@@ -55,4 +55,4 @@ The initial schema encodes core invariants with foreign keys, check constraints,
 
 The implementation is intentionally split into reviewable slices. See [docs/delivery-plan.md](docs/delivery-plan.md) for scope and acceptance criteria for each PR.
 
-# Bling
+New pull requests use the repository review template to record verification, operational impact, and deliberately deferred work.
