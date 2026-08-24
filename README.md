@@ -2,7 +2,9 @@
 
 Bling is a live call-in platform for streamers. Viewers wait in an application-managed queue; a direct, audio-only WebRTC connection begins only after the creator selects one caller. The backend is the control plane and never carries audio.
 
-This branch contains the Phase 1 foundation: a React/Vite client, Go API, PostgreSQL and Redis dependencies, schema migrations, configuration, structured request logging, and health checks.
+The project currently includes a React/Vite client, Go API, PostgreSQL and Redis dependencies, schema migrations, configuration, structured request logging, health checks, and creator authentication.
+
+Creator authentication is available through `/register`, `/login`, and the protected `/dashboard`. The versioned API exposes registration, login, logout, and current-user endpoints under `/api/v1`.
 
 ## Prerequisites
 

@@ -102,6 +102,11 @@ h1 {
 .button:hover {
   border-color: #8f61c8;
 }
+button.button {
+  color: inherit;
+  background: transparent;
+  cursor: pointer;
+}
 .text-link {
   color: #c79dff;
   text-underline-offset: 4px;
@@ -130,11 +135,116 @@ h1 {
   background: #ff6d85;
 }
 
+.auth-page {
+  display: grid;
+  grid-template-rows: auto 1fr;
+}
+.auth-card {
+  width: min(100%, 480px);
+  margin: 7vh auto;
+  padding: clamp(26px, 5vw, 44px);
+  border: 1px solid #2d2b34;
+  border-radius: 24px;
+  background: rgba(18, 17, 24, 0.88);
+  box-shadow: 0 28px 80px rgba(0, 0, 0, 0.3);
+}
+.auth-card h1 {
+  font-size: clamp(2.4rem, 7vw, 4rem);
+}
+.auth-intro,
+.auth-switch {
+  color: #aaa7b7;
+  line-height: 1.55;
+}
+.auth-form {
+  display: grid;
+  gap: 18px;
+  margin: 30px 0;
+}
+.auth-form label {
+  display: grid;
+  gap: 8px;
+  color: #dedbe7;
+  font-size: 0.9rem;
+  font-weight: 650;
+}
+.auth-form input {
+  width: 100%;
+  padding: 13px 14px;
+  border: 1px solid #3a3742;
+  border-radius: 11px;
+  outline: none;
+  color: #f7f5ff;
+  background: #121117;
+  font: inherit;
+}
+.auth-form input:focus {
+  border-color: #a56de9;
+  box-shadow: 0 0 0 3px rgba(165, 109, 233, 0.16);
+}
+.auth-form small {
+  color: #817d8d;
+  font-weight: 400;
+}
+.primary-button {
+  padding: 14px 18px;
+  border: 0;
+  border-radius: 11px;
+  color: #110f16;
+  background: linear-gradient(135deg, #d0a8ff, #ff7ca8);
+  font: inherit;
+  font-weight: 800;
+  cursor: pointer;
+}
+.primary-button:disabled,
+.button:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+.form-error {
+  padding: 12px 14px;
+  border: 1px solid rgba(255, 109, 133, 0.45);
+  border-radius: 10px;
+  color: #ffadb9;
+  background: rgba(255, 109, 133, 0.09);
+  font-size: 0.9rem;
+}
+.auth-switch a {
+  color: #c79dff;
+  font-weight: 700;
+}
+.dashboard-content {
+  max-width: 760px;
+  padding: 13vh 0;
+}
+.dashboard-content h1 {
+  font-size: clamp(3rem, 7vw, 5.8rem);
+}
+.account-card {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 12px 28px;
+  margin-top: 38px;
+  padding: 22px;
+  border: 1px solid #2d2b34;
+  border-radius: 16px;
+  background: rgba(18, 17, 24, 0.72);
+}
+.account-card span {
+  color: #817d8d;
+}
+.account-card strong {
+  overflow-wrap: anywhere;
+}
+
 @media (max-width: 560px) {
   .nav .button {
     display: none;
   }
   .hero {
     padding-top: 20vh;
+  }
+  .account-card {
+    grid-template-columns: 1fr;
   }
 }

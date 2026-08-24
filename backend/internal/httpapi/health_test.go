@@ -38,5 +38,5 @@ func TestReadyzReportsFailedDependency(t *testing.T) {
 
 func testRouter(postgres, redis dependency) http.Handler {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	return newRouter(logger, healthHandler{postgres: postgres, redis: redis, timeout: time.Second})
+	return newRouter(logger, healthHandler{postgres: postgres, redis: redis, timeout: time.Second}, nil, nil)
 }
