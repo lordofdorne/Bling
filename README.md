@@ -6,6 +6,8 @@ The project currently includes a React/Vite client, Go API, PostgreSQL and Redis
 
 Creator authentication is available through `/register`, `/login`, and the protected `/dashboard`. The versioned API exposes registration, login, logout, and current-user endpoints under `/api/v1`.
 
+Authenticated creators can create, start, inspect, and end a Hotline from the dashboard. Public creator pages at `/u/{username}` resolve their current live-show state through the versioned API. PostgreSQL transactions and a partial unique index enforce at most one live show per creator.
+
 ## Prerequisites
 
 - Node.js 22+

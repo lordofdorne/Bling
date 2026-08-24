@@ -1,10 +1,16 @@
 import { Link, useNavigate } from "react-router-dom";
 import { useLogout, useMe } from "../lib/auth";
+import { useEndShow, useLiveShow, useStartShow } from "../lib/shows";
 
 export function Dashboard() {
   const me = useMe();
   const logout = useLogout();
   const navigate = useNavigate();
+  const username = me.data?.username ?? "";
+  const liveShow = useLiveShow(username);
+  const startShow = useStartShow(username);
+  const endShow = useEndShow(username);
+  const activeShow = liveShow.data;
 
   async function signOut() {
     try {
@@ -32,14 +38,68 @@ export function Dashboard() {
       </nav>
       <section className="dashboard-content">
         <p className="eyebrow">Creator workspace</p>
-        <h1>Welcome, {me.data?.username}.</h1>
+        <h1>Welcome, {username}.</h1>
         <p className="lede">
-          Your account is ready. Show controls arrive in the next delivery
-          slice.
+          Open your Hotline when you are ready to take live calls from your
+          audience.
         </p>
+
+        <section className="show-card" aria-label="Hotline controls">
+          {liveShow.isPending ? (
+            <div className="status">Loading show status…</div>
+          ) : liveShow.isError ? (
+            <div className="form-error" role="alert">
+              Unable to load your Hotline status.
+            </div>
+          ) : activeShow ? (
+            <>
+              <div className="show-card-heading">
+                <div>
+                  <div className="live-badge">
+                    <span /> Hotline live
+                  </div>
+                  <h2>Your audience can join.</h2>
+                </div>
+                <button
+                  className="danger-button"
+                  type="button"
+                  onClick={() => endShow.mutate(activeShow.id)}
+                  disabled={endShow.isPending}
+                >
+                  {endShow.isPending ? "Ending…" : "End Hotline"}
+                </button>
+              </div>
+              <p>
+                Public URL: <strong>/u/{username}</strong>
+              </p>
+            </>
+          ) : (
+            <>
+              <h2>No active Hotline</h2>
+              <p>
+                Start a show to open your public page. No microphone is
+                requested until you select a caller.
+              </p>
+              <button
+                className="primary-button"
+                type="button"
+                onClick={() => startShow.mutate()}
+                disabled={startShow.isPending}
+              >
+                {startShow.isPending ? "Starting…" : "Start Hotline"}
+              </button>
+            </>
+          )}
+          {(startShow.isError || endShow.isError) && (
+            <div className="form-error" role="alert">
+              Unable to update your Hotline. Please try again.
+            </div>
+          )}
+        </section>
+
         <div className="account-card">
           <span>Public URL</span>
-          <strong>/u/{me.data?.username}</strong>
+          <strong>/u/{username}</strong>
           <span>Account email</span>
           <strong>{me.data?.email}</strong>
         </div>

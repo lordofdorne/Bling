@@ -8,6 +8,7 @@ import (
 
 	"github.com/bling-app/bling/backend/internal/auth"
 	"github.com/bling-app/bling/backend/internal/config"
+	showdomain "github.com/bling-app/bling/backend/internal/show"
 	"github.com/go-chi/chi/v5"
 	chimiddleware "github.com/go-chi/chi/v5/middleware"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -31,14 +32,15 @@ func NewRouter(logger *slog.Logger, postgres *pgxpool.Pool, redisClient *redis.C
 		sessionTTL:   cfg.SessionTTL,
 		rateWindow:   cfg.AuthRateLimitWindow,
 	}
+	showHandler := showHandler{service: showdomain.NewService(showdomain.NewPostgresStore(postgres)), logger: logger}
 	return newRouter(logger, healthHandler{
 		postgres: postgresDependency{pool: postgres},
 		redis:    redisDependency{client: redisClient},
 		timeout:  cfg.ReadinessTimeout,
-	}, &authHandler, cfg.AllowedOrigins)
+	}, &authHandler, &showHandler, cfg.AllowedOrigins)
 }
 
-func newRouter(logger *slog.Logger, health healthHandler, authentication *authHandler, allowedOrigins []string) http.Handler {
+func newRouter(logger *slog.Logger, health healthHandler, authentication *authHandler, shows *showHandler, allowedOrigins []string) http.Handler {
 	router := chi.NewRouter()
 	router.Use(chimiddleware.RequestID)
 	router.Use(chimiddleware.Recoverer)
@@ -51,6 +53,13 @@ func newRouter(logger *slog.Logger, health healthHandler, authentication *authHa
 		router.Route("/api/v1", func(api chi.Router) {
 			api.Mount("/auth", authentication.routes())
 			api.Get("/me", authentication.me)
+			if shows != nil {
+				api.Get("/creators/{username}/live-show", shows.liveByUsername)
+				api.Group(func(protected chi.Router) {
+					protected.Use(requireCreator(authentication.service, logger))
+					protected.Mount("/shows", shows.routes())
+				})
+			}
 		})
 	}
 	return router

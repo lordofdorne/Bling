@@ -19,11 +19,45 @@ function renderAt(path: string) {
 describe("App routes", () => {
   afterEach(() => vi.unstubAllGlobals());
 
-  it("renders the public creator route", () => {
+  it("renders a closed public creator route", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({ error: { code: "NO_LIVE_SHOW" } }), {
+          status: 404,
+          headers: { "Content-Type": "application/json" },
+        }),
+      ),
+    );
     renderAt("/u/alice");
-    expect(screen.getByText("@alice")).toBeInTheDocument();
     expect(
-      screen.getByRole("heading", { name: /currently closed/i }),
+      await screen.findByRole("heading", { name: /currently closed/i }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("@alice")).toBeInTheDocument();
+  });
+
+  it("renders an open public Hotline", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        Response.json({
+          data: {
+            show: {
+              id: "show-1",
+              creatorId: "user-1",
+              status: "LIVE",
+              startedAt: "2026-08-24T12:00:00Z",
+              endedAt: null,
+              createdAt: "2026-08-24T12:00:00Z",
+              updatedAt: "2026-08-24T12:00:00Z",
+            },
+          },
+        }),
+      ),
+    );
+    renderAt("/u/alice");
+    expect(
+      await screen.findByRole("heading", { name: "The Hotline is open." }),
     ).toBeInTheDocument();
   });
 
@@ -169,6 +203,117 @@ describe("App routes", () => {
 
     expect(
       await screen.findByRole("heading", { name: "Welcome back." }),
+    ).toBeInTheDocument();
+  });
+
+  it("starts a Hotline from the creator dashboard", async () => {
+    const creator = {
+      id: "user-1",
+      username: "alice",
+      email: "alice@example.com",
+      createdAt: "2026-08-24T12:00:00Z",
+    };
+    const createdShow = {
+      id: "show-1",
+      creatorId: "user-1",
+      status: "CREATED",
+      startedAt: null,
+      endedAt: null,
+      createdAt: "2026-08-24T12:00:00Z",
+      updatedAt: "2026-08-24T12:00:00Z",
+    };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const path = String(input);
+        if (path === "/api/v1/me") {
+          return Response.json({ data: { user: creator } });
+        }
+        if (path.includes("/live-show")) {
+          return new Response(
+            JSON.stringify({ error: { code: "NO_LIVE_SHOW" } }),
+            {
+              status: 404,
+              headers: { "Content-Type": "application/json" },
+            },
+          );
+        }
+        if (path === "/api/v1/shows" && init?.method === "POST") {
+          return Response.json(
+            { data: { show: createdShow } },
+            { status: 201 },
+          );
+        }
+        if (path === "/api/v1/shows/show-1/start" && init?.method === "POST") {
+          return Response.json({
+            data: {
+              show: {
+                ...createdShow,
+                status: "LIVE",
+                startedAt: "2026-08-24T12:01:00Z",
+              },
+            },
+          });
+        }
+        return new Response(null, { status: 404 });
+      }),
+    );
+
+    renderAt("/dashboard");
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Start Hotline" }),
+    );
+
+    expect(await screen.findByText("Hotline live")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "End Hotline" }),
+    ).toBeInTheDocument();
+  });
+
+  it("ends the active Hotline", async () => {
+    const creator = {
+      id: "user-1",
+      username: "alice",
+      email: "alice@example.com",
+      createdAt: "2026-08-24T12:00:00Z",
+    };
+    const liveShow = {
+      id: "show-1",
+      creatorId: "user-1",
+      status: "LIVE",
+      startedAt: "2026-08-24T12:00:00Z",
+      endedAt: null,
+      createdAt: "2026-08-24T12:00:00Z",
+      updatedAt: "2026-08-24T12:00:00Z",
+    };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const path = String(input);
+        if (path === "/api/v1/me")
+          return Response.json({ data: { user: creator } });
+        if (path.includes("/live-show"))
+          return Response.json({ data: { show: liveShow } });
+        if (path === "/api/v1/shows/show-1/end" && init?.method === "POST") {
+          return Response.json({
+            data: {
+              show: {
+                ...liveShow,
+                status: "ENDED",
+                endedAt: "2026-08-24T12:05:00Z",
+              },
+            },
+          });
+        }
+        return new Response(null, { status: 404 });
+      }),
+    );
+
+    renderAt("/dashboard");
+    fireEvent.click(await screen.findByRole("button", { name: "End Hotline" }));
+
+    expect(
+      await screen.findByRole("button", { name: "Start Hotline" }),
     ).toBeInTheDocument();
   });
 });
