@@ -12,7 +12,14 @@ Each pull request should be independently reviewable, tested, and small enough t
 
 Acceptance: frontend and backend build; unit tests and Go race detector pass; readiness reflects dependency availability.
 
-## PR 2 — Creator authentication
+## PR 2 — Review workflow
+
+- Pull request template for scope, verification, operational impact, and deferred work
+- Clean foundation handoff for subsequent product slices
+
+Acceptance: every new PR opens with the same production review checklist.
+
+## PR 3 — Creator authentication
 
 - Register, login, logout, and `/api/v1/me`
 - Password hashing, opaque server-side sessions, secure cookies, CSRF protection, validation, and auth rate limiting
@@ -20,7 +27,7 @@ Acceptance: frontend and backend build; unit tests and Go race detector pass; re
 
 Acceptance: auth handler and session tests cover valid, invalid, expired, and unauthorized behavior.
 
-## PR 3 — Show lifecycle
+## PR 4 — Show lifecycle
 
 - Create, start, inspect, and end a show
 - Ownership checks and one-live-show invariant
@@ -28,7 +35,7 @@ Acceptance: auth handler and session tests cover valid, invalid, expired, and un
 
 Acceptance: concurrent start attempts cannot create two live shows.
 
-## PR 4 — Durable caller queue
+## PR 5 — Durable caller queue
 
 - Anonymous viewer identity token and hashed recovery credential
 - Join, leave, current position, and creator queue endpoints
@@ -37,7 +44,7 @@ Acceptance: concurrent start attempts cannot create two live shows.
 
 Acceptance: refresh recovers queue state; viewers cannot inspect other callers; transition tests pass.
 
-## PR 5 — Realtime transport
+## PR 6 — Realtime transport
 
 - Bounded WebSocket hub, one writer per connection, heartbeat, deadlines, origin checks, and rate limits
 - Show-scoped event bus, presence, reconnect with jitter, and REST resynchronization
@@ -45,7 +52,7 @@ Acceptance: refresh recovers queue state; viewers cannot inspect other callers; 
 
 Acceptance: event tests and simulated slow/reconnecting clients show no blocked show fanout or leaked goroutines.
 
-## PR 6 — Atomic caller selection and signaling
+## PR 7 — Atomic caller selection and signaling
 
 - Transactional selection with exactly one active-call winner
 - Active call state machine and scoped WebRTC signaling messages
@@ -53,7 +60,7 @@ Acceptance: event tests and simulated slow/reconnecting clients show no blocked 
 
 Acceptance: simultaneous selections produce one winner and signaling never reaches unrelated users.
 
-## PR 7 — Audio call experience
+## PR 8 — Audio call experience
 
 - Focused WebRTC call manager, configured ICE servers, trickle ICE, and microphone UX
 - Caller connect/retry flow, creator controls, state synchronization, and complete media teardown
@@ -61,11 +68,10 @@ Acceptance: simultaneous selections produce one winner and signaling never reach
 
 Acceptance: the two-browser audio scenario works and every exit path stops local tracks.
 
-## PR 8 — Reliability and operational polish
+## PR 9 — Reliability and operational polish
 
 - Disconnect grace periods and timeouts for stale streamer/caller sessions
 - Load simulator for hundreds of queued WebSocket clients
 - Security review, mobile caller polish, desktop creator polish, and runbook updates
 
 Acceptance: race detector and load smoke test pass; defined failure scenarios recover to authoritative state.
-

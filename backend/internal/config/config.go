@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -10,19 +11,22 @@ import (
 )
 
 type Config struct {
-	Environment       string
-	HTTPAddr          string
-	DatabaseURL       string
-	RedisURL          string
-	FrontendURL       string
-	AllowedOrigins    []string
-	CookieSecure      bool
-	ShutdownTimeout   time.Duration
-	ReadinessTimeout  time.Duration
-	ReadHeaderTimeout time.Duration
-	ReadTimeout       time.Duration
-	WriteTimeout      time.Duration
-	IdleTimeout       time.Duration
+	Environment         string
+	HTTPAddr            string
+	DatabaseURL         string
+	RedisURL            string
+	FrontendURL         string
+	AllowedOrigins      []string
+	CookieSecure        bool
+	SessionTTL          time.Duration
+	BcryptCost          int
+	AuthRateLimitWindow time.Duration
+	ShutdownTimeout     time.Duration
+	ReadinessTimeout    time.Duration
+	ReadHeaderTimeout   time.Duration
+	ReadTimeout         time.Duration
+	WriteTimeout        time.Duration
+	IdleTimeout         time.Duration
 }
 
 func Load() (Config, error) {
@@ -49,14 +53,38 @@ func Load() (Config, error) {
 	if cfg.ReadinessTimeout, err = duration("READINESS_TIMEOUT", 2*time.Second); err != nil {
 		return Config{}, err
 	}
+	if cfg.SessionTTL, err = duration("SESSION_TTL", 30*24*time.Hour); err != nil {
+		return Config{}, err
+	}
+	if cfg.AuthRateLimitWindow, err = duration("AUTH_RATE_LIMIT_WINDOW", time.Minute); err != nil {
+		return Config{}, err
+	}
+	if cfg.BcryptCost, err = integer("BCRYPT_COST", 12); err != nil {
+		return Config{}, err
+	}
+	if cfg.BcryptCost < 10 || cfg.BcryptCost > 15 {
+		return Config{}, fmt.Errorf("BCRYPT_COST must be between 10 and 15")
+	}
 	if cfg.DatabaseURL == "" {
 		return Config{}, fmt.Errorf("DATABASE_URL is required")
 	}
 	if cfg.RedisURL == "" {
 		return Config{}, fmt.Errorf("REDIS_URL is required")
 	}
+	if cfg.Environment == "production" && !cfg.CookieSecure {
+		return Config{}, fmt.Errorf("COOKIE_SECURE must be true in production")
+	}
 
 	return cfg, nil
+}
+
+func integer(key string, fallback int) (int, error) {
+	value := envOrDefault(key, fmt.Sprintf("%d", fallback))
+	parsed, err := strconv.Atoi(value)
+	if err != nil {
+		return 0, fmt.Errorf("parse %s: %w", key, err)
+	}
+	return parsed, nil
 }
 
 func envOrDefault(key, fallback string) string {

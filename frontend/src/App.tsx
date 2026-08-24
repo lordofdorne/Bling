@@ -1,5 +1,8 @@
 import { Link, Route, Routes, useParams } from "react-router-dom";
 import { ApiStatus } from "./components/ApiStatus";
+import { AuthPage } from "./components/AuthPage";
+import { Dashboard } from "./components/Dashboard";
+import { ProtectedRoute } from "./components/ProtectedRoute";
 
 function Home() {
   return (
@@ -8,8 +11,8 @@ function Home() {
         <Link className="brand" to="/">
           Bling<span>.</span>
         </Link>
-        <Link className="button secondary" to="/dashboard">
-          Creator dashboard
+        <Link className="button secondary" to="/login">
+          Creator sign in
         </Link>
       </nav>
       <section className="hero">
@@ -21,21 +24,6 @@ function Home() {
         </p>
         <ApiStatus />
       </section>
-    </main>
-  );
-}
-
-function Dashboard() {
-  return (
-    <main className="page centered">
-      <p className="eyebrow">Creator workspace</p>
-      <h1>Your Hotline starts here.</h1>
-      <p className="lede">
-        Creator accounts and show controls arrive in the next delivery slice.
-      </p>
-      <Link className="text-link" to="/">
-        Back home
-      </Link>
     </main>
   );
 }
@@ -67,7 +55,16 @@ export function App() {
   return (
     <Routes>
       <Route path="/" element={<Home />} />
-      <Route path="/dashboard" element={<Dashboard />} />
+      <Route path="/login" element={<AuthPage mode="login" />} />
+      <Route path="/register" element={<AuthPage mode="register" />} />
+      <Route
+        path="/dashboard"
+        element={
+          <ProtectedRoute>
+            <Dashboard />
+          </ProtectedRoute>
+        }
+      />
       <Route path="/u/:username" element={<PublicHotline />} />
       <Route path="*" element={<NotFound />} />
     </Routes>

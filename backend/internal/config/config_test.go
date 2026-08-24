@@ -30,3 +30,15 @@ func TestLoadParsesValues(t *testing.T) {
 		t.Fatalf("expected two origins, got %v", cfg.AllowedOrigins)
 	}
 }
+
+func TestLoadRequiresSecureProductionCookies(t *testing.T) {
+	t.Setenv("DATABASE_URL", "postgres://example")
+	t.Setenv("REDIS_URL", "redis://example")
+	t.Setenv("APP_ENV", "production")
+	t.Setenv("COOKIE_SECURE", "false")
+
+	_, err := Load()
+	if err == nil {
+		t.Fatal("expected insecure production cookies to fail configuration")
+	}
+}
