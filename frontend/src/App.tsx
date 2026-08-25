@@ -1,8 +1,9 @@
-import { Link, Route, Routes, useParams } from "react-router-dom";
+import { Link, Route, Routes } from "react-router-dom";
 import { ApiStatus } from "./components/ApiStatus";
 import { AuthPage } from "./components/AuthPage";
 import { Dashboard } from "./components/Dashboard";
 import { ProtectedRoute } from "./components/ProtectedRoute";
+import { PublicHotline } from "./components/PublicHotline";
 
 function Home() {
   return (
@@ -24,17 +25,6 @@ function Home() {
         </p>
         <ApiStatus />
       </section>
-    </main>
-  );
-}
-
-function PublicHotline() {
-  const { username } = useParams();
-  return (
-    <main className="page centered">
-      <p className="eyebrow">@{username}</p>
-      <h1>Hotline is currently closed.</h1>
-      <p className="lede">Come back when this creator is live.</p>
     </main>
   );
 }
