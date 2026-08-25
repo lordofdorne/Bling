@@ -48,7 +48,7 @@ func authTestRouter(service *fakeAuthService, limiter auth.RateLimiter) http.Han
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	handler := &authHandler{service: service, limiter: limiter, logger: logger, sessionTTL: time.Hour, rateWindow: time.Minute}
 	health := healthHandler{postgres: fakeDependency{}, redis: fakeDependency{}, timeout: time.Second}
-	return newRouter(logger, health, handler, nil, []string{"http://localhost:5173"})
+	return newRouter(logger, health, handler, nil, nil, []string{"http://localhost:5173"})
 }
 
 func TestRegisterSetsSecureSessionCookie(t *testing.T) {

@@ -168,7 +168,8 @@ button.button {
   font-size: 0.9rem;
   font-weight: 650;
 }
-.auth-form input {
+.auth-form input,
+.auth-form textarea {
   width: 100%;
   padding: 13px 14px;
   border: 1px solid #3a3742;
@@ -177,6 +178,10 @@ button.button {
   color: #f7f5ff;
   background: #121117;
   font: inherit;
+}
+.auth-form textarea {
+  min-height: 110px;
+  resize: vertical;
 }
 .auth-form input:focus {
   border-color: #a56de9;
@@ -294,6 +299,101 @@ button.button {
   cursor: wait;
   opacity: 0.65;
 }
+.hotline-page {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 480px);
+  align-items: center;
+  gap: clamp(40px, 8vw, 120px);
+}
+.hotline-heading h1 {
+  font-size: clamp(3.2rem, 7vw, 6.5rem);
+}
+.queue-card,
+.caller-list {
+  padding: clamp(24px, 4vw, 36px);
+  border: 1px solid #35323e;
+  border-radius: 22px;
+  background: rgba(18, 17, 24, 0.92);
+  box-shadow: 0 28px 80px rgba(0, 0, 0, 0.28);
+}
+.queue-card h2,
+.caller-list h2 {
+  margin: 0;
+}
+.queue-card > p,
+.queue-confirmation > p,
+.empty-queue {
+  color: #aaa7b7;
+  line-height: 1.5;
+}
+.tier-pill,
+.queue-summary {
+  display: flex;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 13px 14px;
+  border: 1px solid #35323e;
+  border-radius: 11px;
+  color: #aaa7b7;
+}
+.tier-pill strong,
+.queue-summary strong {
+  color: #f7f5ff;
+}
+.queue-confirmation {
+  text-align: center;
+}
+.queue-confirmation .eyebrow {
+  margin-bottom: 8px;
+}
+.position-number {
+  color: #d0a8ff;
+  font-size: clamp(4rem, 10vw, 7rem);
+  font-weight: 900;
+  letter-spacing: -0.08em;
+}
+.queue-confirmation .danger-button {
+  margin-top: 20px;
+}
+.caller-list {
+  margin-top: 8px;
+  padding: 22px;
+}
+.caller-list-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.caller-list-heading span {
+  color: #b98cff;
+  font-weight: 750;
+}
+.caller-list ol {
+  display: grid;
+  gap: 10px;
+  margin: 18px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.caller-list li {
+  padding: 15px;
+  border: 1px solid #302d39;
+  border-radius: 12px;
+  background: #121117;
+}
+.caller-list li div {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+}
+.caller-list li span {
+  color: #8f899b;
+  font-size: 0.82rem;
+}
+.caller-list li p {
+  margin: 8px 0 0;
+  color: #c5c1ce;
+}
 
 @media (max-width: 560px) {
   .nav .button {
@@ -308,5 +408,9 @@ button.button {
   .show-card-heading {
     align-items: flex-start;
     flex-direction: column;
+  }
+  .hotline-page {
+    grid-template-columns: 1fr;
+    align-content: center;
   }
 }

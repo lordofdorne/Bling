@@ -18,11 +18,25 @@ func NewPostgresStore(pool *pgxpool.Pool) *PostgresStore { return &PostgresStore
 const showColumns = `id, creator_id, status, started_at, ended_at, created_at, updated_at`
 
 func (s *PostgresStore) Create(ctx context.Context, creatorID string) (Show, error) {
+	tx, err := s.pool.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return Show{}, fmt.Errorf("begin create show: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
 	var result Show
-	err := s.pool.QueryRow(ctx, `INSERT INTO shows (creator_id) VALUES ($1) RETURNING `+showColumns, creatorID).
+	err = tx.QueryRow(ctx, `INSERT INTO shows (creator_id) VALUES ($1) RETURNING `+showColumns, creatorID).
 		Scan(&result.ID, &result.CreatorID, &result.Status, &result.StartedAt, &result.EndedAt, &result.CreatedAt, &result.UpdatedAt)
 	if err != nil {
 		return Show{}, fmt.Errorf("create show: %w", err)
+	}
+	if _, err := tx.Exec(ctx, `
+		INSERT INTO show_tiers (show_id, name, priority_rank, call_duration_seconds)
+		VALUES ($1, 'Standard', 0, 300)`, result.ID); err != nil {
+		return Show{}, fmt.Errorf("create default show tier: %w", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return Show{}, fmt.Errorf("commit create show: %w", err)
 	}
 	return result, nil
 }
@@ -82,6 +96,18 @@ func (s *PostgresStore) transition(ctx context.Context, showID, creatorID string
 	}
 	if err != nil {
 		return Show{}, transitionError(err)
+	}
+	if action == ActionEnd {
+		if _, err := tx.Exec(ctx, `
+			UPDATE queue_entries SET status = 'ENDED', updated_at = $1
+			WHERE show_id = $2 AND status = 'WAITING'`, now, showID); err != nil {
+			return Show{}, fmt.Errorf("close waiting queue: %w", err)
+		}
+		if _, err := tx.Exec(ctx, `
+			INSERT INTO queue_outbox (show_id, event_type, payload)
+			VALUES ($1::uuid, 'queue.show_ended', jsonb_build_object('showId', $1::text))`, showID); err != nil {
+			return Show{}, fmt.Errorf("publish ended queue: %w", err)
+		}
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return Show{}, transitionError(err)

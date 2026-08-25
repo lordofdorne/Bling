@@ -17,7 +17,10 @@ function renderAt(path: string) {
 }
 
 describe("App routes", () => {
-  afterEach(() => vi.unstubAllGlobals());
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    sessionStorage.clear();
+  });
 
   it("renders a closed public creator route", async () => {
     vi.stubGlobal(
@@ -59,6 +62,122 @@ describe("App routes", () => {
     expect(
       await screen.findByRole("heading", { name: "The Hotline is open." }),
     ).toBeInTheDocument();
+  });
+
+  it("joins the public caller queue and shows a recoverable position", async () => {
+    const liveShow = {
+      id: "show-1",
+      creatorId: "user-1",
+      status: "LIVE",
+      startedAt: "2026-08-24T12:00:00Z",
+      endedAt: null,
+      createdAt: "2026-08-24T12:00:00Z",
+      updatedAt: "2026-08-24T12:00:00Z",
+    };
+    const entry = {
+      id: "entry-1",
+      showId: "show-1",
+      displayName: "Sam",
+      topic: "My launch",
+      status: "WAITING",
+      tierId: "tier-1",
+      tierName: "Standard",
+      priorityRank: 0,
+      callDurationSeconds: 300,
+      queuePosition: 12,
+      joinedAt: "2026-08-24T12:01:00Z",
+    };
+    const fetchMock = vi.fn(
+      async (input: RequestInfo | URL, init?: RequestInit) => {
+        const path = String(input);
+        if (path.includes("/live-show"))
+          return Response.json({ data: { show: liveShow } });
+        if (path.endsWith("/tiers"))
+          return Response.json({
+            data: {
+              tiers: [
+                {
+                  id: "tier-1",
+                  name: "Standard",
+                  priorityRank: 0,
+                  callDurationSeconds: 300,
+                },
+              ],
+            },
+          });
+        if (path.endsWith("/queue/me"))
+          return new Response(
+            JSON.stringify({ error: { code: "NOT_IN_QUEUE" } }),
+            {
+              status: 404,
+              headers: { "Content-Type": "application/json" },
+            },
+          );
+        if (path.endsWith("/queue") && init?.method === "POST")
+          return Response.json(
+            { data: { entry, position: 1 } },
+            { status: 201 },
+          );
+        return new Response(null, { status: 404 });
+      },
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderAt("/u/alice");
+    fireEvent.change(await screen.findByLabelText("Name"), {
+      target: { value: "Sam" },
+    });
+    fireEvent.change(screen.getByLabelText(/What do you want/), {
+      target: { value: "My launch" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Join the line" }));
+
+    expect(await screen.findByText("#1")).toBeInTheDocument();
+    const joinCall = fetchMock.mock.calls.find(
+      ([input, init]) =>
+        String(input).endsWith("/queue") && init?.method === "POST",
+    );
+    expect(
+      new Headers(joinCall?.[1]?.headers).get("Idempotency-Key"),
+    ).toBeTruthy();
+  });
+
+  it("restores a caller position after refresh", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        const path = String(input);
+        if (path.includes("/live-show"))
+          return Response.json({
+            data: { show: { id: "show-1", status: "LIVE" } },
+          });
+        if (path.endsWith("/tiers"))
+          return Response.json({ data: { tiers: [] } });
+        if (path.endsWith("/queue/me"))
+          return Response.json({
+            data: {
+              position: 3,
+              entry: {
+                id: "entry-1",
+                showId: "show-1",
+                displayName: "Sam",
+                topic: "My launch",
+                status: "WAITING",
+                tierId: "tier-1",
+                tierName: "Standard",
+                priorityRank: 0,
+                callDurationSeconds: 300,
+                queuePosition: 12,
+                joinedAt: "2026-08-24T12:01:00Z",
+              },
+            },
+          });
+        return new Response(null, { status: 404 });
+      }),
+    );
+    renderAt("/u/alice");
+    expect(await screen.findByText("#3")).toBeInTheDocument();
+    expect(screen.getByText(/safely restored/i)).toBeInTheDocument();
   });
 
   it("renders a not-found state", () => {
@@ -315,5 +434,45 @@ describe("App routes", () => {
     expect(
       await screen.findByRole("button", { name: "Start Hotline" }),
     ).toBeInTheDocument();
+  });
+
+  it("shows the durable caller queue to the creator", async () => {
+    const creator = {
+      id: "user-1",
+      username: "alice",
+      email: "alice@example.com",
+      createdAt: "2026-08-24T12:00:00Z",
+    };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        const path = String(input);
+        if (path === "/api/v1/me")
+          return Response.json({ data: { user: creator } });
+        if (path.includes("/live-show"))
+          return Response.json({
+            data: { show: { id: "show-1", status: "LIVE" } },
+          });
+        if (path.includes("/shows/show-1/queue"))
+          return Response.json({
+            data: {
+              entries: [
+                {
+                  id: "entry-1",
+                  displayName: "Jordan",
+                  topic: "Creator growth",
+                  tierName: "Standard",
+                  callDurationSeconds: 300,
+                },
+              ],
+            },
+          });
+        return new Response(null, { status: 404 });
+      }),
+    );
+    renderAt("/dashboard");
+    expect(await screen.findByText("Jordan")).toBeInTheDocument();
+    expect(screen.getByText("Creator growth")).toBeInTheDocument();
+    expect(screen.getByText("1 waiting")).toBeInTheDocument();
   });
 });

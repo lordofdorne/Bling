@@ -51,7 +51,7 @@ func showTestRouter(authentication *fakeAuthService, service *fakeShowService) h
 	authenticationHandler := &authHandler{service: authentication, limiter: fakeLimiter{allowed: true}, logger: logger, sessionTTL: time.Hour, rateWindow: time.Minute}
 	shows := &showHandler{service: service, logger: logger}
 	health := healthHandler{postgres: fakeDependency{}, redis: fakeDependency{}, timeout: time.Second}
-	return newRouter(logger, health, authenticationHandler, shows, []string{"http://localhost:5173"})
+	return newRouter(logger, health, authenticationHandler, shows, nil, []string{"http://localhost:5173"})
 }
 
 func TestCreateShowUsesAuthenticatedCreator(t *testing.T) {
