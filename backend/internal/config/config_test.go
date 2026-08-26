@@ -42,3 +42,12 @@ func TestLoadRequiresSecureProductionCookies(t *testing.T) {
 		t.Fatal("expected insecure production cookies to fail configuration")
 	}
 }
+
+func TestLoadRejectsUnboundedRealtimeConfiguration(t *testing.T) {
+	t.Setenv("DATABASE_URL", "postgres://example")
+	t.Setenv("REDIS_URL", "redis://example")
+	t.Setenv("REALTIME_MAX_PER_SHOW", "0")
+	if _, err := Load(); err == nil {
+		t.Fatal("expected zero realtime room capacity to fail configuration")
+	}
+}
