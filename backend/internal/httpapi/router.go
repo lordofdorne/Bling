@@ -8,6 +8,7 @@ import (
 
 	"github.com/bling-app/bling/backend/internal/auth"
 	"github.com/bling-app/bling/backend/internal/config"
+	queuedomain "github.com/bling-app/bling/backend/internal/queue"
 	showdomain "github.com/bling-app/bling/backend/internal/show"
 	"github.com/go-chi/chi/v5"
 	chimiddleware "github.com/go-chi/chi/v5/middleware"
@@ -23,7 +24,7 @@ type redisDependency struct{ client *redis.Client }
 
 func (d redisDependency) Ping(ctx context.Context) error { return d.client.Ping(ctx).Err() }
 
-func NewRouter(logger *slog.Logger, postgres *pgxpool.Pool, redisClient *redis.Client, cfg config.Config) http.Handler {
+func NewRouter(logger *slog.Logger, postgres *pgxpool.Pool, redisClient *redis.Client, cfg config.Config, queueService *queuedomain.Service) http.Handler {
 	authHandler := authHandler{
 		service:      auth.NewService(auth.NewPostgresStore(postgres), cfg.BcryptCost, cfg.SessionTTL),
 		limiter:      auth.NewRedisRateLimiter(redisClient),
@@ -33,14 +34,15 @@ func NewRouter(logger *slog.Logger, postgres *pgxpool.Pool, redisClient *redis.C
 		rateWindow:   cfg.AuthRateLimitWindow,
 	}
 	showHandler := showHandler{service: showdomain.NewService(showdomain.NewPostgresStore(postgres)), logger: logger}
+	queueHandler := queueHandler{service: queueService, logger: logger, cookieSecure: cfg.CookieSecure, cookieTTL: cfg.SessionTTL}
 	return newRouter(logger, healthHandler{
 		postgres: postgresDependency{pool: postgres},
 		redis:    redisDependency{client: redisClient},
 		timeout:  cfg.ReadinessTimeout,
-	}, &authHandler, &showHandler, cfg.AllowedOrigins)
+	}, &authHandler, &showHandler, &queueHandler, cfg.AllowedOrigins)
 }
 
-func newRouter(logger *slog.Logger, health healthHandler, authentication *authHandler, shows *showHandler, allowedOrigins []string) http.Handler {
+func newRouter(logger *slog.Logger, health healthHandler, authentication *authHandler, shows *showHandler, queues *queueHandler, allowedOrigins []string) http.Handler {
 	router := chi.NewRouter()
 	router.Use(chimiddleware.RequestID)
 	router.Use(chimiddleware.Recoverer)
@@ -55,9 +57,18 @@ func newRouter(logger *slog.Logger, health healthHandler, authentication *authHa
 			api.Get("/me", authentication.me)
 			if shows != nil {
 				api.Get("/creators/{username}/live-show", shows.liveByUsername)
+				if queues != nil {
+					api.Get("/shows/{showID}/tiers", queues.tiers)
+					api.Post("/shows/{showID}/queue", queues.join)
+					api.Get("/shows/{showID}/queue/me", queues.me)
+					api.Delete("/shows/{showID}/queue/me", queues.leave)
+				}
 				api.Group(func(protected chi.Router) {
 					protected.Use(requireCreator(authentication.service, logger))
 					protected.Mount("/shows", shows.routes())
+					if queues != nil {
+						protected.Get("/shows/{showID}/queue", queues.list)
+					}
 				})
 			}
 		})
@@ -83,7 +94,7 @@ func originProtection(allowedOrigins []string) func(http.Handler) http.Handler {
 				w.Header().Add("Vary", "Origin")
 			}
 			if r.Method == http.MethodOptions {
-				w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+				w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Idempotency-Key")
 				w.Header().Set("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS")
 				w.WriteHeader(http.StatusNoContent)
 				return

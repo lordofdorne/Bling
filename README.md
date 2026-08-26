@@ -2,11 +2,11 @@
 
 Bling is a live call-in platform for streamers. Viewers wait in an application-managed queue; a direct, audio-only WebRTC connection begins only after the creator selects one caller. The backend is the control plane and never carries audio.
 
-The project currently includes a React/Vite client, Go API, PostgreSQL and Redis dependencies, schema migrations, configuration, structured request logging, health checks, and creator authentication.
+The project currently includes a React/Vite client, Go API, PostgreSQL and Redis dependencies, schema migrations, configuration, structured request logging, health checks, creator authentication, show lifecycle controls, and a durable caller queue.
 
 Creator authentication is available through `/register`, `/login`, and the protected `/dashboard`. The versioned API exposes registration, login, logout, and current-user endpoints under `/api/v1`.
 
-Authenticated creators can create, start, inspect, and end a Hotline from the dashboard. Public creator pages at `/u/{username}` resolve their current live-show state through the versioned API. PostgreSQL transactions and a partial unique index enforce at most one live show per creator.
+Authenticated creators can create, start, inspect, and end a Hotline from the dashboard. Viewers can join or leave with an anonymous recovery cookie and recover their current position after refreshing. PostgreSQL remains authoritative for queue state and ordering; Redis stores only the hot, show-scoped candidate index, repaired through a transactional outbox. The creator sees caller names and topics, while public viewers can only read their own queue entry.
 
 ## Prerequisites
 
@@ -44,6 +44,15 @@ cd backend && go test -race ./...
 
 `GET /healthz` reports process liveness. `GET /readyz` returns `200` only when PostgreSQL and Redis are reachable, and otherwise returns a structured `503` response.
 
+With the API running and a live show UUID, exercise the queue admission path with the included load driver:
+
+```bash
+cd backend
+go run ./cmd/queue-load -show <show-uuid> -callers 1000 -concurrency 100
+```
+
+The driver reports failures, throughput, and p50/p95 response latency. It is a repeatable smoke test, not a claim that one local process represents production capacity; million-caller events still require horizontal API capacity, managed PostgreSQL/Redis sizing, and edge admission controls.
+
 ## Database migrations
 
 Migrations are plain SQL in `backend/migrations`. Apply or roll back one migration with:
@@ -53,7 +62,7 @@ make migrate
 make migrate-down
 ```
 
-The initial schema encodes core invariants with foreign keys, check constraints, and partial unique indexes, including one live show per creator and one active call per show.
+The schema encodes core invariants with foreign keys, check constraints, and partial unique indexes, including one live show per creator, one active call per show, idempotent queue admission, and immutable tier/duration snapshots on each caller entry.
 
 ## Delivery roadmap
 

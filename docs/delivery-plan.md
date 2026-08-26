@@ -39,10 +39,12 @@ Acceptance: concurrent start attempts cannot create two live shows.
 
 - Anonymous viewer identity token and hashed recovery credential
 - Join, leave, current position, and creator queue endpoints
-- Explicit queue state machine and transactional queue ordering
-- Caller form and creator queue UI using authoritative REST state
+- Explicit queue state machine, tier/duration snapshots, and sequence-based transactional ordering
+- PostgreSQL source of truth with a Redis sorted-set candidate index and transactional repair outbox
+- Caller form and creator queue UI using authoritative REST state with bounded polling
+- Configurable HTTP queue load driver
 
-Acceptance: refresh recovers queue state; viewers cannot inspect other callers; transition tests pass.
+Acceptance: refresh recovers queue state; viewers cannot inspect other callers; concurrent retries are idempotent; Redis failures fall back to PostgreSQL; integration, transition, and 1,000-caller load smoke tests pass.
 
 ## PR 6 — Realtime transport
 

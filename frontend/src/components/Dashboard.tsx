@@ -1,6 +1,47 @@
 import { Link, useNavigate } from "react-router-dom";
 import { useLogout, useMe } from "../lib/auth";
+import { useCreatorQueue } from "../lib/queue";
 import { useEndShow, useLiveShow, useStartShow } from "../lib/shows";
+
+function CallerList({ showID }: { showID: string }) {
+  const queue = useCreatorQueue(showID);
+  if (queue.isPending)
+    return <div className="status">Loading caller queue…</div>;
+  if (queue.isError)
+    return (
+      <div className="form-error" role="alert">
+        Unable to load the caller queue.
+      </div>
+    );
+  const entries = queue.data ?? [];
+  return (
+    <section className="caller-list" aria-label="Caller queue">
+      <div className="caller-list-heading">
+        <h2>Caller queue</h2>
+        <span>{entries.length} waiting</span>
+      </div>
+      {entries.length === 0 ? (
+        <p className="empty-queue">
+          Share your public URL. Callers will appear here.
+        </p>
+      ) : (
+        <ol>
+          {entries.map((entry) => (
+            <li key={entry.id}>
+              <div>
+                <strong>{entry.displayName}</strong>
+                <span>
+                  {entry.tierName} · {entry.callDurationSeconds}s
+                </span>
+              </div>
+              <p>{entry.topic}</p>
+            </li>
+          ))}
+        </ol>
+      )}
+    </section>
+  );
+}
 
 export function Dashboard() {
   const me = useMe();
@@ -72,6 +113,7 @@ export function Dashboard() {
               <p>
                 Public URL: <strong>/u/{username}</strong>
               </p>
+              <CallerList showID={activeShow.id} />
             </>
           ) : (
             <>

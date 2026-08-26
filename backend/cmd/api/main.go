@@ -12,6 +12,7 @@ import (
 	"github.com/bling-app/bling/backend/internal/config"
 	"github.com/bling-app/bling/backend/internal/database"
 	"github.com/bling-app/bling/backend/internal/httpapi"
+	queuedomain "github.com/bling-app/bling/backend/internal/queue"
 )
 
 func main() {
@@ -43,10 +44,16 @@ func main() {
 			logger.Warn("redis close failed", "error", err)
 		}
 	}()
+	queueService := queuedomain.NewService(
+		queuedomain.NewPostgresRepository(postgres),
+		queuedomain.NewRedisCandidateIndex(redisClient),
+		logger,
+	)
+	go queueService.RunOutbox(ctx)
 
 	server := &http.Server{
 		Addr:              cfg.HTTPAddr,
-		Handler:           httpapi.NewRouter(logger, postgres, redisClient, cfg),
+		Handler:           httpapi.NewRouter(logger, postgres, redisClient, cfg, queueService),
 		ReadHeaderTimeout: cfg.ReadHeaderTimeout,
 		ReadTimeout:       cfg.ReadTimeout,
 		WriteTimeout:      cfg.WriteTimeout,
