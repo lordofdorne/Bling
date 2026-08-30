@@ -18,6 +18,7 @@ const (
 	SignalOffer  = "signal.offer"
 	SignalAnswer = "signal.answer"
 	SignalICE    = "signal.ice"
+	SignalReady  = "signal.ready"
 )
 
 type Signal struct {

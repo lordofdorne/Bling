@@ -11,6 +11,7 @@ import (
 	"time"
 
 	calldomain "github.com/bling-app/bling/backend/internal/call"
+	"github.com/bling-app/bling/backend/internal/config"
 	queuedomain "github.com/bling-app/bling/backend/internal/queue"
 	"github.com/bling-app/bling/backend/internal/realtime"
 	"github.com/coder/websocket"
@@ -30,6 +31,7 @@ type callSignalHandler struct {
 	heartbeat      time.Duration
 	writeTimeout   time.Duration
 	guard          *realtimeHandler
+	iceServers     []config.ICEServer
 }
 
 func (h callSignalHandler) creator(w http.ResponseWriter, r *http.Request) {
@@ -45,6 +47,46 @@ func (h callSignalHandler) viewer(w http.ResponseWriter, r *http.Request) {
 	}
 	tokenHash := queuedomain.Hash(token)
 	h.authorizeAndServe(w, r, realtime.RoleViewer, hex.EncodeToString(tokenHash[:8]), "", tokenHash)
+}
+
+func (h callSignalHandler) creatorRTCConfig(w http.ResponseWriter, r *http.Request) {
+	preventCaching(w)
+	showID, ok := validShowID(w, r)
+	if !ok {
+		return
+	}
+	callID := chi.URLParam(r, "callID")
+	if !uuidPattern.MatchString(callID) {
+		writeError(w, http.StatusBadRequest, "INVALID_CALL_ID", "Call ID is invalid.")
+		return
+	}
+	if err := h.service.AuthorizeCreator(r.Context(), showID, callID, creatorFromContext(r.Context()).ID); err != nil {
+		h.writeAuthorizationError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"data": map[string]any{"iceServers": h.iceServers}})
+}
+
+func (h callSignalHandler) viewerRTCConfig(w http.ResponseWriter, r *http.Request) {
+	preventCaching(w)
+	showID, callID, tokenHash, ok := viewerCallIdentity(w, r)
+	if !ok {
+		return
+	}
+	if err := h.service.AuthorizeViewer(r.Context(), showID, callID, tokenHash); err != nil {
+		h.writeAuthorizationError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"data": map[string]any{"iceServers": h.iceServers}})
+}
+
+func (h callSignalHandler) writeAuthorizationError(w http.ResponseWriter, err error) {
+	if errors.Is(err, calldomain.ErrCallNotFound) {
+		writeError(w, http.StatusNotFound, "CALL_NOT_FOUND", "Active call not found.")
+		return
+	}
+	h.logger.Error("RTC configuration authorization failed", "error", err)
+	writeError(w, http.StatusServiceUnavailable, "SERVICE_UNAVAILABLE", "Call configuration is unavailable.")
 }
 
 func (h callSignalHandler) authorizeAndServe(w http.ResponseWriter, r *http.Request, role, subject, creatorID string, tokenHash []byte) {
@@ -125,7 +167,7 @@ func (h callSignalHandler) read(ctx context.Context, connection *websocket.Conn,
 		if json.Unmarshal(payload, &incoming) != nil || len(incoming.Payload) == 0 || !json.Valid(incoming.Payload) {
 			return errors.New("invalid signal")
 		}
-		allowed := incoming.Type == realtime.SignalICE || (role == realtime.RoleCreator && incoming.Type == realtime.SignalOffer) || (role == realtime.RoleViewer && incoming.Type == realtime.SignalAnswer)
+		allowed := incoming.Type == realtime.SignalICE || (role == realtime.RoleCreator && incoming.Type == realtime.SignalOffer) || (role == realtime.RoleViewer && (incoming.Type == realtime.SignalAnswer || incoming.Type == realtime.SignalReady))
 		if !allowed {
 			return errors.New("signal type is not allowed for role")
 		}

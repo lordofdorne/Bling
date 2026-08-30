@@ -18,6 +18,10 @@ func TestLoadParsesValues(t *testing.T) {
 	t.Setenv("ALLOWED_ORIGINS", "https://one.example, https://two.example")
 	t.Setenv("COOKIE_SECURE", "true")
 	t.Setenv("READINESS_TIMEOUT", "750ms")
+	t.Setenv("STUN_URLS", "stun:one.example, stun:two.example")
+	t.Setenv("TURN_URL", "turn:relay.example")
+	t.Setenv("TURN_USERNAME", "user")
+	t.Setenv("TURN_CREDENTIAL", "secret")
 
 	cfg, err := Load()
 	if err != nil {
@@ -28,6 +32,31 @@ func TestLoadParsesValues(t *testing.T) {
 	}
 	if len(cfg.AllowedOrigins) != 2 {
 		t.Fatalf("expected two origins, got %v", cfg.AllowedOrigins)
+	}
+	if len(cfg.RTCICEServers) != 2 || len(cfg.RTCICEServers[0].URLs) != 2 || cfg.RTCICEServers[1].Credential != "secret" {
+		t.Fatalf("unexpected ICE servers: %+v", cfg.RTCICEServers)
+	}
+}
+
+func TestLoadRejectsIncompleteTURNConfiguration(t *testing.T) {
+	t.Setenv("DATABASE_URL", "postgres://example")
+	t.Setenv("REDIS_URL", "redis://example")
+	t.Setenv("TURN_URL", "turn:relay.example")
+	t.Setenv("TURN_USERNAME", "")
+	t.Setenv("TURN_CREDENTIAL", "")
+	if _, err := Load(); err == nil {
+		t.Fatal("expected incomplete TURN credentials to fail configuration")
+	}
+}
+
+func TestLoadRequiresTURNInProduction(t *testing.T) {
+	t.Setenv("DATABASE_URL", "postgres://example")
+	t.Setenv("REDIS_URL", "redis://example")
+	t.Setenv("APP_ENV", "production")
+	t.Setenv("COOKIE_SECURE", "true")
+	t.Setenv("TURN_URL", "")
+	if _, err := Load(); err == nil {
+		t.Fatal("expected production without TURN to fail configuration")
 	}
 }
 

@@ -2,11 +2,11 @@
 
 Bling is a live call-in platform for streamers. Viewers wait in an application-managed queue; a direct, audio-only WebRTC connection begins only after the creator selects one caller. The backend is the control plane and never carries audio.
 
-The project currently includes a React/Vite client, Go API, PostgreSQL and Redis dependencies, schema migrations, configuration, structured request logging, health checks, creator authentication, show lifecycle controls, a durable caller queue, realtime queue updates, and atomic caller selection with private signaling.
+The project currently includes a React/Vite client, Go API, PostgreSQL and Redis dependencies, schema migrations, configuration, structured request logging, health checks, creator authentication, show lifecycle controls, a durable caller queue, realtime queue updates, atomic caller selection, and direct audio-only WebRTC calls.
 
 Creator authentication is available through `/register`, `/login`, and the protected `/dashboard`. The versioned API exposes registration, login, logout, and current-user endpoints under `/api/v1`.
 
-Authenticated creators can create, start, inspect, and end a Hotline from the dashboard. Viewers can join or leave with an anonymous recovery cookie and recover their current position after refreshing. A creator can manually choose a waiting caller or randomly choose within the highest available priority tier. PostgreSQL serializes selection and guarantees exactly one active call per show; Redis stores the hot candidate index and carries ephemeral invalidation and participant-scoped signaling events. The creator sees caller names and topics, while public viewers can only read their own queue entry and call.
+Authenticated creators can create, start, inspect, and end a Hotline from the dashboard. Viewers can join or leave with an anonymous recovery cookie and recover their current position after refreshing. A creator can manually choose a waiting caller or randomly choose within the highest available priority tier. PostgreSQL serializes selection, guarantees exactly one active call per show, and enforces call expiry; Redis stores the hot candidate index and carries ephemeral invalidation and participant-scoped signaling events. After both participants explicitly allow microphone access, native browser WebRTC carries audio directly between them. The creator sees caller names and topics, while public viewers can only read their own queue entry and call.
 
 ## Prerequisites
 
@@ -53,7 +53,7 @@ go run ./cmd/queue-load -show <show-uuid> -callers 1000 -concurrency 100
 
 The driver reports failures, throughput, and p50/p95 response latency. It is a repeatable smoke test, not a claim that one local process represents production capacity; million-caller events still require horizontal API capacity, managed PostgreSQL/Redis sizing, and edge admission controls.
 
-Realtime transport behavior, limits, and recovery semantics are documented in [docs/realtime.md](docs/realtime.md).
+Realtime transport behavior, limits, and recovery semantics are documented in [docs/realtime.md](docs/realtime.md). ICE configuration and the two-browser audio test are documented in [docs/audio-calls.md](docs/audio-calls.md).
 
 ## Database migrations
 

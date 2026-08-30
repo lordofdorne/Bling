@@ -44,7 +44,7 @@ func NewRouter(logger *slog.Logger, postgres *pgxpool.Pool, redisClient *redis.C
 	}
 	callHandler := callHandler{service: callService, logger: logger}
 	signalGuard := &realtimeHandler{limiter: auth.NewRedisRateLimiter(redisClient), logger: logger, rateLimit: cfg.RealtimeConnectLimit, rateWindow: cfg.RealtimeRateLimitWindow}
-	signalHandler := callSignalHandler{service: callService, hub: signalHub, logger: logger, allowedOrigins: cfg.AllowedOrigins, heartbeat: cfg.RealtimeHeartbeat, writeTimeout: cfg.RealtimeWriteTimeout, guard: signalGuard}
+	signalHandler := callSignalHandler{service: callService, hub: signalHub, logger: logger, allowedOrigins: cfg.AllowedOrigins, heartbeat: cfg.RealtimeHeartbeat, writeTimeout: cfg.RealtimeWriteTimeout, guard: signalGuard, iceServers: cfg.RTCICEServers}
 	return newRouterWithCalls(logger, healthHandler{
 		postgres: postgresDependency{pool: postgres},
 		redis:    redisDependency{client: redisClient},
@@ -73,8 +73,11 @@ func newRouterWithCalls(logger *slog.Logger, health healthHandler, authenticatio
 				api.Get("/creators/{username}/live-show", shows.liveByUsername)
 				if calls != nil {
 					api.Get("/shows/{showID}/calls/me", calls.viewerLatest)
+					api.Post("/shows/{showID}/calls/{callID}/viewer-transition", calls.viewerTransition)
+					api.Post("/shows/{showID}/calls/{callID}/viewer-end", calls.viewerEnd)
 					if signals != nil {
 						api.Get("/shows/{showID}/calls/{callID}/signals", signals.viewer)
+						api.Get("/shows/{showID}/calls/{callID}/rtc-config", signals.viewerRTCConfig)
 					}
 				}
 				if queues != nil {
@@ -100,8 +103,10 @@ func newRouterWithCalls(logger *slog.Logger, health healthHandler, authenticatio
 						protected.Post("/shows/{showID}/calls/select", calls.selectManual)
 						protected.Post("/shows/{showID}/calls/select-random", calls.selectRandom)
 						protected.Post("/shows/{showID}/calls/{callID}/transition", calls.transition)
+						protected.Post("/shows/{showID}/calls/{callID}/creator-end", calls.creatorEnd)
 						if signals != nil {
 							protected.Get("/shows/{showID}/calls/{callID}/creator-signals", signals.creator)
+							protected.Get("/shows/{showID}/calls/{callID}/creator-rtc-config", signals.creatorRTCConfig)
 						}
 					}
 				})

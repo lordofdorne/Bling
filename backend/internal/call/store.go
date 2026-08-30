@@ -18,13 +18,13 @@ func NewPostgresRepository(pool *pgxpool.Pool) *PostgresRepository {
 }
 
 const callColumns = `c.id, c.show_id, c.queue_entry_id, c.status, c.selection_mode,
-	c.call_duration_seconds, c.started_at, c.ended_at, c.created_at, c.updated_at,
+	c.call_duration_seconds, c.started_at, c.ended_at, c.expires_at, c.created_at, c.updated_at,
 	q.id, q.display_name, q.topic, q.tier_name, q.priority_rank, q.call_duration_seconds`
 
 func scanCall(row pgx.Row) (Call, error) {
 	var value Call
 	err := row.Scan(&value.ID, &value.ShowID, &value.QueueEntryID, &value.Status, &value.SelectionMode,
-		&value.CallDurationSeconds, &value.StartedAt, &value.EndedAt, &value.CreatedAt, &value.UpdatedAt,
+		&value.CallDurationSeconds, &value.StartedAt, &value.EndedAt, &value.ExpiresAt, &value.CreatedAt, &value.UpdatedAt,
 		&value.Caller.ID, &value.Caller.DisplayName, &value.Caller.Topic, &value.Caller.TierName,
 		&value.Caller.PriorityRank, &value.Caller.CallDurationSeconds)
 	return value, err
@@ -141,12 +141,24 @@ func (r *PostgresRepository) ViewerLatest(ctx context.Context, showID string, to
 }
 
 func (r *PostgresRepository) Transition(ctx context.Context, showID, callID, creatorID string, target Status, now time.Time) (Call, error) {
+	return r.transition(ctx, showID, callID, target, now, func(ctx context.Context, tx pgx.Tx) (Call, error) {
+		return queryAuthorizedCall(ctx, tx, showID, callID, creatorID, true)
+	})
+}
+
+func (r *PostgresRepository) TransitionViewer(ctx context.Context, showID, callID string, tokenHash []byte, target Status, now time.Time) (Call, error) {
+	return r.transition(ctx, showID, callID, target, now, func(ctx context.Context, tx pgx.Tx) (Call, error) {
+		return queryViewerCall(ctx, tx, showID, callID, tokenHash, true)
+	})
+}
+
+func (r *PostgresRepository) transition(ctx context.Context, showID, callID string, target Status, now time.Time, load func(context.Context, pgx.Tx) (Call, error)) (Call, error) {
 	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{})
 	if err != nil {
 		return Call{}, fmt.Errorf("begin call transition: %w", err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
-	current, err := queryAuthorizedCall(ctx, tx, showID, callID, creatorID, true)
+	current, err := load(ctx, tx)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Call{}, ErrCallNotFound
 	}
@@ -159,18 +171,32 @@ func (r *PostgresRepository) Transition(ctx context.Context, showID, callID, cre
 		}
 		return current, nil
 	}
+	value, err := applyTransition(ctx, tx, current, target, now)
+	if err != nil {
+		return Call{}, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return Call{}, fmt.Errorf("commit call transition: %w", err)
+	}
+	return value, nil
+}
+
+func applyTransition(ctx context.Context, tx pgx.Tx, current Call, target Status, now time.Time) (Call, error) {
 	if !canTransition(current.Status, target) {
 		return Call{}, ErrInvalidTransition
 	}
 	endedAt := any(nil)
 	startedAt := current.StartedAt
+	expiresAt := current.ExpiresAt
 	if target == StatusLive && startedAt == nil {
 		startedAt = &now
+		expires := now.Add(time.Duration(current.CallDurationSeconds) * time.Second)
+		expiresAt = &expires
 	}
 	if target == StatusEnded || target == StatusFailed {
 		endedAt = now
 	}
-	if _, err := tx.Exec(ctx, `UPDATE calls SET status=$1,started_at=$2,ended_at=$3,updated_at=$4 WHERE id=$5`, target, startedAt, endedAt, now, callID); err != nil {
+	if _, err := tx.Exec(ctx, `UPDATE calls SET status=$1,started_at=$2,ended_at=$3,expires_at=$4,updated_at=$5 WHERE id=$6`, target, startedAt, endedAt, expiresAt, now, current.ID); err != nil {
 		return Call{}, fmt.Errorf("update call state: %w", err)
 	}
 	queueStatus := target
@@ -182,17 +208,53 @@ func (r *PostgresRepository) Transition(ctx context.Context, showID, callID, cre
 	}
 	row := callerRow{id: current.QueueEntryID, rank: current.Caller.PriorityRank, duration: current.Caller.CallDurationSeconds}
 	eventType := "call." + stringLower(target)
-	if err := insertOutbox(ctx, tx, showID, eventType, row); err != nil {
+	if err := insertOutbox(ctx, tx, current.ShowID, eventType, row); err != nil {
 		return Call{}, err
 	}
-	value, err := queryCall(ctx, tx, showID, callID)
+	value, err := queryCall(ctx, tx, current.ShowID, current.ID)
 	if err != nil {
-		return Call{}, err
-	}
-	if err := tx.Commit(ctx); err != nil {
-		return Call{}, fmt.Errorf("commit call transition: %w", err)
+		return Call{}, fmt.Errorf("read transitioned call: %w", err)
 	}
 	return value, nil
+}
+
+func (r *PostgresRepository) ExpireDue(ctx context.Context, now time.Time, limit int) ([]Call, error) {
+	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("begin call expiry: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	rows, err := tx.Query(ctx, `SELECT `+callColumns+` FROM calls c JOIN queue_entries q ON q.id=c.queue_entry_id
+		WHERE c.status='LIVE' AND c.expires_at <= $1
+		ORDER BY c.expires_at LIMIT $2 FOR UPDATE OF c SKIP LOCKED`, now, limit)
+	if err != nil {
+		return nil, fmt.Errorf("lock expired calls: %w", err)
+	}
+	due := make([]Call, 0, limit)
+	for rows.Next() {
+		value, scanErr := scanCall(rows)
+		if scanErr != nil {
+			rows.Close()
+			return nil, fmt.Errorf("scan expired call: %w", scanErr)
+		}
+		due = append(due, value)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate expired calls: %w", err)
+	}
+	expired := make([]Call, 0, len(due))
+	for _, current := range due {
+		value, transitionErr := applyTransition(ctx, tx, current, StatusEnded, now)
+		if transitionErr != nil {
+			return nil, transitionErr
+		}
+		expired = append(expired, value)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, fmt.Errorf("commit call expiry: %w", err)
+	}
+	return expired, nil
 }
 
 func canTransition(from, to Status) bool {
@@ -254,6 +316,15 @@ func queryAuthorizedCall(ctx context.Context, tx pgx.Tx, showID, callID, creator
 	}
 	return scanCall(tx.QueryRow(ctx, `SELECT `+callColumns+` FROM calls c JOIN queue_entries q ON q.id=c.queue_entry_id
 		JOIN shows s ON s.id=c.show_id WHERE c.show_id=$1 AND c.id=$2 AND s.creator_id=$3`+suffix, showID, callID, creatorID))
+}
+
+func queryViewerCall(ctx context.Context, tx pgx.Tx, showID, callID string, tokenHash []byte, lock bool) (Call, error) {
+	suffix := ""
+	if lock {
+		suffix = " FOR UPDATE OF c"
+	}
+	return scanCall(tx.QueryRow(ctx, `SELECT `+callColumns+` FROM calls c JOIN queue_entries q ON q.id=c.queue_entry_id
+		WHERE c.show_id=$1 AND c.id=$2 AND q.session_token_hash=$3`+suffix, showID, callID, tokenHash))
 }
 
 func mapNotFound(value Call, err error) (Call, error) {

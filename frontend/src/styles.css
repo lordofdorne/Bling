@@ -425,6 +425,33 @@ button.button {
   gap: 10px;
   margin-top: 8px;
 }
+.audio-call-panel {
+  display: grid;
+  justify-items: center;
+  gap: 12px;
+  width: 100%;
+  margin-top: 12px;
+  padding-top: 18px;
+  border-top: 1px solid #35323e;
+}
+.audio-call-panel audio {
+  display: none;
+}
+.audio-call-panel .call-actions {
+  justify-content: center;
+}
+.call-timer {
+  color: #f7f5ff;
+  font-variant-numeric: tabular-nums;
+  font-size: clamp(2.4rem, 6vw, 4.2rem);
+  font-weight: 850;
+  letter-spacing: -0.06em;
+}
+.connection-label {
+  max-width: 420px;
+  color: #aaa7b7;
+  text-align: center;
+}
 
 @media (max-width: 560px) {
   .nav .button {

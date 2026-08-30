@@ -3,6 +3,7 @@ package call
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"time"
 )
 
@@ -51,6 +52,7 @@ type Call struct {
 	CallDurationSeconds int           `json:"callDurationSeconds"`
 	StartedAt           *time.Time    `json:"startedAt"`
 	EndedAt             *time.Time    `json:"endedAt"`
+	ExpiresAt           *time.Time    `json:"expiresAt"`
 	CreatedAt           time.Time     `json:"createdAt"`
 	UpdatedAt           time.Time     `json:"updatedAt"`
 	Caller              Caller        `json:"caller"`
@@ -61,6 +63,8 @@ type Repository interface {
 	CreatorActive(context.Context, string, string) (Call, error)
 	ViewerLatest(context.Context, string, []byte) (Call, error)
 	Transition(context.Context, string, string, string, Status, time.Time) (Call, error)
+	TransitionViewer(context.Context, string, string, []byte, Status, time.Time) (Call, error)
+	ExpireDue(context.Context, time.Time, int) ([]Call, error)
 	AuthorizeCreator(context.Context, string, string, string) error
 	AuthorizeViewer(context.Context, string, string, []byte) error
 }
@@ -68,10 +72,15 @@ type Repository interface {
 type Service struct {
 	repository Repository
 	now        func() time.Time
+	logger     *slog.Logger
 }
 
-func NewService(repository Repository) *Service {
-	return &Service{repository: repository, now: time.Now}
+func NewService(repository Repository, loggers ...*slog.Logger) *Service {
+	logger := slog.Default()
+	if len(loggers) > 0 && loggers[0] != nil {
+		logger = loggers[0]
+	}
+	return &Service{repository: repository, now: time.Now, logger: logger}
 }
 
 func (s *Service) SelectManual(ctx context.Context, showID, creatorID, entryID string) (Call, error) {
@@ -98,6 +107,35 @@ func (s *Service) Transition(ctx context.Context, showID, callID, creatorID stri
 		return Call{}, ErrInvalidTransition
 	}
 	return s.repository.Transition(ctx, showID, callID, creatorID, target, s.now().UTC())
+}
+
+func (s *Service) TransitionViewer(ctx context.Context, showID, callID string, tokenHash []byte, target Status) (Call, error) {
+	if target != StatusLive && target != StatusEnded && target != StatusFailed {
+		return Call{}, ErrInvalidTransition
+	}
+	return s.repository.TransitionViewer(ctx, showID, callID, tokenHash, target, s.now().UTC())
+}
+
+func (s *Service) RunTimeouts(ctx context.Context) {
+	ticker := time.NewTicker(time.Second)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			for {
+				expired, err := s.repository.ExpireDue(ctx, s.now().UTC(), 100)
+				if err != nil {
+					s.logger.Error("call timeout sweep failed", "error", err)
+					break
+				}
+				if len(expired) < 100 {
+					break
+				}
+			}
+		}
+	}
 }
 
 func (s *Service) AuthorizeCreator(ctx context.Context, showID, callID, creatorID string) error {

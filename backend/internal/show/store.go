@@ -98,15 +98,18 @@ func (s *PostgresStore) transition(ctx context.Context, showID, creatorID string
 		return Show{}, transitionError(err)
 	}
 	if action == ActionEnd {
-		if _, err := tx.Exec(ctx, `
-			UPDATE queue_entries SET status = 'ENDED', updated_at = $1
-			WHERE show_id = $2 AND status IN ('WAITING','SELECTED','CONNECTING','LIVE')`, now, showID); err != nil {
-			return Show{}, fmt.Errorf("close waiting queue: %w", err)
-		}
+		// Lock/finish active calls before closing their queue entries. A concurrent
+		// call transition locks the call row first, so this ordering guarantees the
+		// final queue state is ENDED after that transition releases its lock.
 		if _, err := tx.Exec(ctx, `
 			UPDATE calls SET status = 'ENDED', ended_at = $1, updated_at = $1
 			WHERE show_id = $2 AND status IN ('CREATED','CONNECTING','LIVE')`, now, showID); err != nil {
 			return Show{}, fmt.Errorf("close active call: %w", err)
+		}
+		if _, err := tx.Exec(ctx, `
+			UPDATE queue_entries SET status = 'ENDED', updated_at = $1
+			WHERE show_id = $2 AND status IN ('WAITING','SELECTED','CONNECTING','LIVE')`, now, showID); err != nil {
+			return Show{}, fmt.Errorf("close waiting queue: %w", err)
 		}
 		if _, err := tx.Exec(ctx, `
 			INSERT INTO queue_outbox (show_id, event_type, payload)

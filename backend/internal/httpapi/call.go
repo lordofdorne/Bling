@@ -17,6 +17,7 @@ type callService interface {
 	CreatorActive(context.Context, string, string) (calldomain.Call, error)
 	ViewerLatest(context.Context, string, []byte) (calldomain.Call, error)
 	Transition(context.Context, string, string, string, calldomain.Status) (calldomain.Call, error)
+	TransitionViewer(context.Context, string, string, []byte, calldomain.Status) (calldomain.Call, error)
 }
 
 type callHandler struct {
@@ -126,6 +127,73 @@ func (h callHandler) transition(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"data": value})
+}
+
+func (h callHandler) viewerTransition(w http.ResponseWriter, r *http.Request) {
+	showID, callID, tokenHash, ok := viewerCallIdentity(w, r)
+	if !ok {
+		return
+	}
+	var request transitionCallRequest
+	if decodeJSON(r, &request) != nil {
+		writeError(w, http.StatusBadRequest, "INVALID_REQUEST", "Provide a valid call status.")
+		return
+	}
+	value, err := h.service.TransitionViewer(r.Context(), showID, callID, tokenHash, request.Status)
+	if err != nil {
+		h.writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"data": value})
+}
+
+func (h callHandler) viewerEnd(w http.ResponseWriter, r *http.Request) {
+	showID, callID, tokenHash, ok := viewerCallIdentity(w, r)
+	if !ok {
+		return
+	}
+	value, err := h.service.TransitionViewer(r.Context(), showID, callID, tokenHash, calldomain.StatusEnded)
+	if err != nil {
+		h.writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"data": value})
+}
+
+func (h callHandler) creatorEnd(w http.ResponseWriter, r *http.Request) {
+	showID, ok := validShowID(w, r)
+	if !ok {
+		return
+	}
+	callID := chi.URLParam(r, "callID")
+	if !uuidPattern.MatchString(callID) {
+		writeError(w, http.StatusBadRequest, "INVALID_CALL_ID", "Call ID is invalid.")
+		return
+	}
+	value, err := h.service.Transition(r.Context(), showID, callID, creatorFromContext(r.Context()).ID, calldomain.StatusEnded)
+	if err != nil {
+		h.writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"data": value})
+}
+
+func viewerCallIdentity(w http.ResponseWriter, r *http.Request) (string, string, []byte, bool) {
+	showID, ok := validShowID(w, r)
+	if !ok {
+		return "", "", nil, false
+	}
+	callID := chi.URLParam(r, "callID")
+	if !uuidPattern.MatchString(callID) {
+		writeError(w, http.StatusBadRequest, "INVALID_CALL_ID", "Call ID is invalid.")
+		return "", "", nil, false
+	}
+	token := viewerToken(r)
+	if token == "" {
+		writeError(w, http.StatusUnauthorized, "CALL_IDENTITY_REQUIRED", "This call belongs to its selected caller.")
+		return "", "", nil, false
+	}
+	return showID, callID, queuedomain.Hash(token), true
 }
 
 func (h callHandler) writeError(w http.ResponseWriter, err error) {

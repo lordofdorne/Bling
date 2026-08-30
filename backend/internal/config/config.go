@@ -33,6 +33,13 @@ type Config struct {
 	ReadTimeout             time.Duration
 	WriteTimeout            time.Duration
 	IdleTimeout             time.Duration
+	RTCICEServers           []ICEServer
+}
+
+type ICEServer struct {
+	URLs       []string `json:"urls"`
+	Username   string   `json:"username,omitempty"`
+	Credential string   `json:"credential,omitempty"`
 }
 
 func Load() (Config, error) {
@@ -50,6 +57,20 @@ func Load() (Config, error) {
 		ReadTimeout:       15 * time.Second,
 		WriteTimeout:      30 * time.Second,
 		IdleTimeout:       60 * time.Second,
+	}
+	stunURLs := splitCSV(envOrDefault("STUN_URLS", "stun:stun.l.google.com:19302"))
+	if len(stunURLs) == 0 {
+		return Config{}, fmt.Errorf("STUN_URLS must contain at least one URL")
+	}
+	cfg.RTCICEServers = append(cfg.RTCICEServers, ICEServer{URLs: stunURLs})
+	turnURL := strings.TrimSpace(os.Getenv("TURN_URL"))
+	turnUsername := strings.TrimSpace(os.Getenv("TURN_USERNAME"))
+	turnCredential := strings.TrimSpace(os.Getenv("TURN_CREDENTIAL"))
+	if turnURL != "" {
+		if turnUsername == "" || turnCredential == "" {
+			return Config{}, fmt.Errorf("TURN_USERNAME and TURN_CREDENTIAL are required when TURN_URL is set")
+		}
+		cfg.RTCICEServers = append(cfg.RTCICEServers, ICEServer{URLs: []string{turnURL}, Username: turnUsername, Credential: turnCredential})
 	}
 
 	var err error
@@ -97,6 +118,9 @@ func Load() (Config, error) {
 	}
 	if cfg.Environment == "production" && !cfg.CookieSecure {
 		return Config{}, fmt.Errorf("COOKIE_SECURE must be true in production")
+	}
+	if cfg.Environment == "production" && turnURL == "" {
+		return Config{}, fmt.Errorf("TURN_URL is required in production")
 	}
 
 	return cfg, nil

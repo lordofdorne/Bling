@@ -29,6 +29,13 @@ func (f *fakeRepository) Transition(_ context.Context, _, _, _ string, target St
 	f.target = target
 	return f.value, f.err
 }
+func (f *fakeRepository) TransitionViewer(_ context.Context, _, _ string, _ []byte, target Status, _ time.Time) (Call, error) {
+	f.target = target
+	return f.value, f.err
+}
+func (f *fakeRepository) ExpireDue(context.Context, time.Time, int) ([]Call, error) {
+	return nil, f.err
+}
 func (f *fakeRepository) AuthorizeCreator(context.Context, string, string, string) error {
 	return f.err
 }
@@ -56,5 +63,21 @@ func TestTransitionRejectsUnsupportedTargetBeforePersistence(t *testing.T) {
 	_, err := NewService(repository).Transition(context.Background(), "show", "call", "creator", StatusCreated)
 	if !errors.Is(err, ErrInvalidTransition) || repository.target != "" {
 		t.Fatalf("err=%v target=%q", err, repository.target)
+	}
+}
+
+func TestViewerTransitionAllowsLiveEndAndFailureOnly(t *testing.T) {
+	repository := &fakeRepository{}
+	service := NewService(repository)
+	if _, err := service.TransitionViewer(context.Background(), "show", "call", []byte("viewer"), StatusConnecting); !errors.Is(err, ErrInvalidTransition) {
+		t.Fatalf("connecting transition err=%v", err)
+	}
+	for _, target := range []Status{StatusLive, StatusEnded, StatusFailed} {
+		if _, err := service.TransitionViewer(context.Background(), "show", "call", []byte("viewer"), target); err != nil {
+			t.Fatalf("target=%q err=%v", target, err)
+		}
+		if repository.target != target {
+			t.Fatalf("repository target=%q want=%q", repository.target, target)
+		}
 	}
 }
