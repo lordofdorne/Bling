@@ -48,8 +48,10 @@ With the API running and a live show UUID, exercise the queue admission path wit
 
 ```bash
 cd backend
-go run ./cmd/queue-load -show <show-uuid> -callers 1000 -concurrency 100
+go run ./cmd/queue-load -show <show-uuid> -callers 500 -concurrency 100 -websockets -hold 60s
 ```
+
+Operational recovery, metrics, alerting, and the production security checklist are documented in [docs/operations.md](docs/operations.md).
 
 The driver reports failures, throughput, and p50/p95 response latency. It is a repeatable smoke test, not a claim that one local process represents production capacity; million-caller events still require horizontal API capacity, managed PostgreSQL/Redis sizing, and edge admission controls.
 

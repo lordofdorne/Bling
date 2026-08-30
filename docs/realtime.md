@@ -63,6 +63,8 @@ Redis Pub/Sub is intentionally ephemeral. Clients refetch REST state whenever a 
 
 Each API instance creates at most one Redis subscription for an active show, regardless of how many local WebSocket clients are watching it. The local hub uses non-blocking bounded buffers; a slow client is disconnected and reconnects instead of blocking the show's fanout.
 
+Private call sockets also renew unique TTL presence leases. A global Redis deadline set lets any API instance discover sockets lost during a process or network failure. Redis presence is ephemeral; PostgreSQL stores the disconnect grace deadline and owns the final call transition.
+
 ## Resource controls
 
 The following environment variables bound resource use:

@@ -26,6 +26,7 @@ class FakePeer {
   onconnectionstatechange: (() => void) | null = null;
   addTrack = vi.fn();
   addIceCandidate = vi.fn().mockResolvedValue(undefined);
+  restartIce = vi.fn();
   close = vi.fn(() => {
     this.connectionState = "closed";
   });
@@ -233,7 +234,8 @@ describe("WebRTCCallManager", () => {
     expect(call.sockets[1].close).toHaveBeenCalledOnce();
   });
 
-  it("stops media and reports a failed peer connection", async () => {
+	it("allows a failed peer connection to recover during the grace window", async () => {
+	  vi.useFakeTimers();
     const stream = new FakeStream();
     const call = setup(
       "creator",
@@ -242,8 +244,13 @@ describe("WebRTCCallManager", () => {
     await call.manager.start();
     call.peers[0].connectionState = "failed";
     call.peers[0].onconnectionstatechange?.();
-    await waitFor(() => expect(call.onFailure).toHaveBeenCalledOnce());
-    expect(stream.track.stop).toHaveBeenCalledOnce();
-    expect(call.manager.currentPhase).toBe("failed");
+	expect(call.manager.currentPhase).toBe("reconnecting");
+	expect(call.peers[0].restartIce).toHaveBeenCalledOnce();
+	call.peers[0].connectionState = "connected";
+	call.peers[0].onconnectionstatechange?.();
+	expect(call.manager.currentPhase).toBe("live");
+	await vi.advanceTimersByTimeAsync(20_000);
+	expect(call.onFailure).not.toHaveBeenCalled();
+	expect(stream.track.stop).not.toHaveBeenCalled();
   });
 });

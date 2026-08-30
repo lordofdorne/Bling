@@ -5,6 +5,7 @@ export type WebRTCCallPhase =
   | "requesting-microphone"
   | "waiting"
   | "connecting"
+  | "reconnecting"
   | "live"
   | "microphone-denied"
   | "failed"
@@ -81,6 +82,7 @@ export class WebRTCCallManager {
       this.phase === "requesting-microphone" ||
       this.phase === "waiting" ||
       this.phase === "connecting" ||
+      this.phase === "reconnecting" ||
       this.phase === "live"
     )
       return;
@@ -284,17 +286,32 @@ export class WebRTCCallManager {
       return;
     }
     if (state === "failed") {
-      void this.fail(new Error("The peer-to-peer audio connection failed."));
+	  this.beginRecovery();
       return;
     }
     if (state === "disconnected" && this.disconnectTimer === null) {
+	  this.beginRecovery();
+    }
+  }
+
+  private beginRecovery() {
+    if (this.disconnectTimer !== null || this.closing) return;
+    this.setPhase("reconnecting");
+	if (this.options.role === "creator") {
+	  this.peer?.restartIce();
+	  this.signalChain = this.signalChain
+	    .then(() => this.offer())
+	    .catch((cause) => this.fail(asError(cause)));
+	}
       this.disconnectTimer = this.dependencies.setTimer(() => {
         this.disconnectTimer = null;
-        if (this.peer?.connectionState === "disconnected") {
+        if (
+          this.peer?.connectionState === "disconnected" ||
+          this.peer?.connectionState === "failed"
+        ) {
           void this.fail(new Error("The audio connection was lost."));
         }
-      }, 10_000);
-    }
+      }, 20_000);
   }
 
   private send(type: SignalType, payload: unknown) {

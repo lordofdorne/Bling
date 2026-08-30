@@ -2,6 +2,10 @@ package httpapi
 
 import (
 	"context"
+	"crypto/hmac"
+	"crypto/rand"
+	"crypto/sha1"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -21,17 +25,23 @@ import (
 type signalCallService interface {
 	AuthorizeCreator(context.Context, string, string, string) error
 	AuthorizeViewer(context.Context, string, string, []byte) error
+	ParticipantConnected(context.Context, string, string) error
+	ParticipantDisconnected(context.Context, string, string) error
 }
 
 type callSignalHandler struct {
-	service        signalCallService
-	hub            *realtime.SignalHub
-	logger         *slog.Logger
-	allowedOrigins []string
-	heartbeat      time.Duration
-	writeTimeout   time.Duration
-	guard          *realtimeHandler
-	iceServers     []config.ICEServer
+	service           signalCallService
+	hub               *realtime.SignalHub
+	logger            *slog.Logger
+	allowedOrigins    []string
+	heartbeat         time.Duration
+	writeTimeout      time.Duration
+	guard             *realtimeHandler
+	iceServers        []config.ICEServer
+	turnURL           string
+	turnSharedSecret  string
+	turnCredentialTTL time.Duration
+	presence          *realtime.PresenceStore
 }
 
 func (h callSignalHandler) creator(w http.ResponseWriter, r *http.Request) {
@@ -64,7 +74,7 @@ func (h callSignalHandler) creatorRTCConfig(w http.ResponseWriter, r *http.Reque
 		h.writeAuthorizationError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"data": map[string]any{"iceServers": h.iceServers}})
+	writeJSON(w, http.StatusOK, map[string]any{"data": map[string]any{"iceServers": h.iceServersFor(creatorFromContext(r.Context()).ID)}})
 }
 
 func (h callSignalHandler) viewerRTCConfig(w http.ResponseWriter, r *http.Request) {
@@ -77,7 +87,19 @@ func (h callSignalHandler) viewerRTCConfig(w http.ResponseWriter, r *http.Reques
 		h.writeAuthorizationError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"data": map[string]any{"iceServers": h.iceServers}})
+	writeJSON(w, http.StatusOK, map[string]any{"data": map[string]any{"iceServers": h.iceServersFor(hex.EncodeToString(tokenHash[:8]))}})
+}
+
+func (h callSignalHandler) iceServersFor(subject string) []config.ICEServer {
+	servers := append([]config.ICEServer(nil), h.iceServers...)
+	if h.turnURL == "" || h.turnSharedSecret == "" {
+		return servers
+	}
+	username := fmt.Sprintf("%d:%s", time.Now().UTC().Add(h.turnCredentialTTL).Unix(), subject)
+	digest := hmac.New(sha1.New, []byte(h.turnSharedSecret))
+	_, _ = digest.Write([]byte(username))
+	servers = append(servers, config.ICEServer{URLs: []string{h.turnURL}, Username: username, Credential: base64.StdEncoding.EncodeToString(digest.Sum(nil))})
+	return servers
 }
 
 func (h callSignalHandler) writeAuthorizationError(w http.ResponseWriter, err error) {
@@ -137,10 +159,39 @@ func (h callSignalHandler) serve(w http.ResponseWriter, r *http.Request, showID,
 	}
 	connection.SetReadLimit(64 << 10)
 	defer connection.CloseNow()
+	connectionID, err := randomConnectionID()
+	if err != nil || h.presence == nil {
+		_ = connection.Close(websocket.StatusInternalError, "presence unavailable")
+		return
+	}
+	if err := h.presence.Touch(r.Context(), callID, role, connectionID, time.Now().UTC()); err != nil {
+		h.logger.Error("call presence registration failed", "error", err, "call_id", callID, "role", role)
+		_ = connection.Close(websocket.StatusTryAgainLater, "presence unavailable")
+		return
+	}
+	if err := h.service.ParticipantConnected(r.Context(), callID, role); err != nil {
+		_, _ = h.presence.Disconnect(r.Context(), callID, role, connectionID, time.Now().UTC())
+		_ = connection.Close(websocket.StatusInternalError, "call state unavailable")
+		return
+	}
+	defer func() {
+		cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cleanupCancel()
+		disconnected, presenceErr := h.presence.Disconnect(cleanupCtx, callID, role, connectionID, time.Now().UTC())
+		if presenceErr != nil {
+			h.logger.Error("call presence removal failed", "error", presenceErr, "call_id", callID, "role", role)
+			return
+		}
+		if disconnected {
+			if stateErr := h.service.ParticipantDisconnected(cleanupCtx, callID, role); stateErr != nil {
+				h.logger.Error("participant disconnect persistence failed", "error", stateErr, "call_id", callID, "role", role)
+			}
+		}
+	}()
 	ctx, cancel := context.WithCancel(r.Context())
 	completed := make(chan error, 2)
 	go func() { completed <- h.read(ctx, connection, showID, callID, role, creatorID, tokenHash) }()
-	go func() { completed <- h.write(ctx, connection, client) }()
+	go func() { completed <- h.write(ctx, connection, client, callID, role, connectionID) }()
 	err = <-completed
 	cancel()
 	<-completed
@@ -190,7 +241,7 @@ func (h callSignalHandler) read(ctx context.Context, connection *websocket.Conn,
 	}
 }
 
-func (h callSignalHandler) write(ctx context.Context, connection *websocket.Conn, client *realtime.SignalClient) error {
+func (h callSignalHandler) write(ctx context.Context, connection *websocket.Conn, client *realtime.SignalClient, callID, role, connectionID string) error {
 	heartbeat := time.NewTicker(h.heartbeat)
 	defer heartbeat.Stop()
 	for {
@@ -207,6 +258,9 @@ func (h callSignalHandler) write(ctx context.Context, connection *websocket.Conn
 				return err
 			}
 		case <-heartbeat.C:
+			if err := h.presence.Touch(ctx, callID, role, connectionID, time.Now().UTC()); err != nil {
+				return err
+			}
 			pingCtx, cancel := context.WithTimeout(ctx, h.writeTimeout)
 			err := connection.Ping(pingCtx)
 			cancel()
@@ -215,4 +269,12 @@ func (h callSignalHandler) write(ctx context.Context, connection *websocket.Conn
 			}
 		}
 	}
+}
+
+func randomConnectionID() (string, error) {
+	value := make([]byte, 16)
+	if _, err := rand.Read(value); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(value), nil
 }

@@ -36,6 +36,15 @@ func (f *fakeRepository) TransitionViewer(_ context.Context, _, _ string, _ []by
 func (f *fakeRepository) ExpireDue(context.Context, time.Time, int) ([]Call, error) {
 	return nil, f.err
 }
+func (f *fakeRepository) MarkParticipantConnected(context.Context, string, string, time.Time) error {
+	return f.err
+}
+func (f *fakeRepository) MarkParticipantDisconnected(context.Context, string, string, time.Time) error {
+	return f.err
+}
+func (f *fakeRepository) ExpireDisconnected(context.Context, time.Time, time.Duration, int) ([]Call, error) {
+	return nil, f.err
+}
 func (f *fakeRepository) AuthorizeCreator(context.Context, string, string, string) error {
 	return f.err
 }

@@ -18,13 +18,13 @@ func NewPostgresRepository(pool *pgxpool.Pool) *PostgresRepository {
 }
 
 const callColumns = `c.id, c.show_id, c.queue_entry_id, c.status, c.selection_mode,
-	c.call_duration_seconds, c.started_at, c.ended_at, c.expires_at, c.created_at, c.updated_at,
+	c.call_duration_seconds, c.started_at, c.ended_at, c.expires_at, c.creator_disconnected_at, c.viewer_disconnected_at, c.created_at, c.updated_at,
 	q.id, q.display_name, q.topic, q.tier_name, q.priority_rank, q.call_duration_seconds`
 
 func scanCall(row pgx.Row) (Call, error) {
 	var value Call
 	err := row.Scan(&value.ID, &value.ShowID, &value.QueueEntryID, &value.Status, &value.SelectionMode,
-		&value.CallDurationSeconds, &value.StartedAt, &value.EndedAt, &value.ExpiresAt, &value.CreatedAt, &value.UpdatedAt,
+		&value.CallDurationSeconds, &value.StartedAt, &value.EndedAt, &value.ExpiresAt, &value.CreatorDisconnectedAt, &value.ViewerDisconnectedAt, &value.CreatedAt, &value.UpdatedAt,
 		&value.Caller.ID, &value.Caller.DisplayName, &value.Caller.Topic, &value.Caller.TierName,
 		&value.Caller.PriorityRank, &value.Caller.CallDurationSeconds)
 	return value, err
@@ -196,7 +196,10 @@ func applyTransition(ctx context.Context, tx pgx.Tx, current Call, target Status
 	if target == StatusEnded || target == StatusFailed {
 		endedAt = now
 	}
-	if _, err := tx.Exec(ctx, `UPDATE calls SET status=$1,started_at=$2,ended_at=$3,expires_at=$4,updated_at=$5 WHERE id=$6`, target, startedAt, endedAt, expiresAt, now, current.ID); err != nil {
+	if _, err := tx.Exec(ctx, `UPDATE calls SET status=$1,started_at=$2,ended_at=$3,expires_at=$4,
+		creator_disconnected_at=CASE WHEN $1 IN ('ENDED','FAILED') THEN NULL ELSE creator_disconnected_at END,
+		viewer_disconnected_at=CASE WHEN $1 IN ('ENDED','FAILED') THEN NULL ELSE viewer_disconnected_at END,
+		updated_at=$5 WHERE id=$6`, target, startedAt, endedAt, expiresAt, now, current.ID); err != nil {
 		return Call{}, fmt.Errorf("update call state: %w", err)
 	}
 	queueStatus := target
@@ -216,6 +219,82 @@ func applyTransition(ctx context.Context, tx pgx.Tx, current Call, target Status
 		return Call{}, fmt.Errorf("read transitioned call: %w", err)
 	}
 	return value, nil
+}
+
+func (r *PostgresRepository) MarkParticipantConnected(ctx context.Context, callID, role string, now time.Time) error {
+	column, err := presenceColumn(role)
+	if err != nil {
+		return err
+	}
+	_, err = r.pool.Exec(ctx, `UPDATE calls SET `+column+`=NULL,updated_at=$2 WHERE id=$1 AND status IN ('CREATED','CONNECTING','LIVE')`, callID, now)
+	if err != nil {
+		return fmt.Errorf("mark participant connected: %w", err)
+	}
+	return nil
+}
+
+func (r *PostgresRepository) MarkParticipantDisconnected(ctx context.Context, callID, role string, now time.Time) error {
+	column, err := presenceColumn(role)
+	if err != nil {
+		return err
+	}
+	_, err = r.pool.Exec(ctx, `UPDATE calls SET `+column+`=COALESCE(`+column+`,$2),updated_at=$2 WHERE id=$1 AND status IN ('CREATED','CONNECTING','LIVE')`, callID, now)
+	if err != nil {
+		return fmt.Errorf("mark participant disconnected: %w", err)
+	}
+	return nil
+}
+
+func presenceColumn(role string) (string, error) {
+	switch role {
+	case "creator":
+		return "creator_disconnected_at", nil
+	case "viewer":
+		return "viewer_disconnected_at", nil
+	default:
+		return "", fmt.Errorf("invalid participant role %q", role)
+	}
+}
+
+func (r *PostgresRepository) ExpireDisconnected(ctx context.Context, now time.Time, grace time.Duration, limit int) ([]Call, error) {
+	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("begin disconnected call expiry: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	cutoff := now.Add(-grace)
+	rows, err := tx.Query(ctx, `SELECT `+callColumns+` FROM calls c JOIN queue_entries q ON q.id=c.queue_entry_id
+		WHERE c.status IN ('CREATED','CONNECTING','LIVE')
+		AND (c.creator_disconnected_at <= $1 OR c.viewer_disconnected_at <= $1)
+		ORDER BY LEAST(c.creator_disconnected_at, c.viewer_disconnected_at) LIMIT $2 FOR UPDATE OF c SKIP LOCKED`, cutoff, limit)
+	if err != nil {
+		return nil, fmt.Errorf("lock disconnected calls: %w", err)
+	}
+	due := make([]Call, 0, limit)
+	for rows.Next() {
+		value, scanErr := scanCall(rows)
+		if scanErr != nil {
+			rows.Close()
+			return nil, fmt.Errorf("scan disconnected call: %w", scanErr)
+		}
+		due = append(due, value)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate disconnected calls: %w", err)
+	}
+	expired := make([]Call, 0, len(due))
+	for _, current := range due {
+		value, transitionErr := applyTransition(ctx, tx, current, StatusFailed, now)
+		if transitionErr != nil {
+			return nil, transitionErr
+		}
+		expired = append(expired, value)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, fmt.Errorf("commit disconnected call expiry: %w", err)
+	}
+	return expired, nil
 }
 
 func (r *PostgresRepository) ExpireDue(ctx context.Context, now time.Time, limit int) ([]Call, error) {

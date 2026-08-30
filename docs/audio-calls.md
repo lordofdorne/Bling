@@ -10,8 +10,11 @@ Configure the API with:
 
 - `STUN_URLS`: comma-separated STUN URLs
 - `TURN_URL`: production TURN URL
-- `TURN_USERNAME`: TURN username
-- `TURN_CREDENTIAL`: TURN credential
+- `TURN_SHARED_SECRET`: coturn REST API shared secret; required in production and never sent to clients
+- `TURN_CREDENTIAL_TTL`: lifetime of per-participant TURN credentials (default `15m`)
+- `TURN_USERNAME` / `TURN_CREDENTIAL`: static local-development fallback only
+- `CALL_PRESENCE_TTL`: Redis connection lease, longer than the signaling heartbeat (default `45s`)
+- `CALL_DISCONNECT_GRACE`: recovery window after a participant disappears (default `20s`)
 
 Development defaults to Google's public STUN service. Production startup
 requires TURN because STUN-only calls cannot connect reliably across restrictive
@@ -46,6 +49,8 @@ non-local environments require HTTPS/WSS.
   the sole offerer, avoiding negotiation glare.
 - SDP and trickle ICE use the private call channel. A signaling reconnect uses
   exponential backoff; established P2P audio can continue without WebSocket.
+- A lost peer connection enters a visible 20-second recovery state and requests an ICE restart before failing.
+- Signaling presence is renewed in Redis on heartbeat. When every connection for a participant disappears, PostgreSQL starts the disconnect grace window; reconnecting clears it on any API instance.
 - `connected` moves the durable call to `LIVE`. Peer failure moves it to
   `FAILED`, releasing the show's active-call slot.
 - PostgreSQL stores `started_at` and the snapshotted duration. A backend sweep

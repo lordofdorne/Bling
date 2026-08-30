@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	calldomain "github.com/bling-app/bling/backend/internal/call"
 	"github.com/bling-app/bling/backend/internal/config"
@@ -51,6 +52,8 @@ func main() {
 	signalHub := realtime.NewSignalHub(ctx, eventBus, logger, cfg.RealtimeClientBuffer, 8)
 	callService := calldomain.NewService(calldomain.NewPostgresRepository(postgres), logger)
 	go callService.RunTimeouts(ctx)
+	presence := realtime.NewPresenceStore(redisClient, cfg.CallPresenceTTL)
+	go runPresenceRecovery(ctx, logger, presence, callService, cfg.CallDisconnectGrace)
 	queueService := queuedomain.NewService(
 		queuedomain.NewPostgresRepository(postgres),
 		queuedomain.NewRedisCandidateIndex(redisClient),
@@ -91,4 +94,29 @@ func main() {
 		os.Exit(1)
 	}
 	logger.Info("api stopped")
+}
+
+func runPresenceRecovery(ctx context.Context, logger *slog.Logger, presence *realtime.PresenceStore, calls *calldomain.Service, grace time.Duration) {
+	ticker := time.NewTicker(time.Second)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case now := <-ticker.C:
+			expired, err := presence.Reap(ctx, now.UTC(), 500)
+			if err != nil {
+				logger.Error("call presence sweep failed", "error", err)
+				continue
+			}
+			for _, participant := range expired {
+				if err := calls.ParticipantDisconnected(ctx, participant.CallID, participant.Role); err != nil {
+					logger.Error("stale participant persistence failed", "error", err, "call_id", participant.CallID, "role", participant.Role)
+				}
+			}
+			if err := calls.ExpireDisconnected(ctx, grace); err != nil {
+				logger.Error("disconnected call expiry failed", "error", err)
+			}
+		}
+	}
 }
