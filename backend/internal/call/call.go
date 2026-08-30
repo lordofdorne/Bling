@@ -44,18 +44,20 @@ type Caller struct {
 }
 
 type Call struct {
-	ID                  string        `json:"id"`
-	ShowID              string        `json:"showId"`
-	QueueEntryID        string        `json:"queueEntryId"`
-	Status              Status        `json:"status"`
-	SelectionMode       SelectionMode `json:"selectionMode"`
-	CallDurationSeconds int           `json:"callDurationSeconds"`
-	StartedAt           *time.Time    `json:"startedAt"`
-	EndedAt             *time.Time    `json:"endedAt"`
-	ExpiresAt           *time.Time    `json:"expiresAt"`
-	CreatedAt           time.Time     `json:"createdAt"`
-	UpdatedAt           time.Time     `json:"updatedAt"`
-	Caller              Caller        `json:"caller"`
+	ID                    string        `json:"id"`
+	ShowID                string        `json:"showId"`
+	QueueEntryID          string        `json:"queueEntryId"`
+	Status                Status        `json:"status"`
+	SelectionMode         SelectionMode `json:"selectionMode"`
+	CallDurationSeconds   int           `json:"callDurationSeconds"`
+	StartedAt             *time.Time    `json:"startedAt"`
+	EndedAt               *time.Time    `json:"endedAt"`
+	ExpiresAt             *time.Time    `json:"expiresAt"`
+	CreatorDisconnectedAt *time.Time    `json:"creatorDisconnectedAt,omitempty"`
+	ViewerDisconnectedAt  *time.Time    `json:"viewerDisconnectedAt,omitempty"`
+	CreatedAt             time.Time     `json:"createdAt"`
+	UpdatedAt             time.Time     `json:"updatedAt"`
+	Caller                Caller        `json:"caller"`
 }
 
 type Repository interface {
@@ -65,6 +67,9 @@ type Repository interface {
 	Transition(context.Context, string, string, string, Status, time.Time) (Call, error)
 	TransitionViewer(context.Context, string, string, []byte, Status, time.Time) (Call, error)
 	ExpireDue(context.Context, time.Time, int) ([]Call, error)
+	MarkParticipantConnected(context.Context, string, string, time.Time) error
+	MarkParticipantDisconnected(context.Context, string, string, time.Time) error
+	ExpireDisconnected(context.Context, time.Time, time.Duration, int) ([]Call, error)
 	AuthorizeCreator(context.Context, string, string, string) error
 	AuthorizeViewer(context.Context, string, string, []byte) error
 }
@@ -134,6 +139,26 @@ func (s *Service) RunTimeouts(ctx context.Context) {
 					break
 				}
 			}
+		}
+	}
+}
+
+func (s *Service) ParticipantConnected(ctx context.Context, callID, role string) error {
+	return s.repository.MarkParticipantConnected(ctx, callID, role, s.now().UTC())
+}
+
+func (s *Service) ParticipantDisconnected(ctx context.Context, callID, role string) error {
+	return s.repository.MarkParticipantDisconnected(ctx, callID, role, s.now().UTC())
+}
+
+func (s *Service) ExpireDisconnected(ctx context.Context, grace time.Duration) error {
+	for {
+		expired, err := s.repository.ExpireDisconnected(ctx, s.now().UTC(), grace, 100)
+		if err != nil {
+			return err
+		}
+		if len(expired) < 100 {
+			return nil
 		}
 	}
 }

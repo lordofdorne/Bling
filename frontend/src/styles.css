@@ -440,6 +440,23 @@ button.button {
 .audio-call-panel .call-actions {
   justify-content: center;
 }
+
+@media (max-width: 640px) {
+  .audio-call-panel {
+    padding: 1rem;
+  }
+
+  .audio-call-panel .call-actions {
+    align-items: stretch;
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .audio-call-panel button {
+    min-height: 48px;
+    width: 100%;
+  }
+}
 .call-timer {
   color: #f7f5ff;
   font-variant-numeric: tabular-nums;

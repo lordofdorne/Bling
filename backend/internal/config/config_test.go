@@ -60,6 +60,20 @@ func TestLoadRequiresTURNInProduction(t *testing.T) {
 	}
 }
 
+func TestLoadRequiresEphemeralTURNInProduction(t *testing.T) {
+	t.Setenv("DATABASE_URL", "postgres://example")
+	t.Setenv("REDIS_URL", "redis://example")
+	t.Setenv("APP_ENV", "production")
+	t.Setenv("COOKIE_SECURE", "true")
+	t.Setenv("TURN_URL", "turn:relay.example")
+	t.Setenv("TURN_USERNAME", "static-user")
+	t.Setenv("TURN_CREDENTIAL", "static-secret")
+	t.Setenv("TURN_SHARED_SECRET", "")
+	if _, err := Load(); err == nil {
+		t.Fatal("expected production static TURN credentials to fail configuration")
+	}
+}
+
 func TestLoadRequiresSecureProductionCookies(t *testing.T) {
 	t.Setenv("DATABASE_URL", "postgres://example")
 	t.Setenv("REDIS_URL", "redis://example")

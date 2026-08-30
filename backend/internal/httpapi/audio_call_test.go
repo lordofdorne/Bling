@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	calldomain "github.com/bling-app/bling/backend/internal/call"
 	"github.com/bling-app/bling/backend/internal/config"
@@ -57,6 +58,12 @@ func (f *fakeSignalCallService) AuthorizeViewer(_ context.Context, _, _ string, 
 	f.tokenHash = tokenHash
 	return f.err
 }
+func (f *fakeSignalCallService) ParticipantConnected(context.Context, string, string) error {
+	return f.err
+}
+func (f *fakeSignalCallService) ParticipantDisconnected(context.Context, string, string) error {
+	return f.err
+}
 
 func TestViewerCanTransitionOnlyTheirCallToLive(t *testing.T) {
 	service := &fakeCallService{value: calldomain.Call{ID: testCallID, Status: calldomain.StatusLive}}
@@ -71,6 +78,20 @@ func TestViewerCanTransitionOnlyTheirCallToLive(t *testing.T) {
 
 	if response.Code != http.StatusOK || service.target != calldomain.StatusLive || string(service.tokenHash) != string(queuedomain.Hash("viewer-secret")) {
 		t.Fatalf("status=%d target=%q body=%s", response.Code, service.target, response.Body.String())
+	}
+}
+
+func TestRTCConfigMintsShortLivedTURNCredentials(t *testing.T) {
+	handler := callSignalHandler{
+		iceServers: []config.ICEServer{{URLs: []string{"stun:relay.example"}}},
+		turnURL:    "turn:relay.example", turnSharedSecret: "shared-secret", turnCredentialTTL: 10 * time.Minute,
+	}
+	servers := handler.iceServersFor("caller")
+	if len(servers) != 2 || !strings.HasSuffix(servers[1].Username, ":caller") || servers[1].Credential == "" {
+		t.Fatalf("unexpected ephemeral TURN servers: %+v", servers)
+	}
+	if servers[1].Credential == "shared-secret" {
+		t.Fatal("shared TURN secret was exposed")
 	}
 }
 

@@ -103,6 +103,19 @@ func TestConcurrentSelectionCreatesExactlyOneActiveCall(t *testing.T) {
 	if _, err := repository.Transition(ctx, activeShow.ID, activeCall.ID, creatorID, StatusConnecting, time.Now().UTC()); err != nil {
 		t.Fatal(err)
 	}
+	disconnectedAt := time.Now().UTC()
+	if err := repository.MarkParticipantDisconnected(ctx, activeCall.ID, "viewer", disconnectedAt); err != nil {
+		t.Fatal(err)
+	}
+	if expired, err := repository.ExpireDisconnected(ctx, disconnectedAt.Add(10*time.Second), 20*time.Second, 10); err != nil || len(expired) != 0 {
+		t.Fatalf("call expired inside reconnect grace: expired=%+v err=%v", expired, err)
+	}
+	if err := repository.MarkParticipantConnected(ctx, activeCall.ID, "viewer", disconnectedAt.Add(11*time.Second)); err != nil {
+		t.Fatal(err)
+	}
+	if expired, err := repository.ExpireDisconnected(ctx, disconnectedAt.Add(time.Minute), 20*time.Second, 10); err != nil || len(expired) != 0 {
+		t.Fatalf("reconnected call expired: expired=%+v err=%v", expired, err)
+	}
 	var winnerToken []byte
 	for index, entry := range entries {
 		if entry.ID == activeCall.QueueEntryID {
@@ -122,5 +135,27 @@ func TestConcurrentSelectionCreatesExactlyOneActiveCall(t *testing.T) {
 	}
 	if len(expired) != 1 || expired[0].Status != StatusEnded {
 		t.Fatalf("expired calls=%+v", expired)
+	}
+
+	remainingID := ""
+	for _, entry := range entries {
+		if entry.ID != activeCall.QueueEntryID {
+			remainingID = entry.ID
+		}
+	}
+	secondCall, err := repository.Select(ctx, activeShow.ID, creatorID, remainingID, SelectionManual, time.Now().UTC())
+	if err != nil {
+		t.Fatal(err)
+	}
+	secondDisconnectedAt := time.Now().UTC()
+	if err := repository.MarkParticipantDisconnected(ctx, secondCall.ID, "creator", secondDisconnectedAt); err != nil {
+		t.Fatal(err)
+	}
+	disconnected, err := repository.ExpireDisconnected(ctx, secondDisconnectedAt.Add(21*time.Second), 20*time.Second, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(disconnected) != 1 || disconnected[0].Status != StatusFailed {
+		t.Fatalf("disconnected calls=%+v", disconnected)
 	}
 }

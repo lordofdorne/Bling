@@ -34,6 +34,11 @@ type Config struct {
 	WriteTimeout            time.Duration
 	IdleTimeout             time.Duration
 	RTCICEServers           []ICEServer
+	TURNURL                 string
+	TURNSharedSecret        string
+	TURNCredentialTTL       time.Duration
+	CallPresenceTTL         time.Duration
+	CallDisconnectGrace     time.Duration
 }
 
 type ICEServer struct {
@@ -66,11 +71,16 @@ func Load() (Config, error) {
 	turnURL := strings.TrimSpace(os.Getenv("TURN_URL"))
 	turnUsername := strings.TrimSpace(os.Getenv("TURN_USERNAME"))
 	turnCredential := strings.TrimSpace(os.Getenv("TURN_CREDENTIAL"))
+	turnSharedSecret := strings.TrimSpace(os.Getenv("TURN_SHARED_SECRET"))
 	if turnURL != "" {
-		if turnUsername == "" || turnCredential == "" {
-			return Config{}, fmt.Errorf("TURN_USERNAME and TURN_CREDENTIAL are required when TURN_URL is set")
+		if turnSharedSecret == "" && (turnUsername == "" || turnCredential == "") {
+			return Config{}, fmt.Errorf("TURN_SHARED_SECRET or TURN_USERNAME and TURN_CREDENTIAL are required when TURN_URL is set")
 		}
-		cfg.RTCICEServers = append(cfg.RTCICEServers, ICEServer{URLs: []string{turnURL}, Username: turnUsername, Credential: turnCredential})
+		cfg.TURNURL = turnURL
+		cfg.TURNSharedSecret = turnSharedSecret
+		if turnSharedSecret == "" {
+			cfg.RTCICEServers = append(cfg.RTCICEServers, ICEServer{URLs: []string{turnURL}, Username: turnUsername, Credential: turnCredential})
+		}
 	}
 
 	var err error
@@ -94,6 +104,18 @@ func Load() (Config, error) {
 	}
 	if cfg.RealtimeWriteTimeout, err = duration("REALTIME_WRITE_TIMEOUT", 5*time.Second); err != nil {
 		return Config{}, err
+	}
+	if cfg.TURNCredentialTTL, err = duration("TURN_CREDENTIAL_TTL", 15*time.Minute); err != nil {
+		return Config{}, err
+	}
+	if cfg.CallPresenceTTL, err = duration("CALL_PRESENCE_TTL", 45*time.Second); err != nil {
+		return Config{}, err
+	}
+	if cfg.CallDisconnectGrace, err = duration("CALL_DISCONNECT_GRACE", 20*time.Second); err != nil {
+		return Config{}, err
+	}
+	if cfg.CallPresenceTTL <= cfg.RealtimeHeartbeat {
+		return Config{}, fmt.Errorf("CALL_PRESENCE_TTL must be greater than REALTIME_HEARTBEAT")
 	}
 	if cfg.RealtimeConnectLimit, err = positiveInteger("REALTIME_CONNECT_LIMIT", 60); err != nil {
 		return Config{}, err
@@ -121,6 +143,9 @@ func Load() (Config, error) {
 	}
 	if cfg.Environment == "production" && turnURL == "" {
 		return Config{}, fmt.Errorf("TURN_URL is required in production")
+	}
+	if cfg.Environment == "production" && turnSharedSecret == "" {
+		return Config{}, fmt.Errorf("TURN_SHARED_SECRET is required in production")
 	}
 
 	return cfg, nil

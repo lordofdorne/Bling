@@ -24,7 +24,7 @@ export function CallAudioPanel({
   }, [rtc.remoteStream]);
 
   const canConnect = rtc.phase === "idle" || rtc.phase === "microphone-denied";
-  const hasMicrophone = ["waiting", "connecting", "live"].includes(rtc.phase);
+  const hasMicrophone = ["waiting", "connecting", "reconnecting", "live"].includes(rtc.phase);
   const connectLabel =
     role === "creator"
       ? rtc.phase === "microphone-denied"
@@ -122,6 +122,8 @@ function phaseLabel(
         : "Microphone ready. Waiting for the host…";
     case "connecting":
       return "Establishing direct peer-to-peer audio…";
+    case "reconnecting":
+      return "Connection interrupted. Reconnecting for up to 20 seconds…";
     case "live":
       return "Direct audio connected.";
     case "microphone-denied":
