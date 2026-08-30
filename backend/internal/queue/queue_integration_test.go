@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/bling-app/bling/backend/internal/realtime"
 	showdomain "github.com/bling-app/bling/backend/internal/show"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
@@ -64,7 +65,13 @@ func TestDurableQueueConcurrentJoinRecoveryAndShutdown(t *testing.T) {
 	}
 	repository := NewPostgresRepository(pool)
 	index := NewRedisCandidateIndex(redisClient)
-	service := NewService(repository, index, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	eventBus := realtime.NewRedisBus(redisClient)
+	eventSubscription, err := eventBus.Subscribe(ctx, activeShow.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer eventSubscription.Close()
+	service := NewService(repository, index, eventBus, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	defer index.Clear(context.Background(), activeShow.ID)
 
 	const callers = 100
@@ -102,6 +109,15 @@ func TestDurableQueueConcurrentJoinRecoveryAndShutdown(t *testing.T) {
 			t.Fatalf("queue is not ordered at %d", position)
 		}
 	}
+	service.flushOutbox(ctx)
+	select {
+	case event := <-eventSubscription.Events():
+		if event.Type != realtime.EventQueueJoined || event.ShowID != activeShow.ID {
+			t.Fatalf("realtime queue event=%+v", event)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("durable queue event was not published")
+	}
 
 	duplicate := JoinInput{ShowID: activeShow.ID, DisplayName: "Retry caller", Topic: "Retries", SessionTokenHash: Hash("retry-viewer-" + suffix), JoinKeyHash: Hash("retry-join-" + suffix)}
 	duplicateIDs := make(chan string, 10)
@@ -135,11 +151,17 @@ func TestDurableQueueConcurrentJoinRecoveryAndShutdown(t *testing.T) {
 	if err != nil || state.Entry.ID != duplicateID || state.Position == 0 {
 		t.Fatalf("recovery state=%+v err=%v", state, err)
 	}
+	if err := service.AuthorizeViewer(ctx, activeShow.ID, duplicate.SessionTokenHash); err != nil {
+		t.Fatalf("waiting viewer authorization: %v", err)
+	}
 	if _, err := service.List(ctx, activeShow.ID, "00000000-0000-0000-0000-000000000000", 10, 0); !errors.Is(err, ErrShowNotFound) {
 		t.Fatalf("cross-creator list err=%v", err)
 	}
 	if _, err := service.Leave(ctx, activeShow.ID, duplicate.SessionTokenHash); err != nil {
 		t.Fatal(err)
+	}
+	if err := service.AuthorizeViewer(ctx, activeShow.ID, duplicate.SessionTokenHash); !errors.Is(err, ErrEntryNotFound) {
+		t.Fatalf("left viewer authorization err=%v", err)
 	}
 	if _, err := service.Me(ctx, activeShow.ID, duplicate.SessionTokenHash); err != nil {
 		t.Fatalf("left entry should remain recoverable: %v", err)
@@ -148,8 +170,6 @@ func TestDurableQueueConcurrentJoinRecoveryAndShutdown(t *testing.T) {
 	if _, err := showStore.End(ctx, activeShow.ID, creatorID, time.Now()); err != nil {
 		t.Fatal(err)
 	}
-	// Drain more than one worker page so the terminal clear follows all joins.
-	service.flushOutbox(ctx)
 	service.flushOutbox(ctx)
 	remaining, err := index.List(ctx, activeShow.ID, 10, 0)
 	if err != nil || len(remaining) != 0 {

@@ -1,10 +1,11 @@
 import { Link, useNavigate } from "react-router-dom";
 import { useLogout, useMe } from "../lib/auth";
-import { useCreatorQueue } from "../lib/queue";
+import { useCreatorQueue, useQueueEvents } from "../lib/queue";
 import { useEndShow, useLiveShow, useStartShow } from "../lib/shows";
 
 function CallerList({ showID }: { showID: string }) {
   const queue = useCreatorQueue(showID);
+  useQueueEvents(showID, "creator", true);
   if (queue.isPending)
     return <div className="status">Loading caller queue…</div>;
   if (queue.isError)

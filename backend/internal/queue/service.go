@@ -10,12 +10,13 @@ import (
 type Service struct {
 	repository Repository
 	index      CandidateIndex
+	publisher  EventPublisher
 	logger     *slog.Logger
 	now        func() time.Time
 }
 
-func NewService(repository Repository, index CandidateIndex, logger *slog.Logger) *Service {
-	return &Service{repository: repository, index: index, logger: logger, now: time.Now}
+func NewService(repository Repository, index CandidateIndex, publisher EventPublisher, logger *slog.Logger) *Service {
+	return &Service{repository: repository, index: index, publisher: publisher, logger: logger, now: time.Now}
 }
 
 func (s *Service) Join(ctx context.Context, input JoinInput) (ViewerState, error) {
@@ -82,6 +83,14 @@ func (s *Service) Tiers(ctx context.Context, showID string) ([]Tier, error) {
 	return s.repository.Tiers(ctx, showID)
 }
 
+func (s *Service) AuthorizeCreator(ctx context.Context, showID, creatorID string) error {
+	return s.repository.AuthorizeShow(ctx, showID, creatorID)
+}
+
+func (s *Service) AuthorizeViewer(ctx context.Context, showID string, tokenHash []byte) error {
+	return s.repository.AuthorizeViewer(ctx, showID, tokenHash)
+}
+
 func (s *Service) RunOutbox(ctx context.Context) {
 	ticker := time.NewTicker(500 * time.Millisecond)
 	defer ticker.Stop()
@@ -99,13 +108,15 @@ func (s *Service) RunOutbox(ctx context.Context) {
 }
 
 func (s *Service) flushOutbox(ctx context.Context) bool {
-	events, err := s.repository.PendingOutbox(ctx, 100)
+	const batchSize = 1000
+	events, err := s.repository.PendingOutbox(ctx, batchSize)
 	if err != nil {
 		if !errors.Is(err, context.Canceled) {
 			s.logger.Error("queue outbox read failed", "error", err)
 		}
 		return false
 	}
+	notifications := make(map[string]string)
 	for _, event := range events {
 		var publishErr error
 		switch event.EventType {
@@ -120,12 +131,28 @@ func (s *Service) flushOutbox(ctx context.Context) bool {
 			s.logger.Warn("queue outbox publish failed", "error", publishErr, "outbox_id", event.ID)
 			return false
 		}
-		if err := s.repository.MarkOutboxPublished(ctx, event.ID, s.now()); err != nil {
-			s.logger.Warn("queue outbox acknowledgement failed", "error", err, "outbox_id", event.ID)
-			return false
+		current := notifications[event.Candidate.ShowID]
+		if current == "" || event.EventType == "queue.show_ended" {
+			notifications[event.Candidate.ShowID] = event.EventType
 		}
 	}
-	return len(events) == 100
+	if s.publisher != nil {
+		for showID, eventType := range notifications {
+			if err := s.publisher.PublishQueueEvent(ctx, showID, eventType); err != nil {
+				s.logger.Warn("queue realtime publish failed", "error", err, "show_id", showID)
+				return false
+			}
+		}
+	}
+	ids := make([]int64, len(events))
+	for index, event := range events {
+		ids[index] = event.ID
+	}
+	if err := s.repository.MarkOutboxPublished(ctx, ids, s.now()); err != nil {
+		s.logger.Warn("queue outbox acknowledgement failed", "error", err, "event_count", len(ids))
+		return false
+	}
+	return len(events) == batchSize
 }
 
 func candidateFromEntry(entry Entry) Candidate {

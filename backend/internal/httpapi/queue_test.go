@@ -15,11 +15,12 @@ import (
 )
 
 type fakeQueueService struct {
-	joinInput queuedomain.JoinInput
-	state     queuedomain.ViewerState
-	entries   []queuedomain.Entry
-	err       error
-	listCalls int
+	joinInput    queuedomain.JoinInput
+	state        queuedomain.ViewerState
+	entries      []queuedomain.Entry
+	err          error
+	authorizeErr error
+	listCalls    int
 }
 
 func (f *fakeQueueService) Join(_ context.Context, input queuedomain.JoinInput) (queuedomain.ViewerState, error) {
@@ -39,6 +40,15 @@ func (f *fakeQueueService) List(context.Context, string, string, int, int) ([]qu
 func (f *fakeQueueService) Tiers(context.Context, string) ([]queuedomain.Tier, error) {
 	return []queuedomain.Tier{{ID: "tier-1", Name: "Standard", CallDurationSeconds: 300}}, f.err
 }
+func (f *fakeQueueService) AuthorizeCreator(context.Context, string, string) error {
+	return f.authorizeErr
+}
+func (f *fakeQueueService) AuthorizeViewer(context.Context, string, []byte) error {
+	if f.state.Entry.Status != queuedomain.StatusWaiting {
+		return queuedomain.ErrEntryNotFound
+	}
+	return f.err
+}
 
 func queueTestRouter(authentication *fakeAuthService, service *fakeQueueService) http.Handler {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
@@ -46,7 +56,7 @@ func queueTestRouter(authentication *fakeAuthService, service *fakeQueueService)
 	shows := &showHandler{service: &fakeShowService{}, logger: logger}
 	queues := &queueHandler{service: service, logger: logger, cookieTTL: time.Hour}
 	health := healthHandler{postgres: fakeDependency{}, redis: fakeDependency{}, timeout: time.Second}
-	return newRouter(logger, health, authenticationHandler, shows, queues, []string{"http://localhost:5173"})
+	return newRouter(logger, health, authenticationHandler, shows, queues, nil, []string{"http://localhost:5173"})
 }
 
 func TestJoinQueueSetsOpaqueRecoveryCookieAndHashesCredentials(t *testing.T) {

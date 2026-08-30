@@ -3,6 +3,7 @@ import { useParams } from "react-router-dom";
 import {
   useJoinQueue,
   useLeaveQueue,
+  useQueueEvents,
   useQueueTiers,
   useViewerQueue,
 } from "../lib/queue";
@@ -15,6 +16,7 @@ function CallerQueue({ showID }: { showID: string }) {
   const leave = useLeaveQueue(showID);
   const [displayName, setDisplayName] = useState("");
   const [topic, setTopic] = useState("");
+  useQueueEvents(showID, "viewer", viewer.data?.entry.status === "WAITING");
 
   if (tiers.isPending || viewer.isPending)
     return <div className="status">Loading the caller line…</div>;

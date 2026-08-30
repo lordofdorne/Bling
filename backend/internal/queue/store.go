@@ -230,6 +230,21 @@ func (r *PostgresRepository) AuthorizeShow(ctx context.Context, showID, creatorI
 	return nil
 }
 
+func (r *PostgresRepository) AuthorizeViewer(ctx context.Context, showID string, tokenHash []byte) error {
+	var exists bool
+	if err := r.pool.QueryRow(ctx, `
+		SELECT EXISTS (
+			SELECT 1 FROM queue_entries
+			WHERE show_id = $1 AND session_token_hash = $2 AND status = 'WAITING'
+		)`, showID, tokenHash).Scan(&exists); err != nil {
+		return fmt.Errorf("authorize realtime viewer: %w", err)
+	}
+	if !exists {
+		return ErrEntryNotFound
+	}
+	return nil
+}
+
 func (r *PostgresRepository) EntriesByIDs(ctx context.Context, showID, creatorID string, ids []string) ([]Entry, error) {
 	if len(ids) == 0 {
 		return nil, nil
@@ -318,8 +333,11 @@ func (r *PostgresRepository) PendingOutbox(ctx context.Context, limit int) ([]Ou
 	return events, rows.Err()
 }
 
-func (r *PostgresRepository) MarkOutboxPublished(ctx context.Context, id int64, publishedAt time.Time) error {
-	if _, err := r.pool.Exec(ctx, `UPDATE queue_outbox SET published_at = $1 WHERE id = $2`, publishedAt, id); err != nil {
+func (r *PostgresRepository) MarkOutboxPublished(ctx context.Context, ids []int64, publishedAt time.Time) error {
+	if len(ids) == 0 {
+		return nil
+	}
+	if _, err := r.pool.Exec(ctx, `UPDATE queue_outbox SET published_at = $1 WHERE id = ANY($2)`, publishedAt, ids); err != nil {
 		return fmt.Errorf("mark queue outbox published: %w", err)
 	}
 	return nil

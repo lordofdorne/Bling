@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useEffect } from "react";
 import { ApiError, apiRequest } from "./api";
 
 export type QueueTier = {
@@ -71,7 +72,7 @@ export function useViewerQueue(showID: string) {
     queryKey: viewerKey(showID),
     queryFn: () => getViewerState(showID),
     enabled: showID.length > 0,
-    refetchInterval: 5_000,
+    refetchInterval: 30_000,
   });
 }
 
@@ -118,6 +119,63 @@ export function useCreatorQueue(showID: string) {
         )
       ).data.entries,
     enabled: showID.length > 0,
-    refetchInterval: 5_000,
+    refetchInterval: 30_000,
   });
+}
+
+export function useQueueEvents(
+  showID: string,
+  audience: "viewer" | "creator",
+  enabled: boolean,
+) {
+  const queryClient = useQueryClient();
+  useEffect(() => {
+    if (!enabled || !showID || typeof WebSocket === "undefined") return;
+
+    let socket: WebSocket | undefined;
+    let reconnectTimer: ReturnType<typeof setTimeout> | undefined;
+    let attempts = 0;
+    let stopped = false;
+
+    const synchronize = () => {
+      void queryClient.invalidateQueries({ queryKey: viewerKey(showID) });
+      void queryClient.invalidateQueries({ queryKey: creatorQueueKey(showID) });
+      void queryClient.invalidateQueries({ queryKey: ["creators"] });
+    };
+
+    const connect = () => {
+      if (stopped) return;
+      const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+      const endpoint = audience === "creator" ? "creator-events" : "events";
+      socket = new WebSocket(
+        `${protocol}//${window.location.host}/api/v1/shows/${showID}/queue/${endpoint}`,
+      );
+      socket.onopen = () => {
+        attempts = 0;
+        synchronize();
+      };
+      socket.onmessage = (message) => {
+        try {
+          const event = JSON.parse(String(message.data)) as { showId?: string };
+          if (event.showId === showID) synchronize();
+        } catch {
+          // Ignore malformed transport data; REST remains authoritative.
+        }
+      };
+      socket.onclose = () => {
+        if (stopped) return;
+        const ceiling = Math.min(30_000, 500 * 2 ** attempts++);
+        const delay = ceiling * (0.5 + Math.random());
+        reconnectTimer = setTimeout(connect, delay);
+      };
+      socket.onerror = () => socket?.close();
+    };
+
+    connect();
+    return () => {
+      stopped = true;
+      if (reconnectTimer) clearTimeout(reconnectTimer);
+      socket?.close(1000, "page changed");
+    };
+  }, [audience, enabled, queryClient, showID]);
 }

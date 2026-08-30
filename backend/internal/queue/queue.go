@@ -99,8 +99,9 @@ type Repository interface {
 	EntriesByIDs(context.Context, string, string, []string) ([]Entry, error)
 	Tiers(context.Context, string) ([]Tier, error)
 	AuthorizeShow(context.Context, string, string) error
+	AuthorizeViewer(context.Context, string, []byte) error
 	PendingOutbox(context.Context, int) ([]OutboxEvent, error)
-	MarkOutboxPublished(context.Context, int64, time.Time) error
+	MarkOutboxPublished(context.Context, []int64, time.Time) error
 }
 
 type Candidate struct {
@@ -122,4 +123,8 @@ type CandidateIndex interface {
 	Position(context.Context, Candidate) (int64, error)
 	List(context.Context, string, int, int) ([]string, error)
 	Clear(context.Context, string) error
+}
+
+type EventPublisher interface {
+	PublishQueueEvent(context.Context, string, string) error
 }

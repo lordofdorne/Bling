@@ -2,11 +2,11 @@
 
 Bling is a live call-in platform for streamers. Viewers wait in an application-managed queue; a direct, audio-only WebRTC connection begins only after the creator selects one caller. The backend is the control plane and never carries audio.
 
-The project currently includes a React/Vite client, Go API, PostgreSQL and Redis dependencies, schema migrations, configuration, structured request logging, health checks, creator authentication, show lifecycle controls, and a durable caller queue.
+The project currently includes a React/Vite client, Go API, PostgreSQL and Redis dependencies, schema migrations, configuration, structured request logging, health checks, creator authentication, show lifecycle controls, a durable caller queue, and realtime queue updates.
 
 Creator authentication is available through `/register`, `/login`, and the protected `/dashboard`. The versioned API exposes registration, login, logout, and current-user endpoints under `/api/v1`.
 
-Authenticated creators can create, start, inspect, and end a Hotline from the dashboard. Viewers can join or leave with an anonymous recovery cookie and recover their current position after refreshing. PostgreSQL remains authoritative for queue state and ordering; Redis stores only the hot, show-scoped candidate index, repaired through a transactional outbox. The creator sees caller names and topics, while public viewers can only read their own queue entry.
+Authenticated creators can create, start, inspect, and end a Hotline from the dashboard. Viewers can join or leave with an anonymous recovery cookie and recover their current position after refreshing. PostgreSQL remains authoritative for queue state and ordering; Redis stores the hot candidate index and carries ephemeral show-scoped invalidation events. WebSocket clients always resynchronize through authorized REST endpoints on connection or reconnect. The creator sees caller names and topics, while public viewers can only read their own queue entry.
 
 ## Prerequisites
 
@@ -52,6 +52,8 @@ go run ./cmd/queue-load -show <show-uuid> -callers 1000 -concurrency 100
 ```
 
 The driver reports failures, throughput, and p50/p95 response latency. It is a repeatable smoke test, not a claim that one local process represents production capacity; million-caller events still require horizontal API capacity, managed PostgreSQL/Redis sizing, and edge admission controls.
+
+Realtime transport behavior, limits, and recovery semantics are documented in [docs/realtime.md](docs/realtime.md).
 
 ## Database migrations
 

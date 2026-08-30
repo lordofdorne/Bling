@@ -49,10 +49,11 @@ Acceptance: refresh recovers queue state; viewers cannot inspect other callers; 
 ## PR 6 — Realtime transport
 
 - Bounded WebSocket hub, one writer per connection, heartbeat, deadlines, origin checks, and rate limits
-- Show-scoped event bus, presence, reconnect with jitter, and REST resynchronization
+- One Redis Pub/Sub subscription per active show and API instance, with non-blocking local fanout
+- Authenticated viewer/creator connections, reconnect with jitter, and REST resynchronization
 - Realtime queue updates in both clients
 
-Acceptance: event tests and simulated slow/reconnecting clients show no blocked show fanout or leaked goroutines.
+Acceptance: cross-instance event tests and 500-client simulations show no blocked show fanout; slow clients are disconnected; empty rooms release subscriptions; reconnecting clients resynchronize from REST.
 
 ## PR 7 — Atomic caller selection and signaling
 

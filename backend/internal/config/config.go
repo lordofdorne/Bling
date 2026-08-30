@@ -11,22 +11,28 @@ import (
 )
 
 type Config struct {
-	Environment         string
-	HTTPAddr            string
-	DatabaseURL         string
-	RedisURL            string
-	FrontendURL         string
-	AllowedOrigins      []string
-	CookieSecure        bool
-	SessionTTL          time.Duration
-	BcryptCost          int
-	AuthRateLimitWindow time.Duration
-	ShutdownTimeout     time.Duration
-	ReadinessTimeout    time.Duration
-	ReadHeaderTimeout   time.Duration
-	ReadTimeout         time.Duration
-	WriteTimeout        time.Duration
-	IdleTimeout         time.Duration
+	Environment             string
+	HTTPAddr                string
+	DatabaseURL             string
+	RedisURL                string
+	FrontendURL             string
+	AllowedOrigins          []string
+	CookieSecure            bool
+	SessionTTL              time.Duration
+	BcryptCost              int
+	AuthRateLimitWindow     time.Duration
+	RealtimeRateLimitWindow time.Duration
+	RealtimeHeartbeat       time.Duration
+	RealtimeWriteTimeout    time.Duration
+	RealtimeConnectLimit    int
+	RealtimeClientBuffer    int
+	RealtimeMaxPerShow      int
+	ShutdownTimeout         time.Duration
+	ReadinessTimeout        time.Duration
+	ReadHeaderTimeout       time.Duration
+	ReadTimeout             time.Duration
+	WriteTimeout            time.Duration
+	IdleTimeout             time.Duration
 }
 
 func Load() (Config, error) {
@@ -59,6 +65,24 @@ func Load() (Config, error) {
 	if cfg.AuthRateLimitWindow, err = duration("AUTH_RATE_LIMIT_WINDOW", time.Minute); err != nil {
 		return Config{}, err
 	}
+	if cfg.RealtimeRateLimitWindow, err = duration("REALTIME_RATE_LIMIT_WINDOW", time.Minute); err != nil {
+		return Config{}, err
+	}
+	if cfg.RealtimeHeartbeat, err = duration("REALTIME_HEARTBEAT", 25*time.Second); err != nil {
+		return Config{}, err
+	}
+	if cfg.RealtimeWriteTimeout, err = duration("REALTIME_WRITE_TIMEOUT", 5*time.Second); err != nil {
+		return Config{}, err
+	}
+	if cfg.RealtimeConnectLimit, err = positiveInteger("REALTIME_CONNECT_LIMIT", 60); err != nil {
+		return Config{}, err
+	}
+	if cfg.RealtimeClientBuffer, err = positiveInteger("REALTIME_CLIENT_BUFFER", 16); err != nil {
+		return Config{}, err
+	}
+	if cfg.RealtimeMaxPerShow, err = positiveInteger("REALTIME_MAX_PER_SHOW", 10000); err != nil {
+		return Config{}, err
+	}
 	if cfg.BcryptCost, err = integer("BCRYPT_COST", 12); err != nil {
 		return Config{}, err
 	}
@@ -85,6 +109,17 @@ func integer(key string, fallback int) (int, error) {
 		return 0, fmt.Errorf("parse %s: %w", key, err)
 	}
 	return parsed, nil
+}
+
+func positiveInteger(key string, fallback int) (int, error) {
+	value, err := integer(key, fallback)
+	if err != nil {
+		return 0, err
+	}
+	if value <= 0 {
+		return 0, fmt.Errorf("%s must be positive", key)
+	}
+	return value, nil
 }
 
 func envOrDefault(key, fallback string) string {
