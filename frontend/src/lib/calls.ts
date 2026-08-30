@@ -13,6 +13,7 @@ export type BlingCall = {
   callDurationSeconds: number;
   startedAt: string | null;
   endedAt: string | null;
+  expiresAt: string | null;
   createdAt: string;
   updatedAt: string;
   caller: Pick<
@@ -31,6 +32,58 @@ const activeCallKey = (showID: string) =>
   ["shows", showID, "calls", "active"] as const;
 const viewerCallKey = (showID: string) =>
   ["shows", showID, "calls", "me"] as const;
+
+export type RTCConfig = { iceServers: RTCIceServer[] };
+
+export async function getRTCConfig(
+  showID: string,
+  callID: string,
+  role: "creator" | "viewer",
+) {
+  const endpoint = role === "creator" ? "creator-rtc-config" : "rtc-config";
+  return (
+    await apiRequest<{ data: RTCConfig }>(
+      `/api/v1/shows/${showID}/calls/${callID}/${endpoint}`,
+    )
+  ).data;
+}
+
+export async function transitionParticipantCall(
+  showID: string,
+  callID: string,
+  role: "creator" | "viewer",
+  status: CallStatus,
+) {
+  const endpoint = role === "creator" ? "transition" : "viewer-transition";
+  return (
+    await apiRequest<{ data: BlingCall }>(
+      `/api/v1/shows/${showID}/calls/${callID}/${endpoint}`,
+      { method: "POST", body: JSON.stringify({ status }) },
+    )
+  ).data;
+}
+
+export async function endParticipantCall(
+  showID: string,
+  callID: string,
+  role: "creator" | "viewer",
+) {
+  const endpoint = role === "creator" ? "creator-end" : "viewer-end";
+  return (
+    await apiRequest<{ data: BlingCall }>(
+      `/api/v1/shows/${showID}/calls/${callID}/${endpoint}`,
+      { method: "POST" },
+    )
+  ).data;
+}
+
+export function participantEndURL(
+  showID: string,
+  callID: string,
+  role: "creator" | "viewer",
+) {
+  return `/api/v1/shows/${showID}/calls/${callID}/${role === "creator" ? "creator-end" : "viewer-end"}`;
+}
 
 export function useActiveCall(showID: string) {
   return useQuery({

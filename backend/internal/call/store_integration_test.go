@@ -48,8 +48,10 @@ func TestConcurrentSelectionCreatesExactlyOneActiveCall(t *testing.T) {
 	}
 	queueRepository := queuedomain.NewPostgresRepository(pool)
 	entries := make([]queuedomain.Entry, 2)
+	tokenHashes := make([][]byte, 2)
 	for index := range entries {
-		entries[index], err = queueRepository.Join(ctx, queuedomain.JoinInput{ShowID: activeShow.ID, DisplayName: "Caller", Topic: "Concurrency", SessionTokenHash: queuedomain.Hash("viewer-" + suffix + string(rune('a'+index))), JoinKeyHash: queuedomain.Hash("join-" + suffix + string(rune('a'+index)))})
+		tokenHashes[index] = queuedomain.Hash("viewer-" + suffix + string(rune('a'+index)))
+		entries[index], err = queueRepository.Join(ctx, queuedomain.JoinInput{ShowID: activeShow.ID, DisplayName: "Caller", Topic: "Concurrency", SessionTokenHash: tokenHashes[index], JoinKeyHash: queuedomain.Hash("join-" + suffix + string(rune('a'+index)))})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -93,5 +95,32 @@ func TestConcurrentSelectionCreatesExactlyOneActiveCall(t *testing.T) {
 	}
 	if activeCalls != 1 || selectedEntries != 1 {
 		t.Fatalf("active calls=%d selected entries=%d", activeCalls, selectedEntries)
+	}
+	activeCall, err := repository.CreatorActive(ctx, activeShow.ID, creatorID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := repository.Transition(ctx, activeShow.ID, activeCall.ID, creatorID, StatusConnecting, time.Now().UTC()); err != nil {
+		t.Fatal(err)
+	}
+	var winnerToken []byte
+	for index, entry := range entries {
+		if entry.ID == activeCall.QueueEntryID {
+			winnerToken = tokenHashes[index]
+		}
+	}
+	if winnerToken == nil {
+		t.Fatal("selected caller token was not found")
+	}
+	startedAt := time.Now().UTC().Add(-time.Duration(activeCall.CallDurationSeconds+1) * time.Second)
+	if _, err := repository.TransitionViewer(ctx, activeShow.ID, activeCall.ID, winnerToken, StatusLive, startedAt); err != nil {
+		t.Fatal(err)
+	}
+	expired, err := repository.ExpireDue(ctx, time.Now().UTC(), 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(expired) != 1 || expired[0].Status != StatusEnded {
+		t.Fatalf("expired calls=%+v", expired)
 	}
 }

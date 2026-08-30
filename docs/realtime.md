@@ -37,13 +37,23 @@ Redis subscription per active call. The hub filters by both call ID and target
 role, so an offer or ICE candidate cannot reach another caller or another show.
 
 Creators may send `signal.offer` and `signal.ice`; selected callers may send
-`signal.answer` and `signal.ice`. The server derives `from`, `target`, and
+`signal.ready`, `signal.answer`, and `signal.ice`. The ready message is repeated
+until the caller receives an offer, preventing a creator from publishing an
+ephemeral offer before the caller has granted microphone access. The server derives `from`, `target`, and
 `callId` from the authenticated socket rather than trusting those client fields.
 Messages are limited to 64 KiB and carry opaque, validated JSON payloads. SDP
 and ICE are ephemeral; PostgreSQL remains authoritative for the call lifecycle.
 Connection attempts use the realtime identity/IP rate limits, and each API
 instance admits at most eight local sockets for one call so abandoned tabs
 cannot grow a room without bound.
+
+ICE configuration is returned only after the same active-call authorization:
+
+- Selected caller: `GET /api/v1/shows/{showID}/calls/{callID}/rtc-config`
+- Creator: `GET /api/v1/shows/{showID}/calls/{callID}/creator-rtc-config`
+
+Responses are non-cacheable. TURN credentials come from backend environment
+configuration and are never compiled into the frontend bundle.
 
 ## Delivery and recovery
 

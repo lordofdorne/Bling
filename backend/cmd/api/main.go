@@ -49,7 +49,8 @@ func main() {
 	eventBus := realtime.NewRedisBus(redisClient)
 	realtimeHub := realtime.NewHub(ctx, eventBus, logger, cfg.RealtimeClientBuffer, cfg.RealtimeMaxPerShow)
 	signalHub := realtime.NewSignalHub(ctx, eventBus, logger, cfg.RealtimeClientBuffer, 8)
-	callService := calldomain.NewService(calldomain.NewPostgresRepository(postgres))
+	callService := calldomain.NewService(calldomain.NewPostgresRepository(postgres), logger)
+	go callService.RunTimeouts(ctx)
 	queueService := queuedomain.NewService(
 		queuedomain.NewPostgresRepository(postgres),
 		queuedomain.NewRedisCandidateIndex(redisClient),

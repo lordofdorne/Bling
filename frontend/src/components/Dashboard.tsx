@@ -4,17 +4,16 @@ import {
   useActiveCall,
   useSelectCaller,
   useSelectRandomCaller,
-  useTransitionCall,
 } from "../lib/calls";
 import { useCreatorQueue, useQueueEvents } from "../lib/queue";
 import { useEndShow, useLiveShow, useStartShow } from "../lib/shows";
+import { CallAudioPanel } from "./CallAudioPanel";
 
 function CallerList({ showID }: { showID: string }) {
   const queue = useCreatorQueue(showID);
   const activeCall = useActiveCall(showID);
   const selectCaller = useSelectCaller(showID);
   const selectRandom = useSelectRandomCaller(showID);
-  const transition = useTransitionCall(showID);
   useQueueEvents(showID, "creator", true);
   if (queue.isPending || activeCall.isPending)
     return <div className="status">Loading caller queue…</div>;
@@ -52,40 +51,7 @@ function CallerList({ showID }: { showID: string }) {
           <span>
             {call.caller.tierName} · {call.callDurationSeconds}s reserved
           </span>
-          <div className="call-actions">
-            {call.status === "CREATED" && (
-              <button
-                className="primary-button"
-                type="button"
-                onClick={() =>
-                  transition.mutate({ callID: call.id, status: "CONNECTING" })
-                }
-              >
-                Open connection
-              </button>
-            )}
-            {call.status === "CONNECTING" && (
-              <button
-                className="primary-button"
-                type="button"
-                onClick={() =>
-                  transition.mutate({ callID: call.id, status: "LIVE" })
-                }
-              >
-                Mark live
-              </button>
-            )}
-            <button
-              className="danger-button"
-              type="button"
-              onClick={() =>
-                transition.mutate({ callID: call.id, status: "ENDED" })
-              }
-              disabled={transition.isPending}
-            >
-              End call
-            </button>
-          </div>
+          <CallAudioPanel call={call} role="creator" />
         </div>
       )}
       {entries.length === 0 ? (
@@ -115,7 +81,7 @@ function CallerList({ showID }: { showID: string }) {
           ))}
         </ol>
       )}
-      {(selectCaller.isError || selectRandom.isError || transition.isError) && (
+      {(selectCaller.isError || selectRandom.isError) && (
         <div className="form-error" role="alert">
           Unable to update the active call. Refresh and try again.
         </div>

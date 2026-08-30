@@ -9,6 +9,7 @@ import {
 } from "../lib/queue";
 import { useLiveShow } from "../lib/shows";
 import { useViewerCall } from "../lib/calls";
+import { CallAudioPanel } from "./CallAudioPanel";
 
 function CallerQueue({ showID }: { showID: string }) {
   const tiers = useQueueTiers(showID);
@@ -35,27 +36,20 @@ function CallerQueue({ showID }: { showID: string }) {
     call.data.status !== "ENDED" &&
     call.data.status !== "FAILED"
   ) {
-    const connecting = call.data.status !== "LIVE";
     return (
       <section
         className="queue-card queue-confirmation"
         aria-label="Your call status"
       >
         <p className="eyebrow">You’ve been selected</p>
-        <div className="position-number">{connecting ? "Ready" : "Live"}</div>
-        <h2>
-          {connecting
-            ? "The host is opening your connection."
-            : "You’re connected."}
-        </h2>
-        <p>
-          Keep this tab open. Microphone connection arrives in the next media
-          PR.
-        </p>
+        <div className="position-number">You’re up</div>
+        <h2>The host chose your call.</h2>
+        <p>Your microphone remains off until you choose to connect.</p>
         <div className="queue-summary">
           <strong>{call.data.caller.tierName}</strong>
           <span>{call.data.callDurationSeconds}s reserved</span>
         </div>
+        <CallAudioPanel call={call.data} role="viewer" />
       </section>
     );
   }
