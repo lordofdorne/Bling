@@ -19,7 +19,31 @@ Events intentionally contain no caller names, topics, credentials, or payment da
 }
 ```
 
-Supported types are `queue.joined`, `queue.left`, and `show.ended`.
+Supported invalidation types are `queue.joined`, `queue.left`, `call.selected`,
+`call.connecting`, `call.live`, `call.ended`, `call.failed`, and `show.ended`.
+
+## Private call signaling
+
+WebRTC negotiation uses a separate call-scoped channel. It is deliberately not
+broadcast into the show's queue room:
+
+- Selected caller: `GET /api/v1/shows/{showID}/calls/{callID}/signals`
+- Creator: `GET /api/v1/shows/{showID}/calls/{callID}/creator-signals`
+
+The caller endpoint checks the anonymous recovery credential against the call's
+selected queue entry. The creator endpoint checks both the authenticated owner
+and the call's show. Each API instance multiplexes local participants over one
+Redis subscription per active call. The hub filters by both call ID and target
+role, so an offer or ICE candidate cannot reach another caller or another show.
+
+Creators may send `signal.offer` and `signal.ice`; selected callers may send
+`signal.answer` and `signal.ice`. The server derives `from`, `target`, and
+`callId` from the authenticated socket rather than trusting those client fields.
+Messages are limited to 64 KiB and carry opaque, validated JSON payloads. SDP
+and ICE are ephemeral; PostgreSQL remains authoritative for the call lifecycle.
+Connection attempts use the realtime identity/IP rate limits, and each API
+instance admits at most eight local sockets for one call so abandoned tabs
+cannot grow a room without bound.
 
 ## Delivery and recovery
 

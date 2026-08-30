@@ -112,6 +112,16 @@ func mapQueueEventType(eventType string) string {
 		return EventQueueJoined
 	case "queue.caller_left":
 		return EventQueueLeft
+	case "queue.caller_selected":
+		return EventCallSelected
+	case "call.connecting":
+		return EventCallConnecting
+	case "call.live":
+		return EventCallLive
+	case "call.ended":
+		return EventCallEnded
+	case "call.failed":
+		return EventCallFailed
 	case "queue.show_ended":
 		return EventShowEnded
 	default:

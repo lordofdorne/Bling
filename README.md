@@ -2,11 +2,11 @@
 
 Bling is a live call-in platform for streamers. Viewers wait in an application-managed queue; a direct, audio-only WebRTC connection begins only after the creator selects one caller. The backend is the control plane and never carries audio.
 
-The project currently includes a React/Vite client, Go API, PostgreSQL and Redis dependencies, schema migrations, configuration, structured request logging, health checks, creator authentication, show lifecycle controls, a durable caller queue, and realtime queue updates.
+The project currently includes a React/Vite client, Go API, PostgreSQL and Redis dependencies, schema migrations, configuration, structured request logging, health checks, creator authentication, show lifecycle controls, a durable caller queue, realtime queue updates, and atomic caller selection with private signaling.
 
 Creator authentication is available through `/register`, `/login`, and the protected `/dashboard`. The versioned API exposes registration, login, logout, and current-user endpoints under `/api/v1`.
 
-Authenticated creators can create, start, inspect, and end a Hotline from the dashboard. Viewers can join or leave with an anonymous recovery cookie and recover their current position after refreshing. PostgreSQL remains authoritative for queue state and ordering; Redis stores the hot candidate index and carries ephemeral show-scoped invalidation events. WebSocket clients always resynchronize through authorized REST endpoints on connection or reconnect. The creator sees caller names and topics, while public viewers can only read their own queue entry.
+Authenticated creators can create, start, inspect, and end a Hotline from the dashboard. Viewers can join or leave with an anonymous recovery cookie and recover their current position after refreshing. A creator can manually choose a waiting caller or randomly choose within the highest available priority tier. PostgreSQL serializes selection and guarantees exactly one active call per show; Redis stores the hot candidate index and carries ephemeral invalidation and participant-scoped signaling events. The creator sees caller names and topics, while public viewers can only read their own queue entry and call.
 
 ## Prerequisites
 

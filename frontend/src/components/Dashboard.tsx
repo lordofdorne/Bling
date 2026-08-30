@@ -1,26 +1,93 @@
 import { Link, useNavigate } from "react-router-dom";
 import { useLogout, useMe } from "../lib/auth";
+import {
+  useActiveCall,
+  useSelectCaller,
+  useSelectRandomCaller,
+  useTransitionCall,
+} from "../lib/calls";
 import { useCreatorQueue, useQueueEvents } from "../lib/queue";
 import { useEndShow, useLiveShow, useStartShow } from "../lib/shows";
 
 function CallerList({ showID }: { showID: string }) {
   const queue = useCreatorQueue(showID);
+  const activeCall = useActiveCall(showID);
+  const selectCaller = useSelectCaller(showID);
+  const selectRandom = useSelectRandomCaller(showID);
+  const transition = useTransitionCall(showID);
   useQueueEvents(showID, "creator", true);
-  if (queue.isPending)
+  if (queue.isPending || activeCall.isPending)
     return <div className="status">Loading caller queue…</div>;
-  if (queue.isError)
+  if (queue.isError || activeCall.isError)
     return (
       <div className="form-error" role="alert">
         Unable to load the caller queue.
       </div>
     );
   const entries = queue.data ?? [];
+  const call = activeCall.data;
   return (
     <section className="caller-list" aria-label="Caller queue">
       <div className="caller-list-heading">
-        <h2>Caller queue</h2>
-        <span>{entries.length} waiting</span>
+        <div>
+          <h2>Caller queue</h2>
+          <span>{entries.length} waiting</span>
+        </div>
+        {!call && entries.length > 0 && (
+          <button
+            className="button secondary"
+            type="button"
+            onClick={() => selectRandom.mutate(undefined)}
+            disabled={selectRandom.isPending}
+          >
+            {selectRandom.isPending ? "Choosing…" : "Choose priority random"}
+          </button>
+        )}
       </div>
+      {call && (
+        <div className="active-call-card" aria-label="Active call">
+          <p className="eyebrow">{call.status.replace("_", " ")}</p>
+          <strong>{call.caller.displayName}</strong>
+          <p>{call.caller.topic}</p>
+          <span>
+            {call.caller.tierName} · {call.callDurationSeconds}s reserved
+          </span>
+          <div className="call-actions">
+            {call.status === "CREATED" && (
+              <button
+                className="primary-button"
+                type="button"
+                onClick={() =>
+                  transition.mutate({ callID: call.id, status: "CONNECTING" })
+                }
+              >
+                Open connection
+              </button>
+            )}
+            {call.status === "CONNECTING" && (
+              <button
+                className="primary-button"
+                type="button"
+                onClick={() =>
+                  transition.mutate({ callID: call.id, status: "LIVE" })
+                }
+              >
+                Mark live
+              </button>
+            )}
+            <button
+              className="danger-button"
+              type="button"
+              onClick={() =>
+                transition.mutate({ callID: call.id, status: "ENDED" })
+              }
+              disabled={transition.isPending}
+            >
+              End call
+            </button>
+          </div>
+        </div>
+      )}
       {entries.length === 0 ? (
         <p className="empty-queue">
           Share your public URL. Callers will appear here.
@@ -36,9 +103,22 @@ function CallerList({ showID }: { showID: string }) {
                 </span>
               </div>
               <p>{entry.topic}</p>
+              <button
+                className="button secondary"
+                type="button"
+                onClick={() => selectCaller.mutate(entry.id)}
+                disabled={Boolean(call) || selectCaller.isPending}
+              >
+                Select caller
+              </button>
             </li>
           ))}
         </ol>
+      )}
+      {(selectCaller.isError || selectRandom.isError || transition.isError) && (
+        <div className="form-error" role="alert">
+          Unable to update the active call. Refresh and try again.
+        </div>
       )}
     </section>
   );

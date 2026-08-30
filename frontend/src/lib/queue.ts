@@ -14,7 +14,7 @@ export type QueueEntry = {
   showId: string;
   displayName: string;
   topic: string;
-  status: "WAITING" | "LEFT" | "SELECTED" | "ENDED";
+  status: "WAITING" | "LEFT" | "SELECTED" | "CONNECTING" | "LIVE" | "ENDED";
   tierId: string;
   tierName: string;
   priorityRank: number;
@@ -140,6 +140,9 @@ export function useQueueEvents(
     const synchronize = () => {
       void queryClient.invalidateQueries({ queryKey: viewerKey(showID) });
       void queryClient.invalidateQueries({ queryKey: creatorQueueKey(showID) });
+      void queryClient.invalidateQueries({
+        queryKey: ["shows", showID, "calls"],
+      });
       void queryClient.invalidateQueries({ queryKey: ["creators"] });
     };
 

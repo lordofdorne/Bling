@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/bling-app/bling/backend/internal/auth"
+	calldomain "github.com/bling-app/bling/backend/internal/call"
 	"github.com/bling-app/bling/backend/internal/config"
 	queuedomain "github.com/bling-app/bling/backend/internal/queue"
 	"github.com/bling-app/bling/backend/internal/realtime"
@@ -25,7 +26,7 @@ type redisDependency struct{ client *redis.Client }
 
 func (d redisDependency) Ping(ctx context.Context) error { return d.client.Ping(ctx).Err() }
 
-func NewRouter(logger *slog.Logger, postgres *pgxpool.Pool, redisClient *redis.Client, cfg config.Config, queueService *queuedomain.Service, realtimeHub *realtime.Hub) http.Handler {
+func NewRouter(logger *slog.Logger, postgres *pgxpool.Pool, redisClient *redis.Client, cfg config.Config, queueService *queuedomain.Service, realtimeHub *realtime.Hub, callService *calldomain.Service, signalHub *realtime.SignalHub) http.Handler {
 	authHandler := authHandler{
 		service:      auth.NewService(auth.NewPostgresStore(postgres), cfg.BcryptCost, cfg.SessionTTL),
 		limiter:      auth.NewRedisRateLimiter(redisClient),
@@ -36,19 +37,26 @@ func NewRouter(logger *slog.Logger, postgres *pgxpool.Pool, redisClient *redis.C
 	}
 	showHandler := showHandler{service: showdomain.NewService(showdomain.NewPostgresStore(postgres)), logger: logger}
 	queueHandler := queueHandler{service: queueService, logger: logger, cookieSecure: cfg.CookieSecure, cookieTTL: cfg.SessionTTL}
-	realtimeHandler := realtimeHandler{
+	queueRealtimeHandler := realtimeHandler{
 		service: queueService, hub: realtimeHub, limiter: auth.NewRedisRateLimiter(redisClient), logger: logger,
 		allowedOrigins: cfg.AllowedOrigins, rateLimit: cfg.RealtimeConnectLimit, rateWindow: cfg.RealtimeRateLimitWindow,
 		heartbeat: cfg.RealtimeHeartbeat, writeTimeout: cfg.RealtimeWriteTimeout,
 	}
-	return newRouter(logger, healthHandler{
+	callHandler := callHandler{service: callService, logger: logger}
+	signalGuard := &realtimeHandler{limiter: auth.NewRedisRateLimiter(redisClient), logger: logger, rateLimit: cfg.RealtimeConnectLimit, rateWindow: cfg.RealtimeRateLimitWindow}
+	signalHandler := callSignalHandler{service: callService, hub: signalHub, logger: logger, allowedOrigins: cfg.AllowedOrigins, heartbeat: cfg.RealtimeHeartbeat, writeTimeout: cfg.RealtimeWriteTimeout, guard: signalGuard}
+	return newRouterWithCalls(logger, healthHandler{
 		postgres: postgresDependency{pool: postgres},
 		redis:    redisDependency{client: redisClient},
 		timeout:  cfg.ReadinessTimeout,
-	}, &authHandler, &showHandler, &queueHandler, &realtimeHandler, cfg.AllowedOrigins)
+	}, &authHandler, &showHandler, &queueHandler, &queueRealtimeHandler, &callHandler, &signalHandler, cfg.AllowedOrigins)
 }
 
 func newRouter(logger *slog.Logger, health healthHandler, authentication *authHandler, shows *showHandler, queues *queueHandler, realtimeUpdates *realtimeHandler, allowedOrigins []string) http.Handler {
+	return newRouterWithCalls(logger, health, authentication, shows, queues, realtimeUpdates, nil, nil, allowedOrigins)
+}
+
+func newRouterWithCalls(logger *slog.Logger, health healthHandler, authentication *authHandler, shows *showHandler, queues *queueHandler, realtimeUpdates *realtimeHandler, calls *callHandler, signals *callSignalHandler, allowedOrigins []string) http.Handler {
 	router := chi.NewRouter()
 	router.Use(chimiddleware.RequestID)
 	router.Use(chimiddleware.Recoverer)
@@ -63,6 +71,12 @@ func newRouter(logger *slog.Logger, health healthHandler, authentication *authHa
 			api.Get("/me", authentication.me)
 			if shows != nil {
 				api.Get("/creators/{username}/live-show", shows.liveByUsername)
+				if calls != nil {
+					api.Get("/shows/{showID}/calls/me", calls.viewerLatest)
+					if signals != nil {
+						api.Get("/shows/{showID}/calls/{callID}/signals", signals.viewer)
+					}
+				}
 				if queues != nil {
 					api.Get("/shows/{showID}/tiers", queues.tiers)
 					api.Post("/shows/{showID}/queue", queues.join)
@@ -79,6 +93,15 @@ func newRouter(logger *slog.Logger, health healthHandler, authentication *authHa
 						protected.Get("/shows/{showID}/queue", queues.list)
 						if realtimeUpdates != nil {
 							protected.Get("/shows/{showID}/queue/creator-events", realtimeUpdates.creator)
+						}
+					}
+					if calls != nil {
+						protected.Get("/shows/{showID}/calls/active", calls.creatorActive)
+						protected.Post("/shows/{showID}/calls/select", calls.selectManual)
+						protected.Post("/shows/{showID}/calls/select-random", calls.selectRandom)
+						protected.Post("/shows/{showID}/calls/{callID}/transition", calls.transition)
+						if signals != nil {
+							protected.Get("/shows/{showID}/calls/{callID}/creator-signals", signals.creator)
 						}
 					}
 				})
