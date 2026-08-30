@@ -8,19 +8,21 @@ import {
   useViewerQueue,
 } from "../lib/queue";
 import { useLiveShow } from "../lib/shows";
+import { useViewerCall } from "../lib/calls";
 
 function CallerQueue({ showID }: { showID: string }) {
   const tiers = useQueueTiers(showID);
   const viewer = useViewerQueue(showID);
   const join = useJoinQueue(showID);
   const leave = useLeaveQueue(showID);
+  const call = useViewerCall(showID);
   const [displayName, setDisplayName] = useState("");
   const [topic, setTopic] = useState("");
   useQueueEvents(showID, "viewer", viewer.data?.entry.status === "WAITING");
 
-  if (tiers.isPending || viewer.isPending)
+  if (tiers.isPending || viewer.isPending || call.isPending)
     return <div className="status">Loading the caller line…</div>;
-  if (tiers.isError || viewer.isError)
+  if (tiers.isError || viewer.isError || call.isError)
     return (
       <div className="form-error" role="alert">
         Unable to load the caller line.
@@ -28,6 +30,47 @@ function CallerQueue({ showID }: { showID: string }) {
     );
 
   const state = viewer.data;
+  if (
+    call.data &&
+    call.data.status !== "ENDED" &&
+    call.data.status !== "FAILED"
+  ) {
+    const connecting = call.data.status !== "LIVE";
+    return (
+      <section
+        className="queue-card queue-confirmation"
+        aria-label="Your call status"
+      >
+        <p className="eyebrow">You’ve been selected</p>
+        <div className="position-number">{connecting ? "Ready" : "Live"}</div>
+        <h2>
+          {connecting
+            ? "The host is opening your connection."
+            : "You’re connected."}
+        </h2>
+        <p>
+          Keep this tab open. Microphone connection arrives in the next media
+          PR.
+        </p>
+        <div className="queue-summary">
+          <strong>{call.data.caller.tierName}</strong>
+          <span>{call.data.callDurationSeconds}s reserved</span>
+        </div>
+      </section>
+    );
+  }
+  if (call.data?.status === "ENDED" || call.data?.status === "FAILED") {
+    return (
+      <section
+        className="queue-card queue-confirmation"
+        aria-label="Call ended"
+      >
+        <p className="eyebrow">Call complete</p>
+        <h2>Thanks for joining the Hotline.</h2>
+        <p>Your connection has closed.</p>
+      </section>
+    );
+  }
   if (state?.entry.status === "WAITING") {
     return (
       <section

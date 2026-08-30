@@ -100,8 +100,13 @@ func (s *PostgresStore) transition(ctx context.Context, showID, creatorID string
 	if action == ActionEnd {
 		if _, err := tx.Exec(ctx, `
 			UPDATE queue_entries SET status = 'ENDED', updated_at = $1
-			WHERE show_id = $2 AND status = 'WAITING'`, now, showID); err != nil {
+			WHERE show_id = $2 AND status IN ('WAITING','SELECTED','CONNECTING','LIVE')`, now, showID); err != nil {
 			return Show{}, fmt.Errorf("close waiting queue: %w", err)
+		}
+		if _, err := tx.Exec(ctx, `
+			UPDATE calls SET status = 'ENDED', ended_at = $1, updated_at = $1
+			WHERE show_id = $2 AND status IN ('CREATED','CONNECTING','LIVE')`, now, showID); err != nil {
+			return Show{}, fmt.Errorf("close active call: %w", err)
 		}
 		if _, err := tx.Exec(ctx, `
 			INSERT INTO queue_outbox (show_id, event_type, payload)

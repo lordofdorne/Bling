@@ -9,6 +9,7 @@ import (
 	"os/signal"
 	"syscall"
 
+	calldomain "github.com/bling-app/bling/backend/internal/call"
 	"github.com/bling-app/bling/backend/internal/config"
 	"github.com/bling-app/bling/backend/internal/database"
 	"github.com/bling-app/bling/backend/internal/httpapi"
@@ -47,6 +48,8 @@ func main() {
 	}()
 	eventBus := realtime.NewRedisBus(redisClient)
 	realtimeHub := realtime.NewHub(ctx, eventBus, logger, cfg.RealtimeClientBuffer, cfg.RealtimeMaxPerShow)
+	signalHub := realtime.NewSignalHub(ctx, eventBus, logger, cfg.RealtimeClientBuffer, 8)
+	callService := calldomain.NewService(calldomain.NewPostgresRepository(postgres))
 	queueService := queuedomain.NewService(
 		queuedomain.NewPostgresRepository(postgres),
 		queuedomain.NewRedisCandidateIndex(redisClient),
@@ -57,7 +60,7 @@ func main() {
 
 	server := &http.Server{
 		Addr:              cfg.HTTPAddr,
-		Handler:           httpapi.NewRouter(logger, postgres, redisClient, cfg, queueService, realtimeHub),
+		Handler:           httpapi.NewRouter(logger, postgres, redisClient, cfg, queueService, realtimeHub, callService, signalHub),
 		ReadHeaderTimeout: cfg.ReadHeaderTimeout,
 		ReadTimeout:       cfg.ReadTimeout,
 		WriteTimeout:      cfg.WriteTimeout,

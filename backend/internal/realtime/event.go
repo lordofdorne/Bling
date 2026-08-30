@@ -9,7 +9,12 @@ type Event struct {
 }
 
 const (
-	EventQueueJoined = "queue.joined"
-	EventQueueLeft   = "queue.left"
-	EventShowEnded   = "show.ended"
+	EventQueueJoined    = "queue.joined"
+	EventQueueLeft      = "queue.left"
+	EventCallSelected   = "call.selected"
+	EventCallConnecting = "call.connecting"
+	EventCallLive       = "call.live"
+	EventCallEnded      = "call.ended"
+	EventCallFailed     = "call.failed"
+	EventShowEnded      = "show.ended"
 )

@@ -122,7 +122,7 @@ func (s *Service) flushOutbox(ctx context.Context) bool {
 		switch event.EventType {
 		case "queue.caller_joined":
 			publishErr = s.index.Add(ctx, event.Candidate)
-		case "queue.caller_left":
+		case "queue.caller_left", "queue.caller_selected":
 			publishErr = s.index.Remove(ctx, event.Candidate)
 		case "queue.show_ended":
 			publishErr = s.index.Clear(ctx, event.Candidate.ShowID)
