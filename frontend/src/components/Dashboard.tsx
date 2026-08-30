@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useLogout, useMe } from "../lib/auth";
 import {
@@ -6,7 +7,15 @@ import {
   useSelectRandomCaller,
 } from "../lib/calls";
 import { useCreatorQueue, useQueueEvents } from "../lib/queue";
-import { useEndShow, useLiveShow, useStartShow } from "../lib/shows";
+import {
+  HotlineTier,
+  useCreateShow,
+  useCurrentShow,
+  useEndShow,
+  useSaveTierConfiguration,
+  useStartShow,
+  useTierConfiguration,
+} from "../lib/shows";
 import { CallAudioPanel } from "./CallAudioPanel";
 
 function CallerList({ showID }: { showID: string }) {
@@ -90,15 +99,258 @@ function CallerList({ showID }: { showID: string }) {
   );
 }
 
+type TierDraft = Pick<
+  HotlineTier,
+  "name" | "callDurationSeconds" | "priceCents" | "enabled"
+> & { key: string };
+
+function TierConfiguration({
+  showID,
+  onStart,
+  starting,
+}: {
+  showID: string;
+  onStart: () => void;
+  starting: boolean;
+}) {
+  const configuration = useTierConfiguration(showID);
+  if (configuration.isPending)
+    return <div className="status">Loading Hotline tiers…</div>;
+  if (configuration.isError)
+    return (
+      <div className="form-error" role="alert">
+        Unable to load the tier configuration.
+      </div>
+    );
+  return (
+    <TierConfigurationForm
+      key={configuration.data
+        .map((tier) => `${tier.id}:${tier.updatedAt}`)
+        .join(":")}
+      showID={showID}
+      initialTiers={configuration.data}
+      onStart={onStart}
+      starting={starting}
+    />
+  );
+}
+
+function TierConfigurationForm({
+  showID,
+  initialTiers,
+  onStart,
+  starting,
+}: {
+  showID: string;
+  initialTiers: HotlineTier[];
+  onStart: () => void;
+  starting: boolean;
+}) {
+  const save = useSaveTierConfiguration(showID);
+  const [tiers, setTiers] = useState<TierDraft[]>(() =>
+    initialTiers.map((tier) => ({
+      key: tier.id,
+      name: tier.name,
+      callDurationSeconds: tier.callDurationSeconds,
+      priceCents: tier.priceCents,
+      enabled: tier.enabled,
+    })),
+  );
+  const [dirty, setDirty] = useState(false);
+
+  function update(index: number, patch: Partial<TierDraft>) {
+    setTiers((current) =>
+      current.map((tier, tierIndex) =>
+        tierIndex === index ? { ...tier, ...patch } : tier,
+      ),
+    );
+    setDirty(true);
+  }
+
+  function move(index: number, direction: -1 | 1) {
+    const target = index + direction;
+    if (target < 0 || target >= tiers.length) return;
+    setTiers((current) => {
+      const next = [...current];
+      [next[index], next[target]] = [next[target], next[index]];
+      return next;
+    });
+    setDirty(true);
+  }
+
+  async function saveChanges() {
+    try {
+      await save.mutateAsync(
+        tiers.map(({ name, callDurationSeconds, priceCents, enabled }) => ({
+          name,
+          callDurationSeconds,
+          priceCents,
+          enabled,
+        })),
+      );
+    } catch {
+      // Mutation state renders the server-safe error below.
+    }
+  }
+
+  return (
+    <div className="tier-configuration">
+      <div>
+        <p className="eyebrow">Hotline setup</p>
+        <h2>Configure caller tiers</h2>
+        <p>
+          Higher rows are selected first. Prices are previews until payments are
+          connected.
+        </p>
+      </div>
+      <div className="tier-editor-list">
+        {tiers.map((tier, index) => (
+          <fieldset className="tier-editor" key={tier.key}>
+            <legend>Priority {index + 1}</legend>
+            <label>
+              Tier name
+              <input
+                value={tier.name}
+                maxLength={40}
+                onChange={(event) =>
+                  update(index, { name: event.target.value })
+                }
+              />
+            </label>
+            <label>
+              Call length (seconds)
+              <input
+                type="number"
+                min={30}
+                max={3600}
+                value={tier.callDurationSeconds}
+                onChange={(event) =>
+                  update(index, {
+                    callDurationSeconds: Number(event.target.value),
+                  })
+                }
+              />
+            </label>
+            <label>
+              Future price (USD)
+              <input
+                type="number"
+                min={0}
+                max={10000}
+                step="0.01"
+                value={(tier.priceCents / 100).toFixed(2)}
+                onChange={(event) =>
+                  update(index, {
+                    priceCents: Math.round(Number(event.target.value) * 100),
+                  })
+                }
+              />
+            </label>
+            <label className="tier-enabled">
+              <input
+                type="checkbox"
+                checked={tier.enabled}
+                onChange={(event) =>
+                  update(index, { enabled: event.target.checked })
+                }
+              />
+              Available to callers
+            </label>
+            <div className="tier-editor-actions">
+              <button
+                className="button secondary"
+                type="button"
+                aria-label={`Move ${tier.name || "tier"} up`}
+                onClick={() => move(index, -1)}
+                disabled={index === 0}
+              >
+                ↑
+              </button>
+              <button
+                className="button secondary"
+                type="button"
+                aria-label={`Move ${tier.name || "tier"} down`}
+                onClick={() => move(index, 1)}
+                disabled={index === tiers.length - 1}
+              >
+                ↓
+              </button>
+              <button
+                className="button secondary"
+                type="button"
+                onClick={() => {
+                  setTiers((current) => current.filter((_, i) => i !== index));
+                  setDirty(true);
+                }}
+                disabled={tiers.length === 1}
+              >
+                Remove
+              </button>
+            </div>
+          </fieldset>
+        ))}
+      </div>
+      {tiers.length < 5 && (
+        <button
+          className="button secondary"
+          type="button"
+          onClick={() => {
+            setTiers((current) => [
+              ...current,
+              {
+                key: crypto.randomUUID(),
+                name: `Tier ${current.length + 1}`,
+                callDurationSeconds: 300,
+                priceCents: 0,
+                enabled: true,
+              },
+            ]);
+            setDirty(true);
+          }}
+        >
+          Add tier
+        </button>
+      )}
+      <div className="tier-config-footer">
+        <button
+          className="button secondary"
+          type="button"
+          onClick={() => void saveChanges()}
+          disabled={!dirty || save.isPending}
+        >
+          {save.isPending ? "Saving…" : dirty ? "Save tiers" : "Tiers saved"}
+        </button>
+        <button
+          className="primary-button"
+          type="button"
+          onClick={onStart}
+          disabled={dirty || starting || tiers.length === 0}
+        >
+          {starting ? "Starting…" : "Start Hotline"}
+        </button>
+      </div>
+      {dirty && (
+        <p className="tier-save-hint">Save tier changes before going live.</p>
+      )}
+      {save.isError && (
+        <div className="form-error" role="alert">
+          {save.error.message}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function Dashboard() {
   const me = useMe();
   const logout = useLogout();
   const navigate = useNavigate();
   const username = me.data?.username ?? "";
-  const liveShow = useLiveShow(username);
+  const currentShow = useCurrentShow();
+  const createShow = useCreateShow();
   const startShow = useStartShow(username);
   const endShow = useEndShow(username);
-  const activeShow = liveShow.data;
+  const activeShow = currentShow.data;
 
   async function signOut() {
     try {
@@ -133,13 +385,13 @@ export function Dashboard() {
         </p>
 
         <section className="show-card" aria-label="Hotline controls">
-          {liveShow.isPending ? (
+          {currentShow.isPending ? (
             <div className="status">Loading show status…</div>
-          ) : liveShow.isError ? (
+          ) : currentShow.isError ? (
             <div className="form-error" role="alert">
               Unable to load your Hotline status.
             </div>
-          ) : activeShow ? (
+          ) : activeShow?.status === "LIVE" ? (
             <>
               <div className="show-card-heading">
                 <div>
@@ -162,24 +414,30 @@ export function Dashboard() {
               </p>
               <CallerList showID={activeShow.id} />
             </>
+          ) : activeShow?.status === "CREATED" ? (
+            <TierConfiguration
+              showID={activeShow.id}
+              starting={startShow.isPending}
+              onStart={() => startShow.mutate(activeShow.id)}
+            />
           ) : (
             <>
               <h2>No active Hotline</h2>
               <p>
-                Start a show to open your public page. No microphone is
-                requested until you select a caller.
+                Create a draft to configure caller priority, duration, and
+                future pricing before opening your public page.
               </p>
               <button
                 className="primary-button"
                 type="button"
-                onClick={() => startShow.mutate()}
-                disabled={startShow.isPending}
+                onClick={() => createShow.mutate()}
+                disabled={createShow.isPending}
               >
-                {startShow.isPending ? "Starting…" : "Start Hotline"}
+                {createShow.isPending ? "Creating…" : "Set up Hotline"}
               </button>
             </>
           )}
-          {(startShow.isError || endShow.isError) && (
+          {(createShow.isError || startShow.isError || endShow.isError) && (
             <div className="form-error" role="alert">
               Unable to update your Hotline. Please try again.
             </div>

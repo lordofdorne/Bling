@@ -19,14 +19,14 @@ func NewPostgresRepository(pool *pgxpool.Pool) *PostgresRepository {
 
 const callColumns = `c.id, c.show_id, c.queue_entry_id, c.status, c.selection_mode,
 	c.call_duration_seconds, c.started_at, c.ended_at, c.expires_at, c.creator_disconnected_at, c.viewer_disconnected_at, c.created_at, c.updated_at,
-	q.id, q.display_name, q.topic, q.tier_name, q.priority_rank, q.call_duration_seconds`
+	q.id, q.display_name, q.topic, q.tier_name, q.priority_rank, q.call_duration_seconds, q.tier_price_cents`
 
 func scanCall(row pgx.Row) (Call, error) {
 	var value Call
 	err := row.Scan(&value.ID, &value.ShowID, &value.QueueEntryID, &value.Status, &value.SelectionMode,
 		&value.CallDurationSeconds, &value.StartedAt, &value.EndedAt, &value.ExpiresAt, &value.CreatorDisconnectedAt, &value.ViewerDisconnectedAt, &value.CreatedAt, &value.UpdatedAt,
 		&value.Caller.ID, &value.Caller.DisplayName, &value.Caller.Topic, &value.Caller.TierName,
-		&value.Caller.PriorityRank, &value.Caller.CallDurationSeconds)
+		&value.Caller.PriorityRank, &value.Caller.CallDurationSeconds, &value.Caller.PriceCents)
 	return value, err
 }
 

@@ -54,6 +54,13 @@ func TestConcurrentStartAllowsOneLiveShowPerCreator(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	configured, err := store.ReplaceTiers(ctx, first.ID, creatorID, []TierInput{
+		{Name: "VIP", PriorityRank: 200, CallDurationSeconds: 120, PriceCents: 5000, Enabled: true},
+		{Name: "Standard", PriorityRank: 100, CallDurationSeconds: 300, PriceCents: 1000, Enabled: true},
+	}, time.Now().UTC())
+	if err != nil || len(configured) != 2 || configured[0].Name != "VIP" || configured[0].PriceCents != 5000 {
+		t.Fatalf("configured=%+v err=%v", configured, err)
+	}
 
 	start := make(chan struct{})
 	results := make(chan error, 2)
@@ -92,5 +99,46 @@ func TestConcurrentStartAllowsOneLiveShowPerCreator(t *testing.T) {
 	}
 	if liveCount != 1 {
 		t.Fatalf("live show count = %d, want 1", liveCount)
+	}
+	current, err := store.CurrentForCreator(ctx, creatorID)
+	if err != nil || current.Status != StatusLive {
+		t.Fatalf("current=%+v err=%v", current, err)
+	}
+	if _, err := store.ReplaceTiers(ctx, current.ID, creatorID, []TierInput{{Name: "Late", PriorityRank: 100, CallDurationSeconds: 60, Enabled: true}}, time.Now().UTC()); !errors.Is(err, ErrShowNotConfigurable) {
+		t.Fatalf("live tier replacement err=%v", err)
+	}
+	if _, err := store.End(ctx, current.ID, creatorID, time.Now().UTC()); err != nil {
+		t.Fatal(err)
+	}
+	raceShow, err := store.Create(ctx, creatorID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	raceStart := make(chan struct{})
+	startResult := make(chan error, 1)
+	configureResult := make(chan error, 1)
+	go func() {
+		<-raceStart
+		_, err := store.Start(ctx, raceShow.ID, creatorID, time.Now().UTC())
+		startResult <- err
+	}()
+	go func() {
+		<-raceStart
+		_, err := store.ReplaceTiers(ctx, raceShow.ID, creatorID, []TierInput{
+			{Name: "Priority", PriorityRank: 200, CallDurationSeconds: 120, PriceCents: 2000, Enabled: true},
+			{Name: "Standard", PriorityRank: 100, CallDurationSeconds: 300, PriceCents: 500, Enabled: true},
+		}, time.Now().UTC())
+		configureResult <- err
+	}()
+	close(raceStart)
+	if err := <-startResult; err != nil {
+		t.Fatalf("start/configure race start err=%v", err)
+	}
+	if err := <-configureResult; err != nil && !errors.Is(err, ErrShowNotConfigurable) {
+		t.Fatalf("start/configure race configure err=%v", err)
+	}
+	finalShow, err := store.ByIDForCreator(ctx, raceShow.ID, creatorID)
+	if err != nil || finalShow.Status != StatusLive {
+		t.Fatalf("raced show=%+v err=%v", finalShow, err)
 	}
 }

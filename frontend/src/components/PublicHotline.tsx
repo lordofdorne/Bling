@@ -1,6 +1,7 @@
 import { FormEvent, useState } from "react";
 import { useParams } from "react-router-dom";
 import {
+  QueueTier,
   useJoinQueue,
   useLeaveQueue,
   useQueueEvents,
@@ -11,6 +12,8 @@ import { useLiveShow } from "../lib/shows";
 import { useViewerCall } from "../lib/calls";
 import { CallAudioPanel } from "./CallAudioPanel";
 
+const emptyTiers: QueueTier[] = [];
+
 function CallerQueue({ showID }: { showID: string }) {
   const tiers = useQueueTiers(showID);
   const viewer = useViewerQueue(showID);
@@ -19,7 +22,14 @@ function CallerQueue({ showID }: { showID: string }) {
   const call = useViewerCall(showID);
   const [displayName, setDisplayName] = useState("");
   const [topic, setTopic] = useState("");
+  const [selectedTierID, setSelectedTierID] = useState("");
   useQueueEvents(showID, "viewer", viewer.data?.entry.status === "WAITING");
+  const availableTiers = tiers.data ?? emptyTiers;
+  const effectiveSelectedTierID = availableTiers.some(
+    (tier) => tier.id === selectedTierID,
+  )
+    ? selectedTierID
+    : (availableTiers[0]?.id ?? "");
 
   if (tiers.isPending || viewer.isPending || call.isPending)
     return <div className="status">Loading the caller line…</div>;
@@ -99,13 +109,12 @@ function CallerQueue({ showID }: { showID: string }) {
     );
   }
 
-  const availableTiers = tiers.data ?? [];
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     join.mutate({
       displayName,
       topic,
-      tierId: availableTiers[0]?.id ?? "",
+      tierId: effectiveSelectedTierID,
     });
   }
 
@@ -133,10 +142,28 @@ function CallerQueue({ showID }: { showID: string }) {
           />
         </label>
         {availableTiers.length > 0 && (
-          <div className="tier-pill">
-            <strong>{availableTiers[0].name}</strong>
-            <span>{availableTiers[0].callDurationSeconds}s call</span>
-          </div>
+          <fieldset className="caller-tier-options">
+            <legend>Choose your tier</legend>
+            {availableTiers.map((tier, index) => (
+              <label className="caller-tier-option" key={tier.id}>
+                <input
+                  type="radio"
+                  name="caller-tier"
+                  value={tier.id}
+                  checked={effectiveSelectedTierID === tier.id}
+                  onChange={() => setSelectedTierID(tier.id)}
+                />
+                <span>
+                  <strong>{tier.name}</strong>
+                  <small>
+                    {tier.callDurationSeconds}s · {formatPrice(tier.priceCents)}
+                    {index === 0 ? " · Highest priority" : ""}
+                  </small>
+                </span>
+              </label>
+            ))}
+            <p>Payments are not collected in this test build.</p>
+          </fieldset>
         )}
         <button
           className="primary-button"
@@ -153,6 +180,15 @@ function CallerQueue({ showID }: { showID: string }) {
       </form>
     </section>
   );
+}
+
+function formatPrice(cents: number) {
+  return cents === 0
+    ? "Free"
+    : new Intl.NumberFormat("en-US", {
+        style: "currency",
+        currency: "USD",
+      }).format(cents / 100);
 }
 
 export function PublicHotline() {

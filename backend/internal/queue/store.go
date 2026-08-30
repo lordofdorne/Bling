@@ -18,13 +18,13 @@ func NewPostgresRepository(pool *pgxpool.Pool) *PostgresRepository {
 	return &PostgresRepository{pool: pool}
 }
 
-const entryColumns = `id, show_id, display_name, topic, status, tier_id, tier_name, priority_rank, call_duration_seconds, queue_position, joined_at, selected_at, left_at, created_at, updated_at`
+const entryColumns = `id, show_id, display_name, topic, status, tier_id, tier_name, priority_rank, call_duration_seconds, tier_price_cents, queue_position, joined_at, selected_at, left_at, created_at, updated_at`
 
 func scanEntry(row pgx.Row) (Entry, error) {
 	var entry Entry
 	err := row.Scan(
 		&entry.ID, &entry.ShowID, &entry.DisplayName, &entry.Topic, &entry.Status,
-		&entry.TierID, &entry.TierName, &entry.PriorityRank, &entry.CallDurationSeconds,
+		&entry.TierID, &entry.TierName, &entry.PriorityRank, &entry.CallDurationSeconds, &entry.TierPriceCents,
 		&entry.QueuePosition, &entry.JoinedAt, &entry.SelectedAt, &entry.LeftAt,
 		&entry.CreatedAt, &entry.UpdatedAt,
 	)
@@ -90,11 +90,11 @@ func (r *PostgresRepository) Join(ctx context.Context, input JoinInput) (Entry, 
 			UPDATE queue_entries SET
 				display_name = $1, topic = $2, status = 'WAITING', tier_id = $3,
 				tier_name = $4, priority_rank = $5, call_duration_seconds = $6,
-				queue_position = nextval('queue_entry_position_seq'), session_token_hash = $7,
-				join_key_hash = $8, joined_at = now(), left_at = NULL, updated_at = now()
-			WHERE id = $9 RETURNING `+entryColumns,
+				tier_price_cents = $7, queue_position = nextval('queue_entry_position_seq'), session_token_hash = $8,
+				join_key_hash = $9, joined_at = now(), left_at = NULL, updated_at = now()
+			WHERE id = $10 RETURNING `+entryColumns,
 			input.DisplayName, input.Topic, tier.ID, tier.Name, tier.PriorityRank,
-			tier.CallDurationSeconds, input.SessionTokenHash, input.JoinKeyHash, existing.ID))
+			tier.CallDurationSeconds, tier.PriceCents, input.SessionTokenHash, input.JoinKeyHash, existing.ID))
 	} else if existingErr == nil {
 		if err := tx.Commit(ctx); err != nil {
 			return Entry{}, fmt.Errorf("commit existing queue state: %w", err)
@@ -104,11 +104,11 @@ func (r *PostgresRepository) Join(ctx context.Context, input JoinInput) (Entry, 
 		entry, err = scanEntry(tx.QueryRow(ctx, `
 			INSERT INTO queue_entries (
 				show_id, display_name, topic, tier_id, tier_name, priority_rank,
-				call_duration_seconds, session_token_hash, join_key_hash
-			) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+				call_duration_seconds, tier_price_cents, session_token_hash, join_key_hash
+			) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 			RETURNING `+entryColumns,
 			input.ShowID, input.DisplayName, input.Topic, tier.ID, tier.Name,
-			tier.PriorityRank, tier.CallDurationSeconds, input.SessionTokenHash, input.JoinKeyHash))
+			tier.PriorityRank, tier.CallDurationSeconds, tier.PriceCents, input.SessionTokenHash, input.JoinKeyHash))
 	}
 	if err != nil {
 		return Entry{}, fmt.Errorf("persist queue join: %w", err)
@@ -127,15 +127,15 @@ func (r *PostgresRepository) tierForJoin(ctx context.Context, tx pgx.Tx, showID,
 	var err error
 	if tierID == "" {
 		err = tx.QueryRow(ctx, `
-			SELECT id, name, priority_rank, call_duration_seconds FROM show_tiers
+			SELECT id, name, priority_rank, call_duration_seconds, price_cents FROM show_tiers
 			WHERE show_id = $1 AND enabled = true
 			ORDER BY priority_rank DESC, created_at ASC LIMIT 1`, showID).
-			Scan(&tier.ID, &tier.Name, &tier.PriorityRank, &tier.CallDurationSeconds)
+			Scan(&tier.ID, &tier.Name, &tier.PriorityRank, &tier.CallDurationSeconds, &tier.PriceCents)
 	} else {
 		err = tx.QueryRow(ctx, `
-			SELECT id, name, priority_rank, call_duration_seconds FROM show_tiers
+			SELECT id, name, priority_rank, call_duration_seconds, price_cents FROM show_tiers
 			WHERE show_id = $1 AND id = $2 AND enabled = true`, showID, tierID).
-			Scan(&tier.ID, &tier.Name, &tier.PriorityRank, &tier.CallDurationSeconds)
+			Scan(&tier.ID, &tier.Name, &tier.PriorityRank, &tier.CallDurationSeconds, &tier.PriceCents)
 	}
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Tier{}, ErrTierNotFound
@@ -276,7 +276,7 @@ func (r *PostgresRepository) EntriesByIDs(ctx context.Context, showID, creatorID
 
 func (r *PostgresRepository) Tiers(ctx context.Context, showID string) ([]Tier, error) {
 	rows, err := r.pool.Query(ctx, `
-		SELECT t.id, t.name, t.priority_rank, t.call_duration_seconds
+		SELECT t.id, t.name, t.priority_rank, t.call_duration_seconds, t.price_cents
 		FROM show_tiers t JOIN shows s ON s.id = t.show_id
 		WHERE t.show_id = $1 AND t.enabled = true AND s.status = 'LIVE'
 		ORDER BY t.priority_rank DESC, t.created_at ASC`, showID)
@@ -287,7 +287,7 @@ func (r *PostgresRepository) Tiers(ctx context.Context, showID string) ([]Tier, 
 	tiers := make([]Tier, 0)
 	for rows.Next() {
 		var tier Tier
-		if err := rows.Scan(&tier.ID, &tier.Name, &tier.PriorityRank, &tier.CallDurationSeconds); err != nil {
+		if err := rows.Scan(&tier.ID, &tier.Name, &tier.PriorityRank, &tier.CallDurationSeconds, &tier.PriceCents); err != nil {
 			return nil, fmt.Errorf("scan show tier: %w", err)
 		}
 		tiers = append(tiers, tier)
@@ -359,5 +359,5 @@ func collectEntries(rows pgx.Rows) ([]Entry, error) {
 }
 
 func entryColumnsWithPrefix(prefix string) string {
-	return `id, ` + prefix + `.show_id, ` + prefix + `.display_name, ` + prefix + `.topic, ` + prefix + `.status, ` + prefix + `.tier_id, ` + prefix + `.tier_name, ` + prefix + `.priority_rank, ` + prefix + `.call_duration_seconds, ` + prefix + `.queue_position, ` + prefix + `.joined_at, ` + prefix + `.selected_at, ` + prefix + `.left_at, ` + prefix + `.created_at, ` + prefix + `.updated_at`
+	return `id, ` + prefix + `.show_id, ` + prefix + `.display_name, ` + prefix + `.topic, ` + prefix + `.status, ` + prefix + `.tier_id, ` + prefix + `.tier_name, ` + prefix + `.priority_rank, ` + prefix + `.call_duration_seconds, ` + prefix + `.tier_price_cents, ` + prefix + `.queue_position, ` + prefix + `.joined_at, ` + prefix + `.selected_at, ` + prefix + `.left_at, ` + prefix + `.created_at, ` + prefix + `.updated_at`
 }

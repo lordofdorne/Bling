@@ -97,10 +97,18 @@ describe("App routes", () => {
             data: {
               tiers: [
                 {
+                  id: "tier-vip",
+                  name: "VIP",
+                  priorityRank: 200,
+                  callDurationSeconds: 120,
+                  priceCents: 5000,
+                },
+                {
                   id: "tier-1",
                   name: "Standard",
-                  priorityRank: 0,
+                  priorityRank: 100,
                   callDurationSeconds: 300,
+                  priceCents: 1000,
                 },
               ],
             },
@@ -130,6 +138,7 @@ describe("App routes", () => {
     fireEvent.change(screen.getByLabelText(/What do you want/), {
       target: { value: "My launch" },
     });
+    fireEvent.click(screen.getByLabelText(/Standard/));
     fireEvent.click(screen.getByRole("button", { name: "Join the line" }));
 
     expect(await screen.findByText("#1")).toBeInTheDocument();
@@ -140,6 +149,7 @@ describe("App routes", () => {
     expect(
       new Headers(joinCall?.[1]?.headers).get("Idempotency-Key"),
     ).toBeTruthy();
+    expect(JSON.parse(String(joinCall?.[1]?.body)).tierId).toBe("tier-1");
   });
 
   it("restores a caller position after refresh", async () => {
@@ -348,7 +358,7 @@ describe("App routes", () => {
         if (path === "/api/v1/me") {
           return Response.json({ data: { user: creator } });
         }
-        if (path.includes("/live-show")) {
+        if (path === "/api/v1/shows/current") {
           return new Response(
             JSON.stringify({ error: { code: "NO_LIVE_SHOW" } }),
             {
@@ -362,6 +372,24 @@ describe("App routes", () => {
             { data: { show: createdShow } },
             { status: 201 },
           );
+        }
+        if (path === "/api/v1/shows/show-1/tier-config") {
+          return Response.json({
+            data: {
+              tiers: [
+                {
+                  id: "tier-1",
+                  name: "Standard",
+                  priorityRank: 100,
+                  callDurationSeconds: 300,
+                  priceCents: 0,
+                  enabled: true,
+                  createdAt: "2026-08-24T12:00:00Z",
+                  updatedAt: "2026-08-24T12:00:00Z",
+                },
+              ],
+            },
+          });
         }
         if (path === "/api/v1/shows/show-1/start" && init?.method === "POST") {
           return Response.json({
@@ -379,6 +407,9 @@ describe("App routes", () => {
     );
 
     renderAt("/dashboard");
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Set up Hotline" }),
+    );
     fireEvent.click(
       await screen.findByRole("button", { name: "Start Hotline" }),
     );
@@ -411,7 +442,7 @@ describe("App routes", () => {
         const path = String(input);
         if (path === "/api/v1/me")
           return Response.json({ data: { user: creator } });
-        if (path.includes("/live-show"))
+        if (path === "/api/v1/shows/current")
           return Response.json({ data: { show: liveShow } });
         if (path === "/api/v1/shows/show-1/end" && init?.method === "POST") {
           return Response.json({
@@ -432,7 +463,7 @@ describe("App routes", () => {
     fireEvent.click(await screen.findByRole("button", { name: "End Hotline" }));
 
     expect(
-      await screen.findByRole("button", { name: "Start Hotline" }),
+      await screen.findByRole("button", { name: "Set up Hotline" }),
     ).toBeInTheDocument();
   });
 
@@ -449,7 +480,7 @@ describe("App routes", () => {
         const path = String(input);
         if (path === "/api/v1/me")
           return Response.json({ data: { user: creator } });
-        if (path.includes("/live-show"))
+        if (path === "/api/v1/shows/current")
           return Response.json({
             data: { show: { id: "show-1", status: "LIVE" } },
           });

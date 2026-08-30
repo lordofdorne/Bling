@@ -32,6 +32,7 @@ type Tier struct {
 	Name                string `json:"name"`
 	PriorityRank        int    `json:"priorityRank"`
 	CallDurationSeconds int    `json:"callDurationSeconds"`
+	PriceCents          int    `json:"priceCents"`
 }
 
 type Entry struct {
@@ -44,6 +45,7 @@ type Entry struct {
 	TierName            string     `json:"tierName"`
 	PriorityRank        int        `json:"priorityRank"`
 	CallDurationSeconds int        `json:"callDurationSeconds"`
+	TierPriceCents      int        `json:"tierPriceCents"`
 	QueuePosition       int64      `json:"-"`
 	JoinedAt            time.Time  `json:"joinedAt"`
 	SelectedAt          *time.Time `json:"selectedAt"`

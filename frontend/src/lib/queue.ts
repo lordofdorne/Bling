@@ -7,6 +7,7 @@ export type QueueTier = {
   name: string;
   priorityRank: number;
   callDurationSeconds: number;
+  priceCents: number;
 };
 
 export type QueueEntry = {
@@ -19,6 +20,7 @@ export type QueueEntry = {
   tierName: string;
   priorityRank: number;
   callDurationSeconds: number;
+  tierPriceCents: number;
   joinedAt: string;
 };
 

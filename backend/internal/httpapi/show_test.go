@@ -23,6 +23,8 @@ type fakeShowService struct {
 	showID        string
 	username      string
 	operationCall string
+	tiers         []showdomain.Tier
+	tierInputs    []showdomain.TierInput
 }
 
 func (f *fakeShowService) Create(_ context.Context, creatorID string) (showdomain.Show, error) {
@@ -44,6 +46,18 @@ func (f *fakeShowService) End(_ context.Context, showID, creatorID string) (show
 func (f *fakeShowService) LiveByUsername(_ context.Context, username string) (showdomain.Show, error) {
 	f.username, f.operationCall = username, "live"
 	return f.result, f.err
+}
+func (f *fakeShowService) Current(_ context.Context, creatorID string) (showdomain.Show, error) {
+	f.creatorID, f.operationCall = creatorID, "current"
+	return f.result, f.err
+}
+func (f *fakeShowService) Tiers(_ context.Context, showID, creatorID string) ([]showdomain.Tier, error) {
+	f.showID, f.creatorID, f.operationCall = showID, creatorID, "tiers"
+	return f.tiers, f.err
+}
+func (f *fakeShowService) ReplaceTiers(_ context.Context, showID, creatorID string, tiers []showdomain.TierInput) ([]showdomain.Tier, error) {
+	f.showID, f.creatorID, f.operationCall, f.tierInputs = showID, creatorID, "replace-tiers", tiers
+	return f.tiers, f.err
 }
 
 func showTestRouter(authentication *fakeAuthService, service *fakeShowService) http.Handler {
@@ -119,5 +133,28 @@ func TestPublicMissingLiveShowHasStableError(t *testing.T) {
 
 	if response.Code != http.StatusNotFound || !strings.Contains(response.Body.String(), `"code":"NO_LIVE_SHOW"`) {
 		t.Fatalf("unexpected response: %d %s", response.Code, response.Body.String())
+	}
+}
+
+func TestCreatorReplacesOrderedTierConfiguration(t *testing.T) {
+	service := &fakeShowService{tiers: []showdomain.Tier{{ID: "tier-1", Name: "VIP", PriceCents: 2500, Enabled: true}}}
+	router := showTestRouter(&fakeAuthService{user: auth.User{ID: "creator-1"}}, service)
+	request := httptest.NewRequest(http.MethodPut, "/api/v1/shows/"+testShowID+"/tier-config", strings.NewReader(`{"tiers":[{"name":"VIP","callDurationSeconds":180,"priceCents":2500,"enabled":true}]}`))
+	request.Header.Set("Content-Type", "application/json")
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, request)
+	if response.Code != http.StatusOK || service.operationCall != "replace-tiers" || len(service.tierInputs) != 1 || service.tierInputs[0].PriceCents != 2500 {
+		t.Fatalf("status=%d operation=%q inputs=%+v body=%s", response.Code, service.operationCall, service.tierInputs, response.Body.String())
+	}
+}
+
+func TestTierConfigurationConflictHasStableError(t *testing.T) {
+	service := &fakeShowService{err: showdomain.ErrShowNotConfigurable}
+	router := showTestRouter(&fakeAuthService{user: auth.User{ID: "creator-1"}}, service)
+	request := httptest.NewRequest(http.MethodPut, "/api/v1/shows/"+testShowID+"/tier-config", strings.NewReader(`{"tiers":[{"name":"VIP","callDurationSeconds":180,"priceCents":2500,"enabled":true}]}`))
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, request)
+	if response.Code != http.StatusConflict || !strings.Contains(response.Body.String(), `"code":"SHOW_NOT_CONFIGURABLE"`) {
+		t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
 	}
 }
