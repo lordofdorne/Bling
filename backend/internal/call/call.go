@@ -41,6 +41,7 @@ type Caller struct {
 	TierName            string `json:"tierName"`
 	PriorityRank        int    `json:"priorityRank"`
 	CallDurationSeconds int    `json:"callDurationSeconds"`
+	PriceCents          int    `json:"priceCents"`
 }
 
 type Call struct {

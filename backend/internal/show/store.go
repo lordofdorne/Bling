@@ -48,6 +48,15 @@ func (s *PostgresStore) ByIDForCreator(ctx context.Context, showID, creatorID st
 	return result, mapQueryError("get show", err)
 }
 
+func (s *PostgresStore) CurrentForCreator(ctx context.Context, creatorID string) (Show, error) {
+	var result Show
+	err := s.pool.QueryRow(ctx, `SELECT `+showColumns+` FROM shows
+		WHERE creator_id=$1 AND status IN ('CREATED','LIVE')
+		ORDER BY (status='LIVE') DESC, created_at DESC LIMIT 1`, creatorID).
+		Scan(&result.ID, &result.CreatorID, &result.Status, &result.StartedAt, &result.EndedAt, &result.CreatedAt, &result.UpdatedAt)
+	return result, mapQueryError("get current show", err)
+}
+
 func (s *PostgresStore) Start(ctx context.Context, showID, creatorID string, now time.Time) (Show, error) {
 	return s.transition(ctx, showID, creatorID, ActionStart, now)
 }
@@ -79,6 +88,15 @@ func (s *PostgresStore) transition(ctx context.Context, showID, creatorID string
 			return Show{}, fmt.Errorf("commit idempotent show transition: %w", err)
 		}
 		return current, nil
+	}
+	if action == ActionStart {
+		var enabled bool
+		if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM show_tiers WHERE show_id=$1 AND enabled=true)`, showID).Scan(&enabled); err != nil {
+			return Show{}, fmt.Errorf("check enabled show tiers: %w", err)
+		}
+		if !enabled {
+			return Show{}, ErrTierConfiguration
+		}
 	}
 
 	var result Show
@@ -121,6 +139,85 @@ func (s *PostgresStore) transition(ctx context.Context, showID, creatorID string
 		return Show{}, transitionError(err)
 	}
 	return result, nil
+}
+
+const tierColumns = `id, name, priority_rank, call_duration_seconds, price_cents, enabled, created_at, updated_at`
+
+func (s *PostgresStore) TiersForCreator(ctx context.Context, showID, creatorID string) ([]Tier, error) {
+	rows, err := s.pool.Query(ctx, `SELECT t.id,t.name,t.priority_rank,t.call_duration_seconds,t.price_cents,t.enabled,t.created_at,t.updated_at FROM show_tiers t
+		JOIN shows s ON s.id=t.show_id WHERE t.show_id=$1 AND s.creator_id=$2
+		ORDER BY t.priority_rank DESC, t.created_at`, showID, creatorID)
+	if err != nil {
+		return nil, fmt.Errorf("list creator tiers: %w", err)
+	}
+	defer rows.Close()
+	tiers, err := collectTiers(rows)
+	if err != nil {
+		return nil, err
+	}
+	if len(tiers) == 0 {
+		var exists bool
+		if queryErr := s.pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM shows WHERE id=$1 AND creator_id=$2)`, showID, creatorID).Scan(&exists); queryErr != nil {
+			return nil, fmt.Errorf("authorize creator tiers: %w", queryErr)
+		}
+		if !exists {
+			return nil, ErrNotFound
+		}
+	}
+	return tiers, nil
+}
+
+func (s *PostgresStore) ReplaceTiers(ctx context.Context, showID, creatorID string, inputs []TierInput, now time.Time) ([]Tier, error) {
+	tx, err := s.pool.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("begin replace tiers: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	var status Status
+	if err := tx.QueryRow(ctx, `SELECT status FROM shows WHERE id=$1 AND creator_id=$2 FOR UPDATE`, showID, creatorID).Scan(&status); err != nil {
+		return nil, mapQueryError("lock show for tier configuration", err)
+	}
+	if status != StatusCreated {
+		return nil, ErrShowNotConfigurable
+	}
+	if _, err := tx.Exec(ctx, `DELETE FROM show_tiers WHERE show_id=$1`, showID); err != nil {
+		return nil, fmt.Errorf("clear show tiers: %w", err)
+	}
+	for _, input := range inputs {
+		if _, err := tx.Exec(ctx, `INSERT INTO show_tiers
+			(show_id,name,priority_rank,call_duration_seconds,price_cents,enabled,created_at,updated_at)
+			VALUES($1,$2,$3,$4,$5,$6,$7,$7)`, showID, input.Name, input.PriorityRank, input.CallDurationSeconds, input.PriceCents, input.Enabled, now); err != nil {
+			return nil, fmt.Errorf("insert show tier: %w", err)
+		}
+	}
+	rows, err := tx.Query(ctx, `SELECT `+tierColumns+` FROM show_tiers WHERE show_id=$1 ORDER BY priority_rank DESC,created_at`, showID)
+	if err != nil {
+		return nil, fmt.Errorf("read replaced tiers: %w", err)
+	}
+	tiers, err := collectTiers(rows)
+	rows.Close()
+	if err != nil {
+		return nil, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, fmt.Errorf("commit tier configuration: %w", err)
+	}
+	return tiers, nil
+}
+
+func collectTiers(rows pgx.Rows) ([]Tier, error) {
+	tiers := make([]Tier, 0)
+	for rows.Next() {
+		var tier Tier
+		if err := rows.Scan(&tier.ID, &tier.Name, &tier.PriorityRank, &tier.CallDurationSeconds, &tier.PriceCents, &tier.Enabled, &tier.CreatedAt, &tier.UpdatedAt); err != nil {
+			return nil, fmt.Errorf("scan show tier: %w", err)
+		}
+		tiers = append(tiers, tier)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate show tiers: %w", err)
+	}
+	return tiers, nil
 }
 
 func (s *PostgresStore) LiveByUsername(ctx context.Context, username string) (Show, error) {

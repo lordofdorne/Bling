@@ -8,6 +8,8 @@ Creator authentication is available through `/register`, `/login`, and the prote
 
 Authenticated creators can create, start, inspect, and end a Hotline from the dashboard. Viewers can join or leave with an anonymous recovery cookie and recover their current position after refreshing. A creator can manually choose a waiting caller or randomly choose within the highest available priority tier. PostgreSQL serializes selection, guarantees exactly one active call per show, and enforces call expiry; Redis stores the hot candidate index and carries ephemeral invalidation and participant-scoped signaling events. After both participants explicitly allow microphone access, native browser WebRTC carries audio directly between them. The creator sees caller names and topics, while public viewers can only read their own queue entry and call.
 
+Before going live, a creator can configure one to five ordered caller tiers with availability, duration, and a future price preview. Queue admission snapshots those values so later payment processing can use immutable terms. Payments are not collected yet; see [docs/tier-configuration.md](docs/tier-configuration.md).
+
 ## Prerequisites
 
 - Node.js 22+
@@ -33,6 +35,8 @@ make dev-web
 Open [http://localhost:5173](http://localhost:5173). Vite proxies `/healthz`, `/readyz`, and `/api` to the API at `http://localhost:8080`.
 
 The Go process reads `.env` from the repository root when launched with `make dev-api`. Environment variables already present in the shell take precedence.
+
+If port 8080 is already occupied, run `VITE_API_PROXY_TARGET=http://localhost:18080 npm run dev` from `frontend/` to point Vite at another API process; the default remains `http://localhost:8080`.
 
 ## Verification
 

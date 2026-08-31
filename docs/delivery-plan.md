@@ -78,3 +78,12 @@ Acceptance: the two-browser audio scenario works and every exit path stops local
 - Security review, mobile caller polish, desktop creator polish, and runbook updates
 
 Acceptance: race detector and load smoke test pass; defined failure scenarios recover to authoritative state.
+
+## PR 10 — Host-configurable tiers
+
+- Durable draft Hotline recovery and creator tier editor
+- Ordered server-derived priority, enable/disable controls, duration, and future price
+- Immutable price/duration/priority snapshots on queue admission
+- Caller tier selection with explicit no-payment messaging
+
+Acceptance: configuration/start races serialize on the show row; live tiers cannot change; callers receive exactly the enabled ordered configuration and queue entries preserve its admission-time values.

@@ -59,11 +59,22 @@ func TestDurableQueueConcurrentJoinRecoveryAndShutdown(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if _, err := showStore.ReplaceTiers(ctx, activeShow.ID, creatorID, []showdomain.TierInput{{
+		Name: "Priority", PriorityRank: 100, CallDurationSeconds: 180, PriceCents: 1200, Enabled: true,
+	}, {
+		Name: "Hidden", PriorityRank: 50, CallDurationSeconds: 60, PriceCents: 500, Enabled: false,
+	}}, time.Now().UTC()); err != nil {
+		t.Fatal(err)
+	}
 	activeShow, err = showStore.Start(ctx, activeShow.ID, creatorID, time.Now())
 	if err != nil {
 		t.Fatal(err)
 	}
 	repository := NewPostgresRepository(pool)
+	publicTiers, err := repository.Tiers(ctx, activeShow.ID)
+	if err != nil || len(publicTiers) != 1 || publicTiers[0].Name != "Priority" {
+		t.Fatalf("public tiers=%+v err=%v", publicTiers, err)
+	}
 	index := NewRedisCandidateIndex(redisClient)
 	eventBus := realtime.NewRedisBus(redisClient)
 	eventSubscription, err := eventBus.Subscribe(ctx, activeShow.ID)
@@ -108,6 +119,9 @@ func TestDurableQueueConcurrentJoinRecoveryAndShutdown(t *testing.T) {
 		if entries[position-1].QueuePosition >= entries[position].QueuePosition {
 			t.Fatalf("queue is not ordered at %d", position)
 		}
+	}
+	if entries[0].TierName != "Priority" || entries[0].TierPriceCents != 1200 || entries[0].CallDurationSeconds != 180 {
+		t.Fatalf("tier snapshot=%+v", entries[0])
 	}
 	service.flushOutbox(ctx)
 	select {
