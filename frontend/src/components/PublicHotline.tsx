@@ -1,4 +1,11 @@
-import { FormEvent, useState } from "react";
+import { FormEvent, useMemo, useState } from "react";
+import {
+  Elements,
+  PaymentElement,
+  useElements,
+  useStripe,
+} from "@stripe/react-stripe-js";
+import { loadStripe } from "@stripe/stripe-js";
 import { useParams } from "react-router-dom";
 import {
   QueueTier,
@@ -11,6 +18,7 @@ import {
 import { useLiveShow } from "../lib/shows";
 import { useViewerCall } from "../lib/calls";
 import { CallAudioPanel } from "./CallAudioPanel";
+import { PaymentAuthorization, useAuthorizePayment } from "../lib/payments";
 
 const emptyTiers: QueueTier[] = [];
 
@@ -23,6 +31,10 @@ function CallerQueue({ showID }: { showID: string }) {
   const [displayName, setDisplayName] = useState("");
   const [topic, setTopic] = useState("");
   const [selectedTierID, setSelectedTierID] = useState("");
+  const [authorization, setAuthorization] = useState<
+    (PaymentAuthorization & { storageKey: string }) | null
+  >(null);
+  const authorize = useAuthorizePayment(showID);
   useQueueEvents(showID, "viewer", viewer.data?.entry.status === "WAITING");
   const availableTiers = tiers.data ?? emptyTiers;
   const effectiveSelectedTierID = availableTiers.some(
@@ -30,6 +42,9 @@ function CallerQueue({ showID }: { showID: string }) {
   )
     ? selectedTierID
     : (availableTiers[0]?.id ?? "");
+  const selectedTier = availableTiers.find(
+    (tier) => tier.id === effectiveSelectedTierID,
+  );
 
   if (tiers.isPending || viewer.isPending || call.isPending)
     return <div className="status">Loading the caller line…</div>;
@@ -109,13 +124,34 @@ function CallerQueue({ showID }: { showID: string }) {
     );
   }
 
-  function submit(event: FormEvent<HTMLFormElement>) {
+  async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    join.mutate({
-      displayName,
-      topic,
-      tierId: effectiveSelectedTierID,
-    });
+    const tier = availableTiers.find(
+      (value) => value.id === effectiveSelectedTierID,
+    );
+    if (!tier) return;
+    if (tier.priceCents === 0) {
+      join.mutate({ displayName, topic, tierId: tier.id });
+      return;
+    }
+    try {
+      setAuthorization(await authorize.mutateAsync(tier.id));
+    } catch {
+      /* rendered below */
+    }
+  }
+
+  if (authorization) {
+    return (
+      <StripeAuthorizationForm
+        authorization={authorization}
+        displayName={displayName}
+        topic={topic}
+        tierID={effectiveSelectedTierID}
+        join={join}
+        onBack={() => setAuthorization(null)}
+      />
+    );
   }
 
   return (
@@ -162,23 +198,162 @@ function CallerQueue({ showID }: { showID: string }) {
                 </span>
               </label>
             ))}
-            <p>Payments are not collected in this test build.</p>
+            <p>
+              Your card is authorized now and charged only if the host selects
+              you.
+            </p>
           </fieldset>
         )}
         <button
           className="primary-button"
           type="submit"
-          disabled={join.isPending || availableTiers.length === 0}
+          disabled={
+            join.isPending || authorize.isPending || availableTiers.length === 0
+          }
         >
-          {join.isPending ? "Joining…" : "Join the line"}
+          {join.isPending || authorize.isPending
+            ? "Preparing…"
+            : (selectedTier?.priceCents ?? 0) > 0
+              ? "Continue to payment"
+              : "Join the line"}
         </button>
-        {join.isError && (
+        {(join.isError || authorize.isError) && (
           <div className="form-error" role="alert">
-            {join.error.message}
+            {join.error?.message ?? authorize.error?.message}
           </div>
         )}
       </form>
     </section>
+  );
+}
+
+function StripeAuthorizationForm({
+  authorization,
+  displayName,
+  topic,
+  tierID,
+  join,
+  onBack,
+}: {
+  authorization: PaymentAuthorization & { storageKey: string };
+  displayName: string;
+  topic: string;
+  tierID: string;
+  join: ReturnType<typeof useJoinQueue>;
+  onBack: () => void;
+}) {
+  const stripePromise = useMemo(
+    () => loadStripe(authorization.publishableKey),
+    [authorization.publishableKey],
+  );
+  return (
+    <section className="queue-card payment-card">
+      <p className="eyebrow">Secure payment</p>
+      <h2>Authorize {formatPrice(authorization.amountCents)}</h2>
+      <p>
+        This is a temporary card hold. You are charged only if the host selects
+        your call.
+      </p>
+      <Elements
+        stripe={stripePromise}
+        options={{
+          clientSecret: authorization.clientSecret,
+          appearance: { theme: "stripe" },
+        }}
+      >
+        <ConfirmAuthorization
+          authorization={authorization}
+          displayName={displayName}
+          topic={topic}
+          tierID={tierID}
+          join={join}
+          onBack={onBack}
+        />
+      </Elements>
+    </section>
+  );
+}
+
+function ConfirmAuthorization({
+  authorization,
+  displayName,
+  topic,
+  tierID,
+  join,
+  onBack,
+}: {
+  authorization: PaymentAuthorization & { storageKey: string };
+  displayName: string;
+  topic: string;
+  tierID: string;
+  join: ReturnType<typeof useJoinQueue>;
+  onBack: () => void;
+}) {
+  const stripe = useStripe();
+  const elements = useElements();
+  const [error, setError] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  async function confirm() {
+    if (!stripe || !elements) return;
+    setSubmitting(true);
+    setError("");
+    const result = await stripe.confirmPayment({
+      elements,
+      redirect: "if_required",
+      confirmParams: { return_url: window.location.href },
+    });
+    if (result.error) {
+      setError(result.error.message ?? "Payment authorization failed.");
+      setSubmitting(false);
+      return;
+    }
+    if (result.paymentIntent?.status !== "requires_capture") {
+      setError("The card was not authorized. Try another payment method.");
+      setSubmitting(false);
+      return;
+    }
+    try {
+      await join.mutateAsync({
+        displayName,
+        topic,
+        tierId: tierID,
+        paymentAttemptId: authorization.attemptId,
+      });
+      sessionStorage.removeItem(authorization.storageKey);
+    } catch (joinError) {
+      setError(
+        joinError instanceof Error
+          ? joinError.message
+          : "Unable to join the line.",
+      );
+      setSubmitting(false);
+    }
+  }
+  return (
+    <div className="stripe-payment-form">
+      <PaymentElement options={{ layout: "tabs" }} />
+      <button
+        className="primary-button"
+        type="button"
+        onClick={confirm}
+        disabled={!stripe || submitting || join.isPending}
+      >
+        {submitting || join.isPending ? "Authorizing…" : "Authorize and join"}
+      </button>
+      <button
+        className="button secondary"
+        type="button"
+        onClick={onBack}
+        disabled={submitting}
+      >
+        Back
+      </button>
+      {error && (
+        <div className="form-error" role="alert">
+          {error}
+        </div>
+      )}
+    </div>
   );
 }
 

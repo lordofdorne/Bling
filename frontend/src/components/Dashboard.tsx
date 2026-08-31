@@ -60,7 +60,14 @@ function CallerList({ showID }: { showID: string }) {
           <span>
             {call.caller.tierName} · {call.callDurationSeconds}s reserved
           </span>
-          <CallAudioPanel call={call} role="creator" />
+          {call.status === "PAYMENT_PENDING" ? (
+            <p>
+              Stripe is confirming the charge. Audio stays closed until capture
+              succeeds.
+            </p>
+          ) : (
+            <CallAudioPanel call={call} role="creator" />
+          )}
         </div>
       )}
       {entries.length === 0 ? (
@@ -74,7 +81,10 @@ function CallerList({ showID }: { showID: string }) {
               <div>
                 <strong>{entry.displayName}</strong>
                 <span>
-                  {entry.tierName} · {entry.callDurationSeconds}s
+                  {entry.tierName} · {entry.callDurationSeconds}s ·{" "}
+                  {entry.tierPriceCents > 0
+                    ? `${formatPrice(entry.tierPriceCents)} authorized`
+                    : "Free"}
                 </span>
               </div>
               <p>{entry.topic}</p>
@@ -97,6 +107,13 @@ function CallerList({ showID }: { showID: string }) {
       )}
     </section>
   );
+}
+
+function formatPrice(cents: number) {
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+  }).format(cents / 100);
 }
 
 type TierDraft = Pick<
@@ -199,8 +216,8 @@ function TierConfigurationForm({
         <p className="eyebrow">Hotline setup</p>
         <h2>Configure caller tiers</h2>
         <p>
-          Higher rows are selected first. Prices are previews until payments are
-          connected.
+          Higher rows are selected first. Paid tiers authorize cards at queue
+          entry and capture only when you select a caller.
         </p>
       </div>
       <div className="tier-editor-list">
@@ -232,7 +249,7 @@ function TierConfigurationForm({
               />
             </label>
             <label>
-              Future price (USD)
+              Price (USD)
               <input
                 type="number"
                 min={0}
@@ -245,6 +262,7 @@ function TierConfigurationForm({
                   })
                 }
               />
+              <small>Use $0 for free or at least $0.50 for a paid tier.</small>
             </label>
             <label className="tier-enabled">
               <input

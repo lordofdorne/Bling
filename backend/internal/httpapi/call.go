@@ -210,6 +210,10 @@ func (h callHandler) writeError(w http.ResponseWriter, err error) {
 		writeError(w, http.StatusConflict, "ACTIVE_CALL_EXISTS", "End the active call before choosing another caller.")
 	case errors.Is(err, calldomain.ErrInvalidTransition):
 		writeError(w, http.StatusConflict, "INVALID_CALL_STATE", "That call status change is not allowed.")
+	case errors.Is(err, calldomain.ErrPaymentFailed):
+		writeError(w, http.StatusPaymentRequired, "PAYMENT_CAPTURE_FAILED", "Payment could not be captured, so the call was not opened.")
+	case errors.Is(err, calldomain.ErrPaymentPending):
+		writeError(w, http.StatusConflict, "PAYMENT_CAPTURE_PENDING", "Stripe is confirming the charge. The call will open only after confirmation.")
 	default:
 		h.logger.Error("call request failed", "error", err)
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Unable to update the call.")

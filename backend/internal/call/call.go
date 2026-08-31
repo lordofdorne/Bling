@@ -10,11 +10,12 @@ import (
 type Status string
 
 const (
-	StatusCreated    Status = "CREATED"
-	StatusConnecting Status = "CONNECTING"
-	StatusLive       Status = "LIVE"
-	StatusEnded      Status = "ENDED"
-	StatusFailed     Status = "FAILED"
+	StatusPaymentPending Status = "PAYMENT_PENDING"
+	StatusCreated        Status = "CREATED"
+	StatusConnecting     Status = "CONNECTING"
+	StatusLive           Status = "LIVE"
+	StatusEnded          Status = "ENDED"
+	StatusFailed         Status = "FAILED"
 )
 
 type SelectionMode string
@@ -32,6 +33,8 @@ var (
 	ErrActiveCall        = errors.New("show already has an active call")
 	ErrCallNotFound      = errors.New("call not found")
 	ErrInvalidTransition = errors.New("invalid call state transition")
+	ErrPaymentFailed     = errors.New("payment capture failed")
+	ErrPaymentPending    = errors.New("payment capture outcome is pending")
 )
 
 type Caller struct {

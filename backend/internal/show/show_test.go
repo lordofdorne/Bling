@@ -64,6 +64,7 @@ func TestReplaceTiersDerivesPriorityAndValidatesConfiguration(t *testing.T) {
 	invalid := [][]TierInput{
 		{},
 		{{Name: "VIP", CallDurationSeconds: 29, Enabled: true}},
+		{{Name: "VIP", CallDurationSeconds: 60, PriceCents: 49, Enabled: true}},
 		{{Name: "VIP", CallDurationSeconds: 60, Enabled: false}},
 		{{Name: "VIP", CallDurationSeconds: 60, Enabled: true}, {Name: "vip", CallDurationSeconds: 60, Enabled: true}},
 	}

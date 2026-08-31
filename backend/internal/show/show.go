@@ -129,7 +129,7 @@ func (s *Service) ReplaceTiers(ctx context.Context, showID, creatorID string, ti
 	for index := range tiers {
 		tiers[index].Name = strings.TrimSpace(tiers[index].Name)
 		key := strings.ToLower(tiers[index].Name)
-		if len(tiers[index].Name) < 1 || len(tiers[index].Name) > 40 || tiers[index].CallDurationSeconds < 30 || tiers[index].CallDurationSeconds > 3600 || tiers[index].PriceCents < 0 || tiers[index].PriceCents > 1000000 {
+		if len(tiers[index].Name) < 1 || len(tiers[index].Name) > 40 || tiers[index].CallDurationSeconds < 30 || tiers[index].CallDurationSeconds > 3600 || tiers[index].PriceCents < 0 || (tiers[index].PriceCents > 0 && tiers[index].PriceCents < 50) || tiers[index].PriceCents > 1000000 {
 			return nil, ErrTierConfiguration
 		}
 		if _, exists := seen[key]; exists {

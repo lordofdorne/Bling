@@ -39,6 +39,9 @@ type Config struct {
 	TURNCredentialTTL       time.Duration
 	CallPresenceTTL         time.Duration
 	CallDisconnectGrace     time.Duration
+	StripeSecretKey         string
+	StripePublishableKey    string
+	StripeWebhookSecret     string
 }
 
 type ICEServer struct {
@@ -51,17 +54,20 @@ func Load() (Config, error) {
 	_ = godotenv.Load("../.env", ".env")
 
 	cfg := Config{
-		Environment:       envOrDefault("APP_ENV", "development"),
-		HTTPAddr:          envOrDefault("HTTP_ADDR", ":8080"),
-		DatabaseURL:       os.Getenv("DATABASE_URL"),
-		RedisURL:          os.Getenv("REDIS_URL"),
-		FrontendURL:       envOrDefault("FRONTEND_URL", "http://localhost:5173"),
-		AllowedOrigins:    splitCSV(envOrDefault("ALLOWED_ORIGINS", "http://localhost:5173")),
-		CookieSecure:      strings.EqualFold(envOrDefault("COOKIE_SECURE", "false"), "true"),
-		ReadHeaderTimeout: 5 * time.Second,
-		ReadTimeout:       15 * time.Second,
-		WriteTimeout:      30 * time.Second,
-		IdleTimeout:       60 * time.Second,
+		Environment:          envOrDefault("APP_ENV", "development"),
+		HTTPAddr:             envOrDefault("HTTP_ADDR", ":8080"),
+		DatabaseURL:          os.Getenv("DATABASE_URL"),
+		RedisURL:             os.Getenv("REDIS_URL"),
+		FrontendURL:          envOrDefault("FRONTEND_URL", "http://localhost:5173"),
+		AllowedOrigins:       splitCSV(envOrDefault("ALLOWED_ORIGINS", "http://localhost:5173")),
+		CookieSecure:         strings.EqualFold(envOrDefault("COOKIE_SECURE", "false"), "true"),
+		ReadHeaderTimeout:    5 * time.Second,
+		ReadTimeout:          15 * time.Second,
+		WriteTimeout:         30 * time.Second,
+		IdleTimeout:          60 * time.Second,
+		StripeSecretKey:      strings.TrimSpace(os.Getenv("STRIPE_SECRET_KEY")),
+		StripePublishableKey: strings.TrimSpace(os.Getenv("STRIPE_PUBLISHABLE_KEY")),
+		StripeWebhookSecret:  strings.TrimSpace(os.Getenv("STRIPE_WEBHOOK_SECRET")),
 	}
 	stunURLs := splitCSV(envOrDefault("STUN_URLS", "stun:stun.l.google.com:19302"))
 	if len(stunURLs) == 0 {
@@ -137,6 +143,12 @@ func Load() (Config, error) {
 	}
 	if cfg.RedisURL == "" {
 		return Config{}, fmt.Errorf("REDIS_URL is required")
+	}
+	if (cfg.StripeSecretKey == "") != (cfg.StripePublishableKey == "") {
+		return Config{}, fmt.Errorf("STRIPE_SECRET_KEY and STRIPE_PUBLISHABLE_KEY must be configured together")
+	}
+	if cfg.Environment == "production" && cfg.StripeSecretKey != "" && cfg.StripeWebhookSecret == "" {
+		return Config{}, fmt.Errorf("STRIPE_WEBHOOK_SECRET is required when Stripe is enabled in production")
 	}
 	if cfg.Environment == "production" && !cfg.CookieSecure {
 		return Config{}, fmt.Errorf("COOKIE_SECURE must be true in production")

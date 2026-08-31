@@ -14,12 +14,13 @@ type metricsHandler struct {
 }
 
 func (h metricsHandler) serve(w http.ResponseWriter, r *http.Request) {
-	var waiting, activeCalls, reconnecting, pendingOutbox int64
+	var waiting, activeCalls, reconnecting, pendingOutbox, pendingCaptures int64
 	err := h.pool.QueryRow(r.Context(), `SELECT
 		(SELECT count(*) FROM queue_entries WHERE status='WAITING'),
 		(SELECT count(*) FROM calls WHERE status IN ('CREATED','CONNECTING','LIVE')),
 		(SELECT count(*) FROM calls WHERE status IN ('CREATED','CONNECTING','LIVE') AND (creator_disconnected_at IS NOT NULL OR viewer_disconnected_at IS NOT NULL)),
-		(SELECT count(*) FROM queue_outbox WHERE published_at IS NULL)`).Scan(&waiting, &activeCalls, &reconnecting, &pendingOutbox)
+		(SELECT count(*) FROM queue_outbox WHERE published_at IS NULL),
+		(SELECT count(*) FROM payment_attempts WHERE status='CAPTURING')`).Scan(&waiting, &activeCalls, &reconnecting, &pendingOutbox, &pendingCaptures)
 	if err != nil {
 		h.logger.Error("operational metrics query failed", "error", err)
 		http.Error(w, "metrics unavailable", http.StatusServiceUnavailable)
@@ -31,4 +32,5 @@ func (h metricsHandler) serve(w http.ResponseWriter, r *http.Request) {
 	_, _ = fmt.Fprintf(w, "# TYPE bling_calls_active gauge\nbling_calls_active %d\n", activeCalls)
 	_, _ = fmt.Fprintf(w, "# TYPE bling_calls_in_reconnect_grace gauge\nbling_calls_in_reconnect_grace %d\n", reconnecting)
 	_, _ = fmt.Fprintf(w, "# TYPE bling_queue_outbox_pending gauge\nbling_queue_outbox_pending %d\n", pendingOutbox)
+	_, _ = fmt.Fprintf(w, "# TYPE bling_payment_captures_pending gauge\nbling_payment_captures_pending %d\n", pendingCaptures)
 }

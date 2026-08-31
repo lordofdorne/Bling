@@ -13,4 +13,4 @@ At least one tier must remain enabled. Configuration updates lock the show row a
 
 Public callers see enabled tiers in priority order and explicitly choose one. Joining snapshots the tier name, priority, duration, and price onto the queue entry. Later edits cannot change an admitted caller's terms, and Stripe can use the snapshotted `tier_price_cents` rather than mutable configuration.
 
-Prices are clearly labeled as previews in the current UI. PR 10 does not collect, authorize, or capture payments.
+Paid tiers now use the snapshotted price for Stripe authorization before queue admission and capture after host selection. See [payments.md](payments.md).

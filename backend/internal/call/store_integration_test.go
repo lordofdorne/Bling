@@ -10,10 +10,33 @@ import (
 	"testing"
 	"time"
 
+	paymentdomain "github.com/bling-app/bling/backend/internal/payment"
 	queuedomain "github.com/bling-app/bling/backend/internal/queue"
 	showdomain "github.com/bling-app/bling/backend/internal/show"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
+
+type captureGateway struct {
+	captures int
+	intentID string
+}
+
+func (g *captureGateway) CreateAuthorization(context.Context, paymentdomain.Attempt) (paymentdomain.Intent, error) {
+	return paymentdomain.Intent{}, errors.New("unexpected create")
+}
+func (g *captureGateway) Retrieve(context.Context, string) (paymentdomain.Intent, error) {
+	return paymentdomain.Intent{}, errors.New("unexpected retrieve")
+}
+func (g *captureGateway) Capture(_ context.Context, id, key string) (paymentdomain.Intent, error) {
+	g.captures++
+	if id != g.intentID || key == "" {
+		return paymentdomain.Intent{}, errors.New("invalid capture request")
+	}
+	return paymentdomain.Intent{ID: id, Status: "succeeded", AmountCents: 2500, Currency: "usd"}, nil
+}
+func (g *captureGateway) Cancel(context.Context, string, string) error {
+	return errors.New("unexpected cancel")
+}
 
 func TestConcurrentSelectionCreatesExactlyOneActiveCall(t *testing.T) {
 	databaseURL := os.Getenv("TEST_DATABASE_URL")
@@ -157,5 +180,35 @@ func TestConcurrentSelectionCreatesExactlyOneActiveCall(t *testing.T) {
 	}
 	if len(disconnected) != 1 || disconnected[0].Status != StatusFailed {
 		t.Fatalf("disconnected calls=%+v", disconnected)
+	}
+
+	var paidTierID, attemptID string
+	if err := pool.QueryRow(ctx, `INSERT INTO show_tiers(show_id,name,priority_rank,call_duration_seconds,price_cents) VALUES($1,'Paid',500,120,2500) RETURNING id`, activeShow.ID).Scan(&paidTierID); err != nil {
+		t.Fatal(err)
+	}
+	paidToken := queuedomain.Hash("paid-viewer-" + suffix)
+	intentID := "pi_paid_" + suffix
+	if err := pool.QueryRow(ctx, `INSERT INTO payment_attempts(show_id,tier_id,viewer_token_hash,idempotency_key_hash,stripe_payment_intent_id,amount_cents,status,authorized_at) VALUES($1,$2,$3,$4,$5,2500,'AUTHORIZED',now()) RETURNING id`, activeShow.ID, paidTierID, paidToken, queuedomain.Hash("paid-attempt-"+suffix), intentID).Scan(&attemptID); err != nil {
+		t.Fatal(err)
+	}
+	paidEntry, err := queueRepository.Join(ctx, queuedomain.JoinInput{ShowID: activeShow.ID, TierID: paidTierID, DisplayName: "Paid caller", Topic: "Paid selection", SessionTokenHash: paidToken, JoinKeyHash: queuedomain.Hash("paid-join-" + suffix), PaymentAttemptID: attemptID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	gateway := &captureGateway{intentID: intentID}
+	paidRepository := NewPostgresRepository(pool, gateway)
+	paidCall, err := paidRepository.Select(ctx, activeShow.ID, creatorID, paidEntry.ID, SelectionManual, time.Now().UTC())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if paidCall.Status != StatusCreated || gateway.captures != 1 {
+		t.Fatalf("paid call=%+v captures=%d", paidCall, gateway.captures)
+	}
+	var paymentStatus string
+	if err := pool.QueryRow(ctx, `SELECT status FROM payment_attempts WHERE id=$1`, attemptID).Scan(&paymentStatus); err != nil {
+		t.Fatal(err)
+	}
+	if paymentStatus != "CAPTURED" {
+		t.Fatalf("payment status=%q", paymentStatus)
 	}
 }

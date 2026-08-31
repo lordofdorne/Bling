@@ -94,3 +94,13 @@ func TestLoadRejectsUnboundedRealtimeConfiguration(t *testing.T) {
 		t.Fatal("expected zero realtime room capacity to fail configuration")
 	}
 }
+
+func TestLoadRejectsPartialStripeConfiguration(t *testing.T) {
+	t.Setenv("DATABASE_URL", "postgres://example")
+	t.Setenv("REDIS_URL", "redis://example")
+	t.Setenv("STRIPE_SECRET_KEY", "sk_test_example")
+	t.Setenv("STRIPE_PUBLISHABLE_KEY", "")
+	if _, err := Load(); err == nil {
+		t.Fatal("expected incomplete Stripe keys to fail configuration")
+	}
+}

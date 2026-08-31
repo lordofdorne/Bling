@@ -60,7 +60,7 @@ func TestDurableQueueConcurrentJoinRecoveryAndShutdown(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, err := showStore.ReplaceTiers(ctx, activeShow.ID, creatorID, []showdomain.TierInput{{
-		Name: "Priority", PriorityRank: 100, CallDurationSeconds: 180, PriceCents: 1200, Enabled: true,
+		Name: "Priority", PriorityRank: 100, CallDurationSeconds: 180, PriceCents: 0, Enabled: true,
 	}, {
 		Name: "Hidden", PriorityRank: 50, CallDurationSeconds: 60, PriceCents: 500, Enabled: false,
 	}}, time.Now().UTC()); err != nil {
@@ -120,7 +120,7 @@ func TestDurableQueueConcurrentJoinRecoveryAndShutdown(t *testing.T) {
 			t.Fatalf("queue is not ordered at %d", position)
 		}
 	}
-	if entries[0].TierName != "Priority" || entries[0].TierPriceCents != 1200 || entries[0].CallDurationSeconds != 180 {
+	if entries[0].TierName != "Priority" || entries[0].TierPriceCents != 0 || entries[0].CallDurationSeconds != 180 {
 		t.Fatalf("tier snapshot=%+v", entries[0])
 	}
 	service.flushOutbox(ctx)

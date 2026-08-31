@@ -9,6 +9,7 @@ import (
 	"github.com/bling-app/bling/backend/internal/auth"
 	calldomain "github.com/bling-app/bling/backend/internal/call"
 	"github.com/bling-app/bling/backend/internal/config"
+	paymentdomain "github.com/bling-app/bling/backend/internal/payment"
 	queuedomain "github.com/bling-app/bling/backend/internal/queue"
 	"github.com/bling-app/bling/backend/internal/realtime"
 	showdomain "github.com/bling-app/bling/backend/internal/show"
@@ -26,7 +27,7 @@ type redisDependency struct{ client *redis.Client }
 
 func (d redisDependency) Ping(ctx context.Context) error { return d.client.Ping(ctx).Err() }
 
-func NewRouter(logger *slog.Logger, postgres *pgxpool.Pool, redisClient *redis.Client, cfg config.Config, queueService *queuedomain.Service, realtimeHub *realtime.Hub, callService *calldomain.Service, signalHub *realtime.SignalHub) http.Handler {
+func NewRouter(logger *slog.Logger, postgres *pgxpool.Pool, redisClient *redis.Client, cfg config.Config, queueService *queuedomain.Service, realtimeHub *realtime.Hub, callService *calldomain.Service, signalHub *realtime.SignalHub, paymentService *paymentdomain.Service) http.Handler {
 	authHandler := authHandler{
 		service:      auth.NewService(auth.NewPostgresStore(postgres), cfg.BcryptCost, cfg.SessionTTL),
 		limiter:      auth.NewRedisRateLimiter(redisClient),
@@ -36,7 +37,8 @@ func NewRouter(logger *slog.Logger, postgres *pgxpool.Pool, redisClient *redis.C
 		rateWindow:   cfg.AuthRateLimitWindow,
 	}
 	showHandler := showHandler{service: showdomain.NewService(showdomain.NewPostgresStore(postgres)), logger: logger}
-	queueHandler := queueHandler{service: queueService, logger: logger, cookieSecure: cfg.CookieSecure, cookieTTL: cfg.SessionTTL}
+	queueHandler := queueHandler{service: queueService, payments: paymentService, logger: logger, cookieSecure: cfg.CookieSecure, cookieTTL: cfg.SessionTTL}
+	paymentHandler := paymentHandler{service: paymentService, logger: logger, setCookie: queueHandler.setViewerCookie, webhookSecret: cfg.StripeWebhookSecret}
 	queueRealtimeHandler := realtimeHandler{
 		service: queueService, hub: realtimeHub, limiter: auth.NewRedisRateLimiter(redisClient), logger: logger,
 		allowedOrigins: cfg.AllowedOrigins, rateLimit: cfg.RealtimeConnectLimit, rateWindow: cfg.RealtimeRateLimitWindow,
@@ -50,14 +52,14 @@ func NewRouter(logger *slog.Logger, postgres *pgxpool.Pool, redisClient *redis.C
 		postgres: postgresDependency{pool: postgres},
 		redis:    redisDependency{client: redisClient},
 		timeout:  cfg.ReadinessTimeout,
-	}, &authHandler, &showHandler, &queueHandler, &queueRealtimeHandler, &callHandler, &signalHandler, metrics, cfg.AllowedOrigins)
+	}, &authHandler, &showHandler, &queueHandler, &queueRealtimeHandler, &callHandler, &signalHandler, &paymentHandler, metrics, cfg.AllowedOrigins)
 }
 
 func newRouter(logger *slog.Logger, health healthHandler, authentication *authHandler, shows *showHandler, queues *queueHandler, realtimeUpdates *realtimeHandler, allowedOrigins []string) http.Handler {
-	return newRouterWithCalls(logger, health, authentication, shows, queues, realtimeUpdates, nil, nil, nil, allowedOrigins)
+	return newRouterWithCalls(logger, health, authentication, shows, queues, realtimeUpdates, nil, nil, nil, nil, allowedOrigins)
 }
 
-func newRouterWithCalls(logger *slog.Logger, health healthHandler, authentication *authHandler, shows *showHandler, queues *queueHandler, realtimeUpdates *realtimeHandler, calls *callHandler, signals *callSignalHandler, metrics *metricsHandler, allowedOrigins []string) http.Handler {
+func newRouterWithCalls(logger *slog.Logger, health healthHandler, authentication *authHandler, shows *showHandler, queues *queueHandler, realtimeUpdates *realtimeHandler, calls *callHandler, signals *callSignalHandler, payments *paymentHandler, metrics *metricsHandler, allowedOrigins []string) http.Handler {
 	router := chi.NewRouter()
 	router.Use(chimiddleware.RequestID)
 	router.Use(chimiddleware.Recoverer)
@@ -73,6 +75,10 @@ func newRouterWithCalls(logger *slog.Logger, health healthHandler, authenticatio
 		router.Route("/api/v1", func(api chi.Router) {
 			api.Mount("/auth", authentication.routes())
 			api.Get("/me", authentication.me)
+			if payments != nil {
+				api.Post("/payments/webhook", payments.webhook)
+				api.Post("/shows/{showID}/payments/authorize", payments.authorize)
+			}
 			if shows != nil {
 				api.Get("/creators/{username}/live-show", shows.liveByUsername)
 				if calls != nil {

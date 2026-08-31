@@ -2,7 +2,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ApiError, apiRequest } from "./api";
 import type { QueueEntry } from "./queue";
 
-export type CallStatus = "CREATED" | "CONNECTING" | "LIVE" | "ENDED" | "FAILED";
+export type CallStatus =
+  "PAYMENT_PENDING" | "CREATED" | "CONNECTING" | "LIVE" | "ENDED" | "FAILED";
 
 export type BlingCall = {
   id: string;
@@ -131,6 +132,8 @@ function useSelection(showID: string, random: boolean) {
         queryKey: ["shows", showID, "queue"],
       });
     },
+    onSettled: () =>
+      void queryClient.invalidateQueries({ queryKey: activeCallKey(showID) }),
   });
 }
 

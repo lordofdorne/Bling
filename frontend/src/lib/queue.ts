@@ -85,6 +85,7 @@ export function useJoinQueue(showID: string) {
       displayName: string;
       topic: string;
       tierId: string;
+      paymentAttemptId?: string;
     }) => {
       const key = idempotencyKey(showID);
       const response = await apiRequest<ViewerResponse>(
