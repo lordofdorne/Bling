@@ -108,7 +108,7 @@ describe("App routes", () => {
                   name: "Standard",
                   priorityRank: 100,
                   callDurationSeconds: 300,
-                  priceCents: 1000,
+                  priceCents: 0,
                 },
               ],
             },

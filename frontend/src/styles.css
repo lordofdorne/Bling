@@ -316,6 +316,15 @@ button.button {
   background: rgba(18, 17, 24, 0.92);
   box-shadow: 0 28px 80px rgba(0, 0, 0, 0.28);
 }
+
+.payment-card {
+  max-width: 620px;
+}
+.stripe-payment-form {
+  display: grid;
+  gap: 1rem;
+  margin-top: 1.5rem;
+}
 .queue-card h2,
 .caller-list h2 {
   margin: 0;

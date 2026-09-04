@@ -18,7 +18,7 @@ func NewPostgresRepository(pool *pgxpool.Pool) *PostgresRepository {
 	return &PostgresRepository{pool: pool}
 }
 
-const entryColumns = `id, show_id, display_name, topic, status, tier_id, tier_name, priority_rank, call_duration_seconds, tier_price_cents, queue_position, joined_at, selected_at, left_at, created_at, updated_at`
+const entryColumns = `id, show_id, display_name, topic, status, tier_id, tier_name, priority_rank, call_duration_seconds, tier_price_cents, queue_position, joined_at, selected_at, left_at, created_at, updated_at, payment_attempt_id`
 
 func scanEntry(row pgx.Row) (Entry, error) {
 	var entry Entry
@@ -26,7 +26,7 @@ func scanEntry(row pgx.Row) (Entry, error) {
 		&entry.ID, &entry.ShowID, &entry.DisplayName, &entry.Topic, &entry.Status,
 		&entry.TierID, &entry.TierName, &entry.PriorityRank, &entry.CallDurationSeconds, &entry.TierPriceCents,
 		&entry.QueuePosition, &entry.JoinedAt, &entry.SelectedAt, &entry.LeftAt,
-		&entry.CreatedAt, &entry.UpdatedAt,
+		&entry.CreatedAt, &entry.UpdatedAt, &entry.PaymentAttemptID,
 	)
 	return entry, err
 }
@@ -64,6 +64,20 @@ func (r *PostgresRepository) Join(ctx context.Context, input JoinInput) (Entry, 
 	if err != nil {
 		return Entry{}, err
 	}
+	if tier.PriceCents > 0 {
+		if input.PaymentAttemptID == "" {
+			return Entry{}, ErrPaymentRequired
+		}
+		var valid bool
+		if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM payment_attempts p LEFT JOIN queue_entries q ON q.id=p.queue_entry_id WHERE p.id=$1 AND p.show_id=$2 AND p.tier_id=$3 AND p.viewer_token_hash=$4 AND p.amount_cents=$5 AND p.status='AUTHORIZED' AND (p.queue_entry_id IS NULL OR (q.session_token_hash=$4 AND q.status='WAITING')))`, input.PaymentAttemptID, input.ShowID, tier.ID, input.SessionTokenHash, tier.PriceCents).Scan(&valid); err != nil {
+			return Entry{}, fmt.Errorf("validate queue payment: %w", err)
+		}
+		if !valid {
+			return Entry{}, ErrPaymentRequired
+		}
+	} else {
+		input.PaymentAttemptID = ""
+	}
 
 	existing, existingErr := scanEntry(tx.QueryRow(ctx, `
 		SELECT `+entryColumns+` FROM queue_entries
@@ -91,10 +105,10 @@ func (r *PostgresRepository) Join(ctx context.Context, input JoinInput) (Entry, 
 				display_name = $1, topic = $2, status = 'WAITING', tier_id = $3,
 				tier_name = $4, priority_rank = $5, call_duration_seconds = $6,
 				tier_price_cents = $7, queue_position = nextval('queue_entry_position_seq'), session_token_hash = $8,
-				join_key_hash = $9, joined_at = now(), left_at = NULL, updated_at = now()
-			WHERE id = $10 RETURNING `+entryColumns,
+				join_key_hash = $9, payment_attempt_id = NULLIF($10,'')::uuid, joined_at = now(), left_at = NULL, updated_at = now()
+			WHERE id = $11 RETURNING `+entryColumns,
 			input.DisplayName, input.Topic, tier.ID, tier.Name, tier.PriorityRank,
-			tier.CallDurationSeconds, tier.PriceCents, input.SessionTokenHash, input.JoinKeyHash, existing.ID))
+			tier.CallDurationSeconds, tier.PriceCents, input.SessionTokenHash, input.JoinKeyHash, input.PaymentAttemptID, existing.ID))
 	} else if existingErr == nil {
 		if err := tx.Commit(ctx); err != nil {
 			return Entry{}, fmt.Errorf("commit existing queue state: %w", err)
@@ -104,14 +118,23 @@ func (r *PostgresRepository) Join(ctx context.Context, input JoinInput) (Entry, 
 		entry, err = scanEntry(tx.QueryRow(ctx, `
 			INSERT INTO queue_entries (
 				show_id, display_name, topic, tier_id, tier_name, priority_rank,
-				call_duration_seconds, tier_price_cents, session_token_hash, join_key_hash
-			) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+				call_duration_seconds, tier_price_cents, session_token_hash, join_key_hash, payment_attempt_id
+			) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NULLIF($11,'')::uuid)
 			RETURNING `+entryColumns,
 			input.ShowID, input.DisplayName, input.Topic, tier.ID, tier.Name,
-			tier.PriorityRank, tier.CallDurationSeconds, tier.PriceCents, input.SessionTokenHash, input.JoinKeyHash))
+			tier.PriorityRank, tier.CallDurationSeconds, tier.PriceCents, input.SessionTokenHash, input.JoinKeyHash, input.PaymentAttemptID))
 	}
 	if err != nil {
 		return Entry{}, fmt.Errorf("persist queue join: %w", err)
+	}
+	if input.PaymentAttemptID != "" {
+		tag, updateErr := tx.Exec(ctx, `UPDATE payment_attempts SET queue_entry_id=$2,updated_at=now() WHERE id=$1 AND status='AUTHORIZED' AND queue_entry_id IS NULL`, input.PaymentAttemptID, entry.ID)
+		if updateErr != nil {
+			return Entry{}, fmt.Errorf("claim payment authorization: %w", updateErr)
+		}
+		if tag.RowsAffected() != 1 {
+			return Entry{}, ErrPaymentRequired
+		}
 	}
 	if err := insertOutbox(ctx, tx, "queue.caller_joined", entry); err != nil {
 		return Entry{}, err
@@ -359,5 +382,5 @@ func collectEntries(rows pgx.Rows) ([]Entry, error) {
 }
 
 func entryColumnsWithPrefix(prefix string) string {
-	return `id, ` + prefix + `.show_id, ` + prefix + `.display_name, ` + prefix + `.topic, ` + prefix + `.status, ` + prefix + `.tier_id, ` + prefix + `.tier_name, ` + prefix + `.priority_rank, ` + prefix + `.call_duration_seconds, ` + prefix + `.tier_price_cents, ` + prefix + `.queue_position, ` + prefix + `.joined_at, ` + prefix + `.selected_at, ` + prefix + `.left_at, ` + prefix + `.created_at, ` + prefix + `.updated_at`
+	return `id, ` + prefix + `.show_id, ` + prefix + `.display_name, ` + prefix + `.topic, ` + prefix + `.status, ` + prefix + `.tier_id, ` + prefix + `.tier_name, ` + prefix + `.priority_rank, ` + prefix + `.call_duration_seconds, ` + prefix + `.tier_price_cents, ` + prefix + `.queue_position, ` + prefix + `.joined_at, ` + prefix + `.selected_at, ` + prefix + `.left_at, ` + prefix + `.created_at, ` + prefix + `.updated_at, ` + prefix + `.payment_attempt_id`
 }

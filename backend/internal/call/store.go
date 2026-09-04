@@ -7,14 +7,22 @@ import (
 	"math/rand/v2"
 	"time"
 
+	paymentdomain "github.com/bling-app/bling/backend/internal/payment"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-type PostgresRepository struct{ pool *pgxpool.Pool }
+type PostgresRepository struct {
+	pool     *pgxpool.Pool
+	payments paymentdomain.Gateway
+}
 
-func NewPostgresRepository(pool *pgxpool.Pool) *PostgresRepository {
-	return &PostgresRepository{pool: pool}
+func NewPostgresRepository(pool *pgxpool.Pool, payments ...paymentdomain.Gateway) *PostgresRepository {
+	value := &PostgresRepository{pool: pool}
+	if len(payments) > 0 {
+		value.payments = payments[0]
+	}
+	return value
 }
 
 const callColumns = `c.id, c.show_id, c.queue_entry_id, c.status, c.selection_mode,
@@ -48,7 +56,7 @@ func (r *PostgresRepository) Select(ctx context.Context, showID, creatorID, entr
 		return Call{}, ErrShowNotLive
 	}
 	var active bool
-	if err := tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM calls WHERE show_id=$1 AND status IN ('CREATED','CONNECTING','LIVE'))`, showID).Scan(&active); err != nil {
+	if err := tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM calls WHERE show_id=$1 AND status IN ('PAYMENT_PENDING','CREATED','CONNECTING','LIVE'))`, showID).Scan(&active); err != nil {
 		return Call{}, fmt.Errorf("check active call: %w", err)
 	}
 	if active {
@@ -69,6 +77,9 @@ func (r *PostgresRepository) Select(ctx context.Context, showID, creatorID, entr
 	}
 	if err != nil {
 		return Call{}, fmt.Errorf("select waiting caller: %w", err)
+	}
+	if selected.price > 0 {
+		return r.selectPaid(ctx, tx, showID, selected, mode, now)
 	}
 
 	if _, err := tx.Exec(ctx, `UPDATE queue_entries SET status='SELECTED', selected_at=$1, updated_at=$1 WHERE id=$2`, now, selected.id); err != nil {
@@ -93,17 +104,21 @@ func (r *PostgresRepository) Select(ctx context.Context, showID, creatorID, entr
 }
 
 type callerRow struct {
-	id       string
-	rank     int
-	position int64
-	duration int
+	id               string
+	rank             int
+	position         int64
+	duration         int
+	price            int64
+	paymentAttemptID string
+	paymentIntentID  string
 }
 
 func lockCaller(ctx context.Context, tx pgx.Tx, predicate, showID string, argument any) (callerRow, error) {
 	var value callerRow
-	err := tx.QueryRow(ctx, `SELECT q.id,q.priority_rank,q.queue_position,q.call_duration_seconds FROM queue_entries q
-		WHERE q.show_id=$1 AND q.status='WAITING' AND `+predicate+` FOR UPDATE`, showID, argument).
-		Scan(&value.id, &value.rank, &value.position, &value.duration)
+	err := tx.QueryRow(ctx, `SELECT q.id,q.priority_rank,q.queue_position,q.call_duration_seconds,q.tier_price_cents,COALESCE(p.id::text,''),COALESCE(p.stripe_payment_intent_id,'') FROM queue_entries q
+		LEFT JOIN payment_attempts p ON p.id=q.payment_attempt_id AND p.status='AUTHORIZED'
+		WHERE q.show_id=$1 AND q.status='WAITING' AND `+predicate+` FOR UPDATE OF q`, showID, argument).
+		Scan(&value.id, &value.rank, &value.position, &value.duration, &value.price, &value.paymentAttemptID, &value.paymentIntentID)
 	return value, err
 }
 
@@ -120,23 +135,123 @@ func randomCaller(ctx context.Context, tx pgx.Tx, showID string) (callerRow, err
 		pivot += rand.Int64N(width)
 	}
 	var value callerRow
-	err := tx.QueryRow(ctx, `SELECT id,priority_rank,queue_position,call_duration_seconds FROM queue_entries
-		WHERE show_id=$1 AND status='WAITING' AND priority_rank=$2
-		ORDER BY (queue_position < $3), queue_position LIMIT 1 FOR UPDATE`, showID, rank, pivot).
-		Scan(&value.id, &value.rank, &value.position, &value.duration)
+	err := tx.QueryRow(ctx, `SELECT q.id,q.priority_rank,q.queue_position,q.call_duration_seconds,q.tier_price_cents,COALESCE(p.id::text,''),COALESCE(p.stripe_payment_intent_id,'') FROM queue_entries q
+		LEFT JOIN payment_attempts p ON p.id=q.payment_attempt_id AND p.status='AUTHORIZED'
+		WHERE q.show_id=$1 AND q.status='WAITING' AND q.priority_rank=$2
+		ORDER BY (q.queue_position < $3), q.queue_position LIMIT 1 FOR UPDATE OF q`, showID, rank, pivot).
+		Scan(&value.id, &value.rank, &value.position, &value.duration, &value.price, &value.paymentAttemptID, &value.paymentIntentID)
 	return value, err
+}
+
+func (r *PostgresRepository) selectPaid(ctx context.Context, tx pgx.Tx, showID string, selected callerRow, mode SelectionMode, now time.Time) (Call, error) {
+	if r.payments == nil || selected.paymentAttemptID == "" || selected.paymentIntentID == "" {
+		return Call{}, ErrPaymentFailed
+	}
+	var callID string
+	if err := tx.QueryRow(ctx, `INSERT INTO calls (show_id,queue_entry_id,status,selection_mode,call_duration_seconds,payment_attempt_id,created_at,updated_at) VALUES ($1,$2,'PAYMENT_PENDING',$3,$4,$5,$6,$6) RETURNING id`, showID, selected.id, mode, selected.duration, selected.paymentAttemptID, now).Scan(&callID); err != nil {
+		return Call{}, fmt.Errorf("reserve paid call: %w", err)
+	}
+	tag, err := tx.Exec(ctx, `UPDATE payment_attempts SET status='CAPTURING',updated_at=$2 WHERE id=$1 AND status='AUTHORIZED'`, selected.paymentAttemptID, now)
+	if err != nil {
+		return Call{}, fmt.Errorf("reserve payment capture: %w", err)
+	}
+	if tag.RowsAffected() != 1 {
+		return Call{}, ErrPaymentFailed
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return Call{}, fmt.Errorf("commit paid caller reservation: %w", err)
+	}
+
+	intent, captureErr := r.payments.Capture(ctx, selected.paymentIntentID, "bling-payment-capture-"+callID)
+	if captureErr != nil {
+		if cancelErr := r.payments.Cancel(ctx, selected.paymentIntentID, "capture_failed_"+callID); cancelErr != nil {
+			return Call{}, ErrPaymentPending
+		}
+		if err := r.failPaidSelection(ctx, callID, selected.paymentAttemptID, now); err != nil {
+			return Call{}, fmt.Errorf("capture failed and reservation cleanup failed: %v: %w", captureErr, err)
+		}
+		return Call{}, ErrPaymentFailed
+	}
+	if intent.Status != "succeeded" {
+		if intent.Status != "canceled" {
+			if err := r.payments.Cancel(ctx, selected.paymentIntentID, "capture_incomplete_"+callID); err != nil {
+				return Call{}, ErrPaymentPending
+			}
+		}
+		if err := r.failPaidSelection(ctx, callID, selected.paymentAttemptID, now); err != nil {
+			return Call{}, err
+		}
+		return Call{}, ErrPaymentFailed
+	}
+	return r.completePaidSelection(ctx, showID, callID, selected, now)
+}
+
+func (r *PostgresRepository) failPaidSelection(ctx context.Context, callID, attemptID string, now time.Time) error {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	if _, err := tx.Exec(ctx, `UPDATE calls SET status='FAILED',ended_at=$2,updated_at=$2 WHERE id=$1 AND status='PAYMENT_PENDING'`, callID, now); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(ctx, `UPDATE payment_attempts SET status='FAILED',failure_code='capture_failed',updated_at=$2 WHERE id=$1 AND status='CAPTURING'`, attemptID, now); err != nil {
+		return err
+	}
+	var showID, entryID string
+	var rank int
+	var position int64
+	if err := tx.QueryRow(ctx, `UPDATE queue_entries q SET status='LEFT',left_at=$2,updated_at=$2 FROM calls c WHERE c.id=$1 AND q.id=c.queue_entry_id AND q.status='WAITING' RETURNING q.show_id,q.id,q.priority_rank,q.queue_position`, callID, now).Scan(&showID, &entryID, &rank, &position); err != nil {
+		return err
+	}
+	if err := insertOutbox(ctx, tx, showID, "queue.caller_left", callerRow{id: entryID, rank: rank, position: position}); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
+}
+
+func (r *PostgresRepository) completePaidSelection(ctx context.Context, showID, callID string, selected callerRow, now time.Time) (Call, error) {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return Call{}, fmt.Errorf("begin paid selection completion: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	if _, err := tx.Exec(ctx, `UPDATE payment_attempts SET status='CAPTURED',captured_at=COALESCE(captured_at,$2),updated_at=$2 WHERE id=$1 AND status IN ('CAPTURING','CAPTURED')`, selected.paymentAttemptID, now); err != nil {
+		return Call{}, err
+	}
+	if _, err := tx.Exec(ctx, `UPDATE queue_entries SET status='SELECTED',selected_at=$2,updated_at=$2 WHERE id=$1 AND status='WAITING'`, selected.id, now); err != nil {
+		return Call{}, err
+	}
+	tag, err := tx.Exec(ctx, `UPDATE calls SET status='CREATED',updated_at=$2 WHERE id=$1 AND status='PAYMENT_PENDING'`, callID, now)
+	if err != nil {
+		return Call{}, err
+	}
+	if tag.RowsAffected() != 1 {
+		return Call{}, ErrActiveCall
+	}
+	if err := insertOutbox(ctx, tx, showID, "queue.caller_selected", selected); err != nil {
+		return Call{}, err
+	}
+	value, err := queryCall(ctx, tx, showID, callID)
+	if err != nil {
+		return Call{}, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return Call{}, fmt.Errorf("commit paid caller selection: %w", err)
+	}
+	return value, nil
 }
 
 func (r *PostgresRepository) CreatorActive(ctx context.Context, showID, creatorID string) (Call, error) {
 	value, err := scanCall(r.pool.QueryRow(ctx, `SELECT `+callColumns+` FROM calls c JOIN queue_entries q ON q.id=c.queue_entry_id
 		JOIN shows s ON s.id=c.show_id WHERE c.show_id=$1 AND s.creator_id=$2
-		AND c.status IN ('CREATED','CONNECTING','LIVE') ORDER BY c.created_at DESC LIMIT 1`, showID, creatorID))
+		AND c.status IN ('PAYMENT_PENDING','CREATED','CONNECTING','LIVE') ORDER BY c.created_at DESC LIMIT 1`, showID, creatorID))
 	return mapNotFound(value, err)
 }
 
 func (r *PostgresRepository) ViewerLatest(ctx context.Context, showID string, tokenHash []byte) (Call, error) {
 	value, err := scanCall(r.pool.QueryRow(ctx, `SELECT `+callColumns+` FROM calls c JOIN queue_entries q ON q.id=c.queue_entry_id
-		WHERE c.show_id=$1 AND q.session_token_hash=$2 ORDER BY c.created_at DESC LIMIT 1`, showID, tokenHash))
+		WHERE c.show_id=$1 AND q.session_token_hash=$2 AND c.status <> 'PAYMENT_PENDING' ORDER BY c.created_at DESC LIMIT 1`, showID, tokenHash))
 	return mapNotFound(value, err)
 }
 

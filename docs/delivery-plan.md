@@ -87,3 +87,13 @@ Acceptance: race detector and load smoke test pass; defined failure scenarios re
 - Caller tier selection with explicit no-payment messaging
 
 Acceptance: configuration/start races serialize on the show row; live tiers cannot change; callers receive exactly the enabled ordered configuration and queue entries preserve its admission-time values.
+
+## PR 11 — Stripe authorization and capture
+
+- Stripe Payment Element with card-only manual-capture PaymentIntents
+- Server-priced, viewer-bound authorization before paid queue admission
+- Per-show payment reservation and idempotent capture before caller selection becomes visible
+- Signed webhook reconciliation for captured, canceled, and failed intents
+- Authorization release when a caller leaves, with free tiers available when Stripe is disabled
+
+Acceptance: a paid caller cannot enter with a missing, reused, wrong-tier, wrong-viewer, or wrong-amount authorization; concurrent selections cannot double-charge; signaling remains unavailable until capture succeeds; Stripe test mode exercises authorize, leave/cancel, and select/capture.

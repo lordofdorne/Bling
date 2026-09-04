@@ -14,6 +14,7 @@ import (
 	"github.com/bling-app/bling/backend/internal/config"
 	"github.com/bling-app/bling/backend/internal/database"
 	"github.com/bling-app/bling/backend/internal/httpapi"
+	paymentdomain "github.com/bling-app/bling/backend/internal/payment"
 	queuedomain "github.com/bling-app/bling/backend/internal/queue"
 	"github.com/bling-app/bling/backend/internal/realtime"
 )
@@ -50,7 +51,12 @@ func main() {
 	eventBus := realtime.NewRedisBus(redisClient)
 	realtimeHub := realtime.NewHub(ctx, eventBus, logger, cfg.RealtimeClientBuffer, cfg.RealtimeMaxPerShow)
 	signalHub := realtime.NewSignalHub(ctx, eventBus, logger, cfg.RealtimeClientBuffer, 8)
-	callService := calldomain.NewService(calldomain.NewPostgresRepository(postgres), logger)
+	var paymentGateway paymentdomain.Gateway
+	if cfg.StripeSecretKey != "" {
+		paymentGateway = paymentdomain.NewStripeGateway(cfg.StripeSecretKey)
+	}
+	paymentService := paymentdomain.NewService(paymentdomain.NewPostgresRepository(postgres), paymentGateway, cfg.StripePublishableKey)
+	callService := calldomain.NewService(calldomain.NewPostgresRepository(postgres, paymentGateway), logger)
 	go callService.RunTimeouts(ctx)
 	presence := realtime.NewPresenceStore(redisClient, cfg.CallPresenceTTL)
 	go runPresenceRecovery(ctx, logger, presence, callService, cfg.CallDisconnectGrace)
@@ -64,7 +70,7 @@ func main() {
 
 	server := &http.Server{
 		Addr:              cfg.HTTPAddr,
-		Handler:           httpapi.NewRouter(logger, postgres, redisClient, cfg, queueService, realtimeHub, callService, signalHub),
+		Handler:           httpapi.NewRouter(logger, postgres, redisClient, cfg, queueService, realtimeHub, callService, signalHub, paymentService),
 		ReadHeaderTimeout: cfg.ReadHeaderTimeout,
 		ReadTimeout:       cfg.ReadTimeout,
 		WriteTimeout:      cfg.WriteTimeout,

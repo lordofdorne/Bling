@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"time"
 
+	paymentdomain "github.com/bling-app/bling/backend/internal/payment"
 	queuedomain "github.com/bling-app/bling/backend/internal/queue"
 	"github.com/go-chi/chi/v5"
 )
@@ -24,15 +25,17 @@ type queueService interface {
 
 type queueHandler struct {
 	service      queueService
+	payments     *paymentdomain.Service
 	logger       *slog.Logger
 	cookieSecure bool
 	cookieTTL    time.Duration
 }
 
 type joinQueueRequest struct {
-	DisplayName string `json:"displayName"`
-	Topic       string `json:"topic"`
-	TierID      string `json:"tierId"`
+	DisplayName      string `json:"displayName"`
+	Topic            string `json:"topic"`
+	TierID           string `json:"tierId"`
+	PaymentAttemptID string `json:"paymentAttemptId"`
 }
 
 func (h queueHandler) join(w http.ResponseWriter, r *http.Request) {
@@ -67,10 +70,16 @@ func (h queueHandler) join(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	if request.PaymentAttemptID != "" && h.payments != nil {
+		if err := h.payments.VerifyForQueue(r.Context(), showID, request.PaymentAttemptID, queuedomain.Hash(token)); err != nil {
+			writePaymentError(w, h.logger, err)
+			return
+		}
+	}
 
 	state, err := h.service.Join(r.Context(), queuedomain.JoinInput{
 		ShowID: showID, TierID: request.TierID, DisplayName: request.DisplayName, Topic: request.Topic,
-		SessionTokenHash: queuedomain.Hash(token), JoinKeyHash: queuedomain.Hash(joinKey),
+		SessionTokenHash: queuedomain.Hash(token), JoinKeyHash: queuedomain.Hash(joinKey), PaymentAttemptID: request.PaymentAttemptID,
 	})
 	if err != nil {
 		h.writeError(w, err)
@@ -114,6 +123,11 @@ func (h queueHandler) leave(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		h.writeError(w, err)
 		return
+	}
+	if entry.PaymentAttemptID != nil && h.payments != nil {
+		if err := h.payments.CancelForViewer(r.Context(), showID, *entry.PaymentAttemptID, queuedomain.Hash(token)); err != nil {
+			h.logger.Error("release payment authorization after queue leave failed", "error", err, "show_id", showID, "queue_entry_id", entry.ID)
+		}
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"data": map[string]any{"entry": entry}})
 }
@@ -163,6 +177,8 @@ func (h queueHandler) writeError(w http.ResponseWriter, err error) {
 		writeError(w, http.StatusUnprocessableEntity, "VALIDATION_FAILED", err.Error())
 	case errors.Is(err, queuedomain.ErrCannotLeave):
 		writeError(w, http.StatusConflict, "INVALID_QUEUE_STATE", "This queue entry can no longer leave.")
+	case errors.Is(err, queuedomain.ErrPaymentRequired):
+		writeError(w, http.StatusPaymentRequired, "PAYMENT_REQUIRED", "Authorize payment for this tier before joining.")
 	default:
 		h.logger.Error("queue request failed", "error", err)
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Unable to update the queue.")

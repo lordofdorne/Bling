@@ -14,6 +14,7 @@ Scrape `GET /metrics`. It exposes aggregate gauges only:
 - `bling_calls_active`
 - `bling_calls_in_reconnect_grace`
 - `bling_queue_outbox_pending`
+- `bling_payment_captures_pending`
 
 Page when readiness fails for two minutes or the outbox backlog grows continuously for five minutes. Investigate elevated reconnect-grace calls alongside TURN reachability, Redis latency, and deployment/network events. Request latency and failures remain in structured API logs with request IDs.
 

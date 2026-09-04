@@ -18,13 +18,14 @@ const (
 )
 
 var (
-	ErrShowNotLive   = errors.New("show is not live")
-	ErrTierNotFound  = errors.New("queue tier not found")
-	ErrEntryNotFound = errors.New("queue entry not found")
-	ErrShowNotFound  = errors.New("show not found")
-	ErrInvalidName   = errors.New("display name must be 1-60 characters")
-	ErrInvalidTopic  = errors.New("topic must be 1-280 characters")
-	ErrCannotLeave   = errors.New("queue entry cannot leave from its current state")
+	ErrShowNotLive     = errors.New("show is not live")
+	ErrTierNotFound    = errors.New("queue tier not found")
+	ErrEntryNotFound   = errors.New("queue entry not found")
+	ErrShowNotFound    = errors.New("show not found")
+	ErrInvalidName     = errors.New("display name must be 1-60 characters")
+	ErrInvalidTopic    = errors.New("topic must be 1-280 characters")
+	ErrCannotLeave     = errors.New("queue entry cannot leave from its current state")
+	ErrPaymentRequired = errors.New("an authorized payment is required for this tier")
 )
 
 type Tier struct {
@@ -52,6 +53,7 @@ type Entry struct {
 	LeftAt              *time.Time `json:"leftAt"`
 	CreatedAt           time.Time  `json:"createdAt"`
 	UpdatedAt           time.Time  `json:"updatedAt"`
+	PaymentAttemptID    *string    `json:"-"`
 }
 
 type ViewerState struct {
@@ -66,6 +68,7 @@ type JoinInput struct {
 	Topic            string
 	SessionTokenHash []byte
 	JoinKeyHash      []byte
+	PaymentAttemptID string
 }
 
 func (input *JoinInput) NormalizeAndValidate() error {
