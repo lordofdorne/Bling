@@ -216,8 +216,24 @@ func (r *PostgresRepository) completePaidSelection(ctx context.Context, showID, 
 		return Call{}, fmt.Errorf("begin paid selection completion: %w", err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
+	var showStatus string
+	if err := tx.QueryRow(ctx, `SELECT status FROM shows WHERE id=$1 FOR SHARE`, showID).Scan(&showStatus); err != nil {
+		return Call{}, err
+	}
 	if _, err := tx.Exec(ctx, `UPDATE payment_attempts SET status='CAPTURED',captured_at=COALESCE(captured_at,$2),updated_at=$2 WHERE id=$1 AND status IN ('CAPTURING','CAPTURED')`, selected.paymentAttemptID, now); err != nil {
 		return Call{}, err
+	}
+	if showStatus != "LIVE" {
+		if _, err := tx.Exec(ctx, `UPDATE calls SET status='FAILED',ended_at=COALESCE(ended_at,$2),updated_at=$2 WHERE id=$1`, callID, now); err != nil {
+			return Call{}, err
+		}
+		if err := enqueueRefundForCall(ctx, tx, callID, "show_ended_before_call_started", now); err != nil {
+			return Call{}, err
+		}
+		if err := tx.Commit(ctx); err != nil {
+			return Call{}, err
+		}
+		return Call{}, ErrShowNotLive
 	}
 	if _, err := tx.Exec(ctx, `UPDATE queue_entries SET status='SELECTED',selected_at=$2,updated_at=$2 WHERE id=$1 AND status='WAITING'`, selected.id, now); err != nil {
 		return Call{}, err
@@ -310,6 +326,15 @@ func applyTransition(ctx context.Context, tx pgx.Tx, current Call, target Status
 	}
 	if target == StatusEnded || target == StatusFailed {
 		endedAt = now
+		if current.StartedAt == nil {
+			reason := "call_ended_before_live"
+			if target == StatusFailed {
+				reason = "call_failed_before_live"
+			}
+			if err := enqueueRefundForCall(ctx, tx, current.ID, reason, now); err != nil {
+				return Call{}, err
+			}
+		}
 	}
 	if _, err := tx.Exec(ctx, `UPDATE calls SET status=$1,started_at=$2,ended_at=$3,expires_at=$4,
 		creator_disconnected_at=CASE WHEN $1 IN ('ENDED','FAILED') THEN NULL ELSE creator_disconnected_at END,
@@ -334,6 +359,19 @@ func applyTransition(ctx context.Context, tx pgx.Tx, current Call, target Status
 		return Call{}, fmt.Errorf("read transitioned call: %w", err)
 	}
 	return value, nil
+}
+
+func enqueueRefundForCall(ctx context.Context, tx pgx.Tx, callID, reason string, now time.Time) error {
+	_, err := tx.Exec(ctx, `
+		INSERT INTO payment_refunds(payment_attempt_id,call_id,stripe_payment_intent_id,amount_cents,currency,reason,next_attempt_at,requested_at,updated_at)
+		SELECT p.id,c.id,p.stripe_payment_intent_id,p.amount_cents,p.currency,$2,$3,$3,$3
+		FROM calls c JOIN payment_attempts p ON p.id=c.payment_attempt_id
+		WHERE c.id=$1 AND p.status='CAPTURED'
+		ON CONFLICT(payment_attempt_id) DO NOTHING`, callID, reason, now)
+	if err != nil {
+		return fmt.Errorf("schedule automatic refund: %w", err)
+	}
+	return nil
 }
 
 func (r *PostgresRepository) MarkParticipantConnected(ctx context.Context, callID, role string, now time.Time) error {

@@ -13,6 +13,7 @@ import (
 	calldomain "github.com/bling-app/bling/backend/internal/call"
 	"github.com/bling-app/bling/backend/internal/config"
 	"github.com/bling-app/bling/backend/internal/database"
+	financedomain "github.com/bling-app/bling/backend/internal/finance"
 	"github.com/bling-app/bling/backend/internal/httpapi"
 	paymentdomain "github.com/bling-app/bling/backend/internal/payment"
 	payoutdomain "github.com/bling-app/bling/backend/internal/payout"
@@ -54,10 +55,14 @@ func main() {
 	signalHub := realtime.NewSignalHub(ctx, eventBus, logger, cfg.RealtimeClientBuffer, 8)
 	var paymentGateway paymentdomain.Gateway
 	var payoutGateway payoutdomain.Gateway
+	var financeGateway financedomain.Gateway
 	if cfg.StripeSecretKey != "" {
 		paymentGateway = paymentdomain.NewStripeGateway(cfg.StripeSecretKey)
 		payoutGateway = payoutdomain.NewStripeGateway(cfg.StripeSecretKey)
+		financeGateway = financedomain.NewStripeGateway(cfg.StripeSecretKey)
 	}
+	financeService := financedomain.NewService(financedomain.NewPostgresRepository(postgres), financeGateway, logger)
+	go financeService.Run(ctx)
 	payoutService := payoutdomain.NewService(payoutdomain.NewPostgresRepository(postgres), payoutGateway, cfg.StripeConnectCountry, cfg.FrontendURL)
 	paymentService := paymentdomain.NewService(paymentdomain.NewPostgresRepository(postgres), paymentGateway, cfg.StripePublishableKey)
 	callService := calldomain.NewService(calldomain.NewPostgresRepository(postgres, paymentGateway), logger)
@@ -74,7 +79,7 @@ func main() {
 
 	server := &http.Server{
 		Addr:              cfg.HTTPAddr,
-		Handler:           httpapi.NewRouter(logger, postgres, redisClient, cfg, queueService, realtimeHub, callService, signalHub, paymentService, payoutService),
+		Handler:           httpapi.NewRouter(logger, postgres, redisClient, cfg, queueService, realtimeHub, callService, signalHub, paymentService, payoutService, financeService),
 		ReadHeaderTimeout: cfg.ReadHeaderTimeout,
 		ReadTimeout:       cfg.ReadTimeout,
 		WriteTimeout:      cfg.WriteTimeout,

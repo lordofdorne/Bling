@@ -12,6 +12,14 @@ Every paid authorization snapshots the destination account, the 3,000-basis-poin
 
 Paid Hotlines cannot start until Stripe reports `details_submitted`, `charges_enabled`, and `payouts_enabled`. The signed `account.updated` webhook keeps those capabilities current. Account Links are generated only for the signed-in creator, use fixed application return URLs, and are treated as single-use redirects.
 
+## Refund and recovery policy
+
+If a paid call is captured but never reaches `LIVE`, ending or failing that call schedules a full refund in the same PostgreSQL transaction. A background worker creates the Stripe refund with `reverse_transfer=true` and `refund_application_fee=true`, so the creator transfer and Bling's fee are both returned as part of the reversal. Calls that reached `LIVE` are never refunded automatically; later customer-support refunds require an explicit policy and endpoint.
+
+Refund requests use a stable Stripe idempotency key, exponential retries, and a ten-attempt ceiling for provider errors. Pending Stripe refunds are polled with the same key and reconciled from `refund.created`, `refund.updated`, and `refund.failed` events.
+
+Every supported Stripe event is claimed in a durable event ledger before processing. Completed event IDs are ignored on redelivery, failed processing can retry, and stale processing claims become reclaimable after five minutes. Dispute and connected-account payout events are retained for creator activity, operational alerts, and support investigation.
+
 ## Local test mode
 
 1. Create or open a Stripe sandbox with Connect enabled and copy its test secret and publishable keys into `.env` as `STRIPE_SECRET_KEY` and `STRIPE_PUBLISHABLE_KEY`. Set `STRIPE_CONNECT_COUNTRY` to the two-letter launch country (the local default is `US`).
@@ -28,7 +36,7 @@ Paid Hotlines cannot start until Stripe reports `details_submitted`, `charges_en
 5. Run PostgreSQL, Redis, migrations, the API, and the web app as usual. On the creator dashboard, choose **Set up payouts** and complete Stripe's test onboarding, including a test payout account.
 6. Configure a paid tier on a draft Hotline and start it. In Stripe's payment form use test card `4242 4242 4242 4242`, any future date, and any three-digit CVC. Never use a real card in test mode.
 
-The caller page should say the card is authorized, the Stripe Dashboard should show an uncaptured payment, and selecting the caller should change it to succeeded before the audio call opens. Leaving the queue cancels and releases the authorization. Stripe's `payment_intent.succeeded`, `payment_intent.canceled`, and `payment_intent.payment_failed` webhooks reconcile interrupted API requests idempotently.
+The caller page should say the card is authorized, the Stripe Dashboard should show an uncaptured payment, and selecting the caller should change it to succeeded before the audio call opens. Leaving the queue cancels and releases the authorization. Failing the selected call before it reaches `LIVE` should create a succeeded full refund with a transfer reversal and application-fee refund. Stripe's payment, refund, dispute, account, and connected payout webhooks reconcile interrupted API requests idempotently.
 
 ## Operational rules
 
@@ -38,4 +46,4 @@ The caller page should say the card is authorized, the Stripe Dashboard should s
 - Authorization holds expire on card-network timelines. Canceled or failed intents are removed from the queue by webhook reconciliation.
 - The database amount, currency, show, tier, viewer identity, and one-time queue claim are all verified before admission.
 - The connected-account destination and 30% application fee are also verified before admission.
-- Refunds, transfer reversals, disputes, negative balances, tax reporting, and payout operations require a dedicated follow-up before production launch.
+- Automatic refunds cover only captured calls that never reached `LIVE`. Manual/partial refund authorization, dispute evidence submission, negative-balance funding, and tax reporting remain separate operational work.

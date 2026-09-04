@@ -15,8 +15,13 @@ Scrape `GET /metrics`. It exposes aggregate gauges only:
 - `bling_calls_in_reconnect_grace`
 - `bling_queue_outbox_pending`
 - `bling_payment_captures_pending`
+- `bling_payment_refunds_pending`
+- `bling_payment_refunds_failed`
+- `bling_stripe_webhook_events_failed`
+- `bling_payment_disputes_open`
+- `bling_creator_payouts_failed`
 
-Page when readiness fails for two minutes or the outbox backlog grows continuously for five minutes. Investigate elevated reconnect-grace calls alongside TURN reachability, Redis latency, and deployment/network events. Request latency and failures remain in structured API logs with request IDs.
+Page when readiness fails for two minutes, the outbox backlog grows continuously for five minutes, any refund reaches `FAILED`, a supported webhook event remains `FAILED`, a dispute needs attention, or a creator payout fails. Investigate pending refunds that do not clear within ten minutes. Request latency and failures remain in structured API logs with request IDs.
 
 ## Failure recovery
 
@@ -24,6 +29,9 @@ Page when readiness fails for two minutes or the outbox backlog grows continuous
 2. Redis unavailable: signaling and queue notifications reconnect with jitter; PostgreSQL queue data remains intact. Restore Redis and restart an API instance only if subscriptions do not recover.
 3. API instance terminated: the load balancer removes it through readiness; clients reconnect to another instance. Presence TTL plus grace cleans abandoned calls.
 4. TURN unavailable: direct connections may still work, but symmetric-NAT callers fail. Restore TURN and verify newly issued credentials using an authorized RTC-config request.
+5. Refund failed: inspect the Stripe request log using the refund request's stable idempotency key, restore platform balance or provider connectivity, and reconcile the request before issuing any manual refund.
+6. Payout failed: direct the creator to update payout details through Stripe onboarding. Stripe disables the failed external account until corrected.
+7. Dispute opened: investigate the call and Stripe evidence deadline. Destination-charge dispute amounts and fees are debited from the Bling platform balance; transfer recovery is a deliberate support action, not an automatic worker action.
 
 ## Load smoke
 

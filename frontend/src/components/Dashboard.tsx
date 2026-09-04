@@ -8,6 +8,7 @@ import {
 } from "../lib/calls";
 import { useCreatorQueue, useQueueEvents } from "../lib/queue";
 import { usePayoutOnboarding, usePayoutStatus } from "../lib/payouts";
+import { PaymentActivity, usePaymentActivity } from "../lib/finance";
 import {
   HotlineTier,
   useCreateShow,
@@ -115,6 +116,14 @@ function formatPrice(cents: number) {
     style: "currency",
     currency: "USD",
   }).format(cents / 100);
+}
+
+function activityLabel(activity: PaymentActivity) {
+  if (activity.disputeStatus) return `Dispute: ${activity.disputeStatus}`;
+  if (activity.refundStatus === "SUCCEEDED") return "Refunded";
+  if (activity.refundStatus === "FAILED") return "Refund needs attention";
+  if (activity.refundStatus) return "Refund in progress";
+  return "Paid call";
 }
 
 type TierDraft = Pick<
@@ -393,6 +402,7 @@ export function Dashboard() {
   const endShow = useEndShow(username);
   const payouts = usePayoutStatus();
   const payoutOnboarding = usePayoutOnboarding();
+  const paymentActivity = usePaymentActivity();
   const activeShow = currentShow.data;
 
   async function signOut() {
@@ -474,6 +484,57 @@ export function Dashboard() {
                 </div>
               )}
             </>
+          )}
+        </section>
+
+        {paymentActivity.data?.payoutFailure && (
+          <section className="show-card" aria-label="Payout problem">
+            <p className="eyebrow">Payout needs attention</p>
+            <h2>Stripe could not send your latest payout.</h2>
+            <p role="alert">
+              Update your payout details in Stripe before another bank transfer
+              can be sent. Reference:{" "}
+              {paymentActivity.data.payoutFailure.failureCode}
+            </p>
+            <button
+              className="primary-button"
+              type="button"
+              onClick={() => payoutOnboarding.mutate()}
+              disabled={payoutOnboarding.isPending}
+            >
+              Update payout details
+            </button>
+          </section>
+        )}
+
+        <section className="show-card" aria-label="Payment activity">
+          <p className="eyebrow">Payment activity</p>
+          <h2>Recent paid calls</h2>
+          {paymentActivity.isPending ? (
+            <div className="status">Loading payment activity…</div>
+          ) : paymentActivity.isError ? (
+            <div className="form-error" role="alert">
+              Unable to load payment activity.
+            </div>
+          ) : paymentActivity.data.activity.length === 0 ? (
+            <p>No paid calls yet.</p>
+          ) : (
+            <ol className="payment-activity-list">
+              {paymentActivity.data.activity.map((activity) => (
+                <li key={activity.paymentAttemptId}>
+                  <div>
+                    <strong>{formatPrice(activity.amountCents)}</strong>
+                    <span>{activityLabel(activity)}</span>
+                  </div>
+                  <span>
+                    Creator share:{" "}
+                    {formatPrice(
+                      activity.amountCents - activity.platformFeeCents,
+                    )}
+                  </span>
+                </li>
+              ))}
+            </ol>
           )}
         </section>
 

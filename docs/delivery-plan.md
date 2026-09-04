@@ -107,3 +107,14 @@ Acceptance: a paid caller cannot enter with a missing, reused, wrong-tier, wrong
 - Dashboard payout status and onboarding recovery
 
 Acceptance: paid Hotlines cannot start without a payout-ready creator; each PaymentIntent is bound to the snapshotted connected account and whole-cent 30% fee; free tiers remain usable without Stripe; repeated onboarding requests reuse one connected account.
+
+## PR 13 — Financial recovery
+
+- Durable, idempotent Stripe webhook event claims across API instances
+- Automatic full refunds for captured calls that never reach `LIVE`
+- Creator-transfer reversal and application-fee refund on every automatic refund
+- Retryable refund worker with terminal failure visibility
+- Dispute and connected payout event reconciliation
+- Creator payment activity, payout-failure warnings, and operational metrics
+
+Acceptance: terminating an unopened captured call commits exactly one refund request; repeated workers and webhook deliveries cannot create duplicate refunds; calls that reached `LIVE` are not automatically refunded; dispute, payout failure, and refund status are creator-scoped and observable.

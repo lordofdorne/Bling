@@ -452,6 +452,23 @@ describe("App routes", () => {
               },
             },
           });
+        if (path === "/api/v1/payments/activity")
+          return Response.json({
+            data: {
+              activity: [
+                {
+                  paymentAttemptId: "attempt-1",
+                  amountCents: 2500,
+                  platformFeeCents: 750,
+                  currency: "usd",
+                  paymentStatus: "CAPTURED",
+                  refundStatus: "SUCCEEDED",
+                  createdAt: "2026-08-24T12:00:00Z",
+                },
+              ],
+              payoutFailure: null,
+            },
+          });
         return new Response(null, { status: 404 });
       }),
     );
@@ -463,6 +480,8 @@ describe("App routes", () => {
     expect(
       screen.getByText(/receive 70% of each paid call/i),
     ).toBeInTheDocument();
+    expect(screen.getByText("Refunded")).toBeInTheDocument();
+    expect(screen.getByText("Creator share: $17.50")).toBeInTheDocument();
   });
 
   it("ends the active Hotline", async () => {
