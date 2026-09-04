@@ -150,14 +150,20 @@ func (r *PostgresRepository) tierForJoin(ctx context.Context, tx pgx.Tx, showID,
 	var err error
 	if tierID == "" {
 		err = tx.QueryRow(ctx, `
-			SELECT id, name, priority_rank, call_duration_seconds, price_cents FROM show_tiers
-			WHERE show_id = $1 AND enabled = true
-			ORDER BY priority_rank DESC, created_at ASC LIMIT 1`, showID).
+			SELECT t.id, t.name, t.priority_rank, t.call_duration_seconds, t.price_cents
+			FROM show_tiers t JOIN shows s ON s.id=t.show_id
+			LEFT JOIN creator_payout_accounts p ON p.creator_id=s.creator_id
+			WHERE t.show_id = $1 AND t.enabled = true
+			  AND (t.price_cents=0 OR (p.charges_enabled AND p.payouts_enabled AND p.details_submitted))
+			ORDER BY t.priority_rank DESC, t.created_at ASC LIMIT 1`, showID).
 			Scan(&tier.ID, &tier.Name, &tier.PriorityRank, &tier.CallDurationSeconds, &tier.PriceCents)
 	} else {
 		err = tx.QueryRow(ctx, `
-			SELECT id, name, priority_rank, call_duration_seconds, price_cents FROM show_tiers
-			WHERE show_id = $1 AND id = $2 AND enabled = true`, showID, tierID).
+			SELECT t.id, t.name, t.priority_rank, t.call_duration_seconds, t.price_cents
+			FROM show_tiers t JOIN shows s ON s.id=t.show_id
+			LEFT JOIN creator_payout_accounts p ON p.creator_id=s.creator_id
+			WHERE t.show_id = $1 AND t.id = $2 AND t.enabled = true
+			  AND (t.price_cents=0 OR (p.charges_enabled AND p.payouts_enabled AND p.details_submitted))`, showID, tierID).
 			Scan(&tier.ID, &tier.Name, &tier.PriorityRank, &tier.CallDurationSeconds, &tier.PriceCents)
 	}
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -301,7 +307,9 @@ func (r *PostgresRepository) Tiers(ctx context.Context, showID string) ([]Tier, 
 	rows, err := r.pool.Query(ctx, `
 		SELECT t.id, t.name, t.priority_rank, t.call_duration_seconds, t.price_cents
 		FROM show_tiers t JOIN shows s ON s.id = t.show_id
+		LEFT JOIN creator_payout_accounts p ON p.creator_id=s.creator_id
 		WHERE t.show_id = $1 AND t.enabled = true AND s.status = 'LIVE'
+		  AND (t.price_cents=0 OR (p.charges_enabled AND p.payouts_enabled AND p.details_submitted))
 		ORDER BY t.priority_rank DESC, t.created_at ASC`, showID)
 	if err != nil {
 		return nil, fmt.Errorf("list show tiers: %w", err)

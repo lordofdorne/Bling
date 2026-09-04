@@ -17,9 +17,11 @@ func NewStripeGateway(secretKey string) *StripeGateway {
 func (g *StripeGateway) CreateAuthorization(ctx context.Context, attempt Attempt) (Intent, error) {
 	params := &stripe.PaymentIntentParams{
 		Amount: stripe.Int64(attempt.AmountCents), Currency: stripe.String(attempt.Currency),
-		CaptureMethod:      stripe.String(string(stripe.PaymentIntentCaptureMethodManual)),
-		PaymentMethodTypes: stripe.StringSlice([]string{"card"}),
-		Description:        stripe.String("Bling Hotline call"),
+		CaptureMethod:        stripe.String(string(stripe.PaymentIntentCaptureMethodManual)),
+		PaymentMethodTypes:   stripe.StringSlice([]string{"card"}),
+		Description:          stripe.String("Bling Hotline call"),
+		ApplicationFeeAmount: stripe.Int64(attempt.PlatformFeeCents),
+		TransferData:         &stripe.PaymentIntentTransferDataParams{Destination: stripe.String(attempt.DestinationAccountID)},
 	}
 	params.Context = ctx
 	params.AddMetadata("bling_payment_attempt_id", attempt.ID)
@@ -66,7 +68,11 @@ func stripeIntent(value *stripe.PaymentIntent) Intent {
 	if value == nil {
 		return Intent{}
 	}
-	return Intent{ID: value.ID, ClientSecret: value.ClientSecret, AmountCents: value.Amount, Currency: string(value.Currency), Status: string(value.Status)}
+	destinationID := ""
+	if value.TransferData != nil && value.TransferData.Destination != nil {
+		destinationID = value.TransferData.Destination.ID
+	}
+	return Intent{ID: value.ID, ClientSecret: value.ClientSecret, AmountCents: value.Amount, Currency: string(value.Currency), Status: string(value.Status), DestinationAccountID: destinationID, ApplicationFeeAmount: value.ApplicationFeeAmount}
 }
 
 var _ Gateway = (*StripeGateway)(nil)

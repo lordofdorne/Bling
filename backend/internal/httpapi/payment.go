@@ -8,6 +8,7 @@ import (
 	"net/http"
 
 	paymentdomain "github.com/bling-app/bling/backend/internal/payment"
+	payoutdomain "github.com/bling-app/bling/backend/internal/payout"
 	queuedomain "github.com/bling-app/bling/backend/internal/queue"
 	stripe "github.com/stripe/stripe-go/v82"
 	"github.com/stripe/stripe-go/v82/webhook"
@@ -18,6 +19,7 @@ type paymentHandler struct {
 	logger        *slog.Logger
 	setCookie     func(http.ResponseWriter, string)
 	webhookSecret string
+	payouts       *payoutdomain.Service
 }
 
 func (h paymentHandler) webhook(w http.ResponseWriter, r *http.Request) {
@@ -33,6 +35,26 @@ func (h paymentHandler) webhook(w http.ResponseWriter, r *http.Request) {
 	event, err := webhook.ConstructEvent(payload, r.Header.Get("Stripe-Signature"), h.webhookSecret)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "INVALID_WEBHOOK_SIGNATURE", "Invalid webhook signature.")
+		return
+	}
+	if event.Type == "account.updated" {
+		var account stripe.Account
+		if err := json.Unmarshal(event.Data.Raw, &account); err != nil {
+			writeError(w, http.StatusBadRequest, "INVALID_WEBHOOK", "Invalid account event.")
+			return
+		}
+		if h.payouts != nil {
+			due := []string{}
+			if account.Requirements != nil {
+				due = append(due, account.Requirements.CurrentlyDue...)
+			}
+			if err := h.payouts.Reconcile(r.Context(), payoutdomain.StripeAccount{ID: account.ID, ChargesEnabled: account.ChargesEnabled, PayoutsEnabled: account.PayoutsEnabled, DetailsSubmitted: account.DetailsSubmitted, RequirementsDue: due}); err != nil {
+				h.logger.Error("Stripe account webhook reconciliation failed", "error", err, "event_id", event.ID)
+				writeError(w, http.StatusInternalServerError, "WEBHOOK_RETRY", "Account event could not be reconciled.")
+				return
+			}
+		}
+		w.WriteHeader(http.StatusNoContent)
 		return
 	}
 	var intent stripe.PaymentIntent
@@ -114,6 +136,8 @@ func writePaymentError(w http.ResponseWriter, logger *slog.Logger, err error) {
 		writeError(w, http.StatusConflict, "SHOW_NOT_LIVE", "This Hotline is not accepting callers.")
 	case errors.Is(err, paymentdomain.ErrTierNotFound), errors.Is(err, paymentdomain.ErrFreeTier):
 		writeError(w, http.StatusUnprocessableEntity, "TIER_NOT_PAYABLE", "That paid tier is unavailable.")
+	case errors.Is(err, paymentdomain.ErrPayoutsNotReady):
+		writeError(w, http.StatusConflict, "CREATOR_PAYOUTS_NOT_READY", "This creator cannot accept paid calls right now.")
 	case errors.Is(err, paymentdomain.ErrAttemptNotFound), errors.Is(err, paymentdomain.ErrAuthorization), errors.Is(err, paymentdomain.ErrAuthorizationUsed):
 		writeError(w, http.StatusPaymentRequired, "PAYMENT_NOT_AUTHORIZED", "Payment was not authorized. Try again.")
 	case errors.Is(err, paymentdomain.ErrCaptureFailed):

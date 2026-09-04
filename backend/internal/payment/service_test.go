@@ -65,8 +65,8 @@ func TestAuthorizeCreatesManualCaptureIntent(t *testing.T) {
 }
 
 func TestVerifyRequiresStripeCapturableStateAndExactAmount(t *testing.T) {
-	repository := &fakeRepository{attempt: Attempt{ID: "attempt-1", StripePaymentIntentID: "pi_1", AmountCents: 2500, Currency: "usd", Status: StatusCreated}}
-	gateway := &fakeGateway{intent: Intent{ID: "pi_1", AmountCents: 2500, Currency: "usd", Status: "requires_capture"}}
+	repository := &fakeRepository{attempt: Attempt{ID: "attempt-1", StripePaymentIntentID: "pi_1", DestinationAccountID: "acct_creator", AmountCents: 2500, PlatformFeeCents: 750, Currency: "usd", Status: StatusCreated}}
+	gateway := &fakeGateway{intent: Intent{ID: "pi_1", DestinationAccountID: "acct_creator", ApplicationFeeAmount: 750, AmountCents: 2500, Currency: "usd", Status: "requires_capture"}}
 	service := NewService(repository, gateway, "pk_test_example")
 	if err := service.VerifyForQueue(context.Background(), "show-1", "attempt-1", []byte("viewer")); err != nil {
 		t.Fatal(err)
@@ -78,6 +78,27 @@ func TestVerifyRequiresStripeCapturableStateAndExactAmount(t *testing.T) {
 	repository.authorized = false
 	if err := service.VerifyForQueue(context.Background(), "show-1", "attempt-1", []byte("viewer")); !errors.Is(err, ErrAuthorization) {
 		t.Fatalf("amount mismatch error=%v", err)
+	}
+	gateway.intent.AmountCents = 2500
+	gateway.intent.DestinationAccountID = "acct_attacker"
+	if err := service.VerifyForQueue(context.Background(), "show-1", "attempt-1", []byte("viewer")); !errors.Is(err, ErrAuthorization) {
+		t.Fatalf("destination mismatch error=%v", err)
+	}
+	gateway.intent.DestinationAccountID = "acct_creator"
+	gateway.intent.ApplicationFeeAmount = 749
+	if err := service.VerifyForQueue(context.Background(), "show-1", "attempt-1", []byte("viewer")); !errors.Is(err, ErrAuthorization) {
+		t.Fatalf("fee mismatch error=%v", err)
+	}
+}
+
+func TestPlatformFeeIsThirtyPercentInWholeCents(t *testing.T) {
+	for _, test := range []struct {
+		amount int64
+		fee    int64
+	}{{50, 15}, {99, 29}, {2500, 750}} {
+		if got := platformFeeCents(test.amount); got != test.fee {
+			t.Fatalf("platformFeeCents(%d)=%d want %d", test.amount, got, test.fee)
+		}
 	}
 }
 

@@ -97,3 +97,13 @@ Acceptance: configuration/start races serialize on the show row; live tiers cann
 - Authorization release when a caller leaves, with free tiers available when Stripe is disabled
 
 Acceptance: a paid caller cannot enter with a missing, reused, wrong-tier, wrong-viewer, or wrong-amount authorization; concurrent selections cannot double-charge; signaling remains unavailable until capture succeeds; Stripe test mode exercises authorize, leave/cancel, and select/capture.
+
+## PR 12 — Stripe Connect creator payouts
+
+- Stripe Express onboarding and signed account capability reconciliation
+- Creator-controlled per-tier pricing with paid-tier readiness gates
+- Destination charges to the creator's connected account
+- Immutable 30% Bling application-fee snapshot and verification
+- Dashboard payout status and onboarding recovery
+
+Acceptance: paid Hotlines cannot start without a payout-ready creator; each PaymentIntent is bound to the snapshotted connected account and whole-cent 30% fee; free tiers remain usable without Stripe; repeated onboarding requests reuse one connected account.

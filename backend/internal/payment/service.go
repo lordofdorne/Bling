@@ -66,7 +66,7 @@ func (s *Service) VerifyForQueue(ctx context.Context, showID, attemptID string, 
 	if err != nil {
 		return fmt.Errorf("verify Stripe authorization: %w", err)
 	}
-	if intent.Status != "requires_capture" || intent.AmountCents != attempt.AmountCents || intent.Currency != attempt.Currency {
+	if intent.Status != "requires_capture" || intent.AmountCents != attempt.AmountCents || intent.Currency != attempt.Currency || intent.DestinationAccountID != attempt.DestinationAccountID || intent.ApplicationFeeAmount != attempt.PlatformFeeCents {
 		return ErrAuthorization
 	}
 	return s.repository.MarkAuthorized(ctx, attempt.ID, s.now().UTC())

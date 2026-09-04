@@ -420,6 +420,51 @@ describe("App routes", () => {
     ).toBeInTheDocument();
   });
 
+  it("shows the creator's 70 percent payout when Stripe is ready", async () => {
+    const creator = {
+      id: "user-1",
+      username: "alice",
+      email: "alice@example.com",
+      createdAt: "2026-08-24T12:00:00Z",
+    };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        const path = String(input);
+        if (path === "/api/v1/me")
+          return Response.json({ data: { user: creator } });
+        if (path === "/api/v1/shows/current")
+          return new Response(
+            JSON.stringify({ error: { code: "SHOW_NOT_FOUND" } }),
+            { status: 404, headers: { "Content-Type": "application/json" } },
+          );
+        if (path === "/api/v1/payouts/account")
+          return Response.json({
+            data: {
+              payouts: {
+                connected: true,
+                chargesEnabled: true,
+                payoutsEnabled: true,
+                detailsSubmitted: true,
+                ready: true,
+                requirementsDue: [],
+                platformFeePercent: 30,
+              },
+            },
+          });
+        return new Response(null, { status: 404 });
+      }),
+    );
+
+    renderAt("/dashboard");
+    expect(
+      await screen.findByRole("heading", { name: "Stripe payouts are ready." }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/receive 70% of each paid call/i),
+    ).toBeInTheDocument();
+  });
+
   it("ends the active Hotline", async () => {
     const creator = {
       id: "user-1",

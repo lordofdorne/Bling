@@ -18,14 +18,24 @@ func NewPostgresRepository(pool *pgxpool.Pool) *PostgresRepository {
 	return &PostgresRepository{pool: pool}
 }
 
-const attemptColumns = `id,show_id,tier_id,queue_entry_id,stripe_payment_intent_id,amount_cents,currency,status,authorized_at,captured_at,canceled_at,created_at,updated_at`
+const attemptColumns = `id,show_id,tier_id,queue_entry_id,stripe_payment_intent_id,destination_account_id,amount_cents,platform_fee_bps,platform_fee_cents,currency,status,authorized_at,captured_at,canceled_at,created_at,updated_at`
 
 func scanAttempt(row pgx.Row) (Attempt, error) {
 	var value Attempt
-	var intentID sql.NullString
-	err := row.Scan(&value.ID, &value.ShowID, &value.TierID, &value.QueueEntryID, &intentID, &value.AmountCents, &value.Currency, &value.Status, &value.AuthorizedAt, &value.CapturedAt, &value.CanceledAt, &value.CreatedAt, &value.UpdatedAt)
+	var intentID, destinationID sql.NullString
+	var feeBPS, feeCents sql.NullInt64
+	err := row.Scan(&value.ID, &value.ShowID, &value.TierID, &value.QueueEntryID, &intentID, &destinationID, &value.AmountCents, &feeBPS, &feeCents, &value.Currency, &value.Status, &value.AuthorizedAt, &value.CapturedAt, &value.CanceledAt, &value.CreatedAt, &value.UpdatedAt)
 	if intentID.Valid {
 		value.StripePaymentIntentID = intentID.String
+	}
+	if destinationID.Valid {
+		value.DestinationAccountID = destinationID.String
+	}
+	if feeBPS.Valid {
+		value.PlatformFeeBPS = feeBPS.Int64
+	}
+	if feeCents.Valid {
+		value.PlatformFeeCents = feeCents.Int64
 	}
 	return value, err
 }
@@ -38,7 +48,12 @@ func (r *PostgresRepository) Prepare(ctx context.Context, input PrepareInput, no
 	defer func() { _ = tx.Rollback(ctx) }()
 	var status string
 	var amount int64
-	if err := tx.QueryRow(ctx, `SELECT s.status,t.price_cents FROM shows s JOIN show_tiers t ON t.show_id=s.id WHERE s.id=$1 AND t.id=$2 AND t.enabled FOR SHARE OF s,t`, input.ShowID, input.TierID).Scan(&status, &amount); err != nil {
+	var destinationID sql.NullString
+	var chargesEnabled, payoutsEnabled, detailsSubmitted bool
+	if err := tx.QueryRow(ctx, `SELECT s.status,t.price_cents,p.stripe_account_id,COALESCE(p.charges_enabled,false),COALESCE(p.payouts_enabled,false),COALESCE(p.details_submitted,false)
+		FROM shows s JOIN show_tiers t ON t.show_id=s.id
+		LEFT JOIN creator_payout_accounts p ON p.creator_id=s.creator_id
+		WHERE s.id=$1 AND t.id=$2 AND t.enabled FOR SHARE OF s,t`, input.ShowID, input.TierID).Scan(&status, &amount, &destinationID, &chargesEnabled, &payoutsEnabled, &detailsSubmitted); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return Attempt{}, ErrTierNotFound
 		}
@@ -50,7 +65,15 @@ func (r *PostgresRepository) Prepare(ctx context.Context, input PrepareInput, no
 	if amount <= 0 {
 		return Attempt{}, ErrFreeTier
 	}
-	value, err := scanAttempt(tx.QueryRow(ctx, `INSERT INTO payment_attempts (show_id,tier_id,viewer_token_hash,idempotency_key_hash,amount_cents,currency,created_at,updated_at) VALUES ($1,$2,$3,$4,$5,'usd',$6,$6) ON CONFLICT (show_id,idempotency_key_hash) DO UPDATE SET updated_at=payment_attempts.updated_at RETURNING `+attemptColumns, input.ShowID, input.TierID, input.ViewerTokenHash, input.IdempotencyKeyHash, amount, now))
+	if !destinationID.Valid || !chargesEnabled || !payoutsEnabled || !detailsSubmitted {
+		return Attempt{}, ErrPayoutsNotReady
+	}
+	feeCents := platformFeeCents(amount)
+	value, err := scanAttempt(tx.QueryRow(ctx, `INSERT INTO payment_attempts
+		(show_id,tier_id,viewer_token_hash,idempotency_key_hash,destination_account_id,amount_cents,platform_fee_bps,platform_fee_cents,currency,created_at,updated_at)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'usd',$9,$9)
+		ON CONFLICT (show_id,idempotency_key_hash) DO UPDATE SET updated_at=payment_attempts.updated_at
+		RETURNING `+attemptColumns, input.ShowID, input.TierID, input.ViewerTokenHash, input.IdempotencyKeyHash, destinationID.String, amount, PlatformFeeBPS, feeCents, now))
 	if err != nil {
 		return Attempt{}, fmt.Errorf("persist payment attempt: %w", err)
 	}
@@ -65,6 +88,10 @@ func (r *PostgresRepository) Prepare(ctx context.Context, input PrepareInput, no
 		return Attempt{}, fmt.Errorf("commit payment attempt: %w", err)
 	}
 	return value, nil
+}
+
+func platformFeeCents(amountCents int64) int64 {
+	return amountCents * PlatformFeeBPS / 10000
 }
 
 func (r *PostgresRepository) AttachIntent(ctx context.Context, attemptID, intentID string, now time.Time) error {

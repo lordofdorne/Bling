@@ -7,6 +7,7 @@ import {
   useSelectRandomCaller,
 } from "../lib/calls";
 import { useCreatorQueue, useQueueEvents } from "../lib/queue";
+import { usePayoutOnboarding, usePayoutStatus } from "../lib/payouts";
 import {
   HotlineTier,
   useCreateShow,
@@ -125,10 +126,12 @@ function TierConfiguration({
   showID,
   onStart,
   starting,
+  payoutsReady,
 }: {
   showID: string;
   onStart: () => void;
   starting: boolean;
+  payoutsReady: boolean;
 }) {
   const configuration = useTierConfiguration(showID);
   if (configuration.isPending)
@@ -148,6 +151,7 @@ function TierConfiguration({
       initialTiers={configuration.data}
       onStart={onStart}
       starting={starting}
+      payoutsReady={payoutsReady}
     />
   );
 }
@@ -157,11 +161,13 @@ function TierConfigurationForm({
   initialTiers,
   onStart,
   starting,
+  payoutsReady,
 }: {
   showID: string;
   initialTiers: HotlineTier[];
   onStart: () => void;
   starting: boolean;
+  payoutsReady: boolean;
 }) {
   const save = useSaveTierConfiguration(showID);
   const [tiers, setTiers] = useState<TierDraft[]>(() =>
@@ -174,6 +180,10 @@ function TierConfigurationForm({
     })),
   );
   const [dirty, setDirty] = useState(false);
+
+  const hasEnabledPaidTier = tiers.some(
+    (tier) => tier.enabled && tier.priceCents > 0,
+  );
 
   function update(index: number, patch: Partial<TierDraft>) {
     setTiers((current) =>
@@ -342,11 +352,24 @@ function TierConfigurationForm({
           className="primary-button"
           type="button"
           onClick={onStart}
-          disabled={dirty || starting || tiers.length === 0}
+          disabled={
+            dirty ||
+            starting ||
+            tiers.length === 0 ||
+            (hasEnabledPaidTier && !payoutsReady)
+          }
+          aria-describedby={
+            hasEnabledPaidTier && !payoutsReady ? "payouts-required" : undefined
+          }
         >
           {starting ? "Starting…" : "Start Hotline"}
         </button>
       </div>
+      {hasEnabledPaidTier && !payoutsReady && (
+        <p className="tier-save-hint" id="payouts-required">
+          Finish Stripe payout setup before starting with paid tiers.
+        </p>
+      )}
       {dirty && (
         <p className="tier-save-hint">Save tier changes before going live.</p>
       )}
@@ -368,6 +391,8 @@ export function Dashboard() {
   const createShow = useCreateShow();
   const startShow = useStartShow(username);
   const endShow = useEndShow(username);
+  const payouts = usePayoutStatus();
+  const payoutOnboarding = usePayoutOnboarding();
   const activeShow = currentShow.data;
 
   async function signOut() {
@@ -401,6 +426,56 @@ export function Dashboard() {
           Open your Hotline when you are ready to take live calls from your
           audience.
         </p>
+
+        <section className="show-card payout-card" aria-label="Creator payouts">
+          <p className="eyebrow">Creator payouts</p>
+          {payouts.isPending ? (
+            <div className="status">Checking Stripe payout status…</div>
+          ) : payouts.isError ? (
+            <div className="form-error" role="alert">
+              Unable to load payout status.
+            </div>
+          ) : payouts.data.ready ? (
+            <>
+              <h2>Stripe payouts are ready.</h2>
+              <p>
+                You receive {100 - payouts.data.platformFeePercent}% of each
+                paid call. Bling’s platform fee is{" "}
+                {payouts.data.platformFeePercent}%.
+              </p>
+            </>
+          ) : (
+            <>
+              <h2>
+                {payouts.data.connected
+                  ? "Finish Stripe payout setup"
+                  : "Connect Stripe to accept paid calls"}
+              </h2>
+              <p>
+                Set your own price for each tier. You receive{" "}
+                {100 - payouts.data.platformFeePercent}% of every paid call and
+                Bling keeps {payouts.data.platformFeePercent}%.
+              </p>
+              <button
+                className="primary-button"
+                type="button"
+                onClick={() => payoutOnboarding.mutate()}
+                disabled={payoutOnboarding.isPending}
+              >
+                {payoutOnboarding.isPending
+                  ? "Opening Stripe…"
+                  : payouts.data.connected
+                    ? "Continue Stripe setup"
+                    : "Set up payouts"}
+              </button>
+              {payoutOnboarding.isError && (
+                <div className="form-error" role="alert">
+                  {payoutOnboarding.error.message}
+                </div>
+              )}
+            </>
+          )}
+        </section>
 
         <section className="show-card" aria-label="Hotline controls">
           {currentShow.isPending ? (
@@ -436,6 +511,7 @@ export function Dashboard() {
             <TierConfiguration
               showID={activeShow.id}
               starting={startShow.isPending}
+              payoutsReady={payouts.data?.ready ?? false}
               onStart={() => startShow.mutate(activeShow.id)}
             />
           ) : (
