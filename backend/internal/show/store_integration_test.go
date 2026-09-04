@@ -44,6 +44,9 @@ func TestConcurrentStartAllowsOneLiveShowPerCreator(t *testing.T) {
 		defer cleanupCancel()
 		_, _ = pool.Exec(cleanupCtx, `DELETE FROM users WHERE id = $1`, creatorID)
 	}()
+	if _, err := pool.Exec(ctx, `INSERT INTO creator_payout_accounts(creator_id,stripe_account_id,charges_enabled,payouts_enabled,details_submitted) VALUES($1,$2,true,true,true)`, creatorID, "acct_show_"+suffix); err != nil {
+		t.Fatal(err)
+	}
 
 	store := NewPostgresStore(pool)
 	first, err := store.Create(ctx, creatorID)

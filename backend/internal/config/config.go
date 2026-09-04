@@ -42,6 +42,7 @@ type Config struct {
 	StripeSecretKey         string
 	StripePublishableKey    string
 	StripeWebhookSecret     string
+	StripeConnectCountry    string
 }
 
 type ICEServer struct {
@@ -68,6 +69,7 @@ func Load() (Config, error) {
 		StripeSecretKey:      strings.TrimSpace(os.Getenv("STRIPE_SECRET_KEY")),
 		StripePublishableKey: strings.TrimSpace(os.Getenv("STRIPE_PUBLISHABLE_KEY")),
 		StripeWebhookSecret:  strings.TrimSpace(os.Getenv("STRIPE_WEBHOOK_SECRET")),
+		StripeConnectCountry: strings.ToUpper(envOrDefault("STRIPE_CONNECT_COUNTRY", "US")),
 	}
 	stunURLs := splitCSV(envOrDefault("STUN_URLS", "stun:stun.l.google.com:19302"))
 	if len(stunURLs) == 0 {
@@ -146,6 +148,9 @@ func Load() (Config, error) {
 	}
 	if (cfg.StripeSecretKey == "") != (cfg.StripePublishableKey == "") {
 		return Config{}, fmt.Errorf("STRIPE_SECRET_KEY and STRIPE_PUBLISHABLE_KEY must be configured together")
+	}
+	if len(cfg.StripeConnectCountry) != 2 {
+		return Config{}, fmt.Errorf("STRIPE_CONNECT_COUNTRY must be a two-letter country code")
 	}
 	if cfg.Environment == "production" && cfg.StripeSecretKey != "" && cfg.StripeWebhookSecret == "" {
 		return Config{}, fmt.Errorf("STRIPE_WEBHOOK_SECRET is required when Stripe is enabled in production")

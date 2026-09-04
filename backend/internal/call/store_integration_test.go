@@ -183,6 +183,9 @@ func TestConcurrentSelectionCreatesExactlyOneActiveCall(t *testing.T) {
 	}
 
 	var paidTierID, attemptID string
+	if _, err := pool.Exec(ctx, `INSERT INTO creator_payout_accounts(creator_id,stripe_account_id,charges_enabled,payouts_enabled,details_submitted) VALUES($1,$2,true,true,true)`, creatorID, "acct_call_"+suffix); err != nil {
+		t.Fatal(err)
+	}
 	if err := pool.QueryRow(ctx, `INSERT INTO show_tiers(show_id,name,priority_rank,call_duration_seconds,price_cents) VALUES($1,'Paid',500,120,2500) RETURNING id`, activeShow.ID).Scan(&paidTierID); err != nil {
 		t.Fatal(err)
 	}

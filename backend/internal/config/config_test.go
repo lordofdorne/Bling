@@ -104,3 +104,12 @@ func TestLoadRejectsPartialStripeConfiguration(t *testing.T) {
 		t.Fatal("expected incomplete Stripe keys to fail configuration")
 	}
 }
+
+func TestLoadRejectsInvalidStripeConnectCountry(t *testing.T) {
+	t.Setenv("DATABASE_URL", "postgres://example")
+	t.Setenv("REDIS_URL", "redis://example")
+	t.Setenv("STRIPE_CONNECT_COUNTRY", "USA")
+	if _, err := Load(); err == nil {
+		t.Fatal("expected invalid Stripe Connect country to fail configuration")
+	}
+}

@@ -90,12 +90,23 @@ func (s *PostgresStore) transition(ctx context.Context, showID, creatorID string
 		return current, nil
 	}
 	if action == ActionStart {
-		var enabled bool
-		if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM show_tiers WHERE show_id=$1 AND enabled=true)`, showID).Scan(&enabled); err != nil {
+		var enabled, hasPaid bool
+		if err := tx.QueryRow(ctx, `SELECT
+			EXISTS(SELECT 1 FROM show_tiers WHERE show_id=$1 AND enabled=true),
+			EXISTS(SELECT 1 FROM show_tiers WHERE show_id=$1 AND enabled=true AND price_cents>0)`, showID).Scan(&enabled, &hasPaid); err != nil {
 			return Show{}, fmt.Errorf("check enabled show tiers: %w", err)
 		}
 		if !enabled {
 			return Show{}, ErrTierConfiguration
+		}
+		if hasPaid {
+			var payoutsReady bool
+			if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM creator_payout_accounts WHERE creator_id=$1 AND charges_enabled AND payouts_enabled AND details_submitted)`, creatorID).Scan(&payoutsReady); err != nil {
+				return Show{}, fmt.Errorf("check creator payouts: %w", err)
+			}
+			if !payoutsReady {
+				return Show{}, ErrPayoutsNotReady
+			}
 		}
 	}
 

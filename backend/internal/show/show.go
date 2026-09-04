@@ -21,6 +21,7 @@ var (
 	ErrInvalidTransition   = errors.New("show state transition is not allowed")
 	ErrTierConfiguration   = errors.New("invalid tier configuration")
 	ErrShowNotConfigurable = errors.New("show tiers can only be changed before the show starts")
+	ErrPayoutsNotReady     = errors.New("creator payouts must be ready before starting paid tiers")
 )
 
 type Show struct {

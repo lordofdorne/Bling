@@ -168,6 +168,8 @@ func (h showHandler) writeError(w http.ResponseWriter, err error) {
 		writeError(w, http.StatusConflict, "SHOW_NOT_CONFIGURABLE", "Tiers can only be changed before the Hotline starts.")
 	case errors.Is(err, showdomain.ErrTierConfiguration):
 		writeError(w, http.StatusUnprocessableEntity, "INVALID_TIER_CONFIGURATION", "Use 1-5 uniquely named tiers, keep one enabled, and check price and duration values.")
+	case errors.Is(err, showdomain.ErrPayoutsNotReady):
+		writeError(w, http.StatusConflict, "PAYOUTS_NOT_READY", "Finish Stripe payout setup before starting a Hotline with paid tiers.")
 	default:
 		h.logger.Error("show request failed", "error", err)
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Unable to update the show.")
