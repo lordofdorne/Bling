@@ -131,8 +131,16 @@ func (s *PostgresStore) transition(ctx context.Context, showID, creatorID string
 		// call transition locks the call row first, so this ordering guarantees the
 		// final queue state is ENDED after that transition releases its lock.
 		if _, err := tx.Exec(ctx, `
+			INSERT INTO payment_refunds(payment_attempt_id,call_id,stripe_payment_intent_id,amount_cents,currency,reason,next_attempt_at,requested_at,updated_at)
+			SELECT p.id,c.id,p.stripe_payment_intent_id,p.amount_cents,p.currency,'show_ended_before_call_started',$1,$1,$1
+			FROM calls c JOIN payment_attempts p ON p.id=c.payment_attempt_id
+			WHERE c.show_id=$2 AND c.status IN ('CREATED','CONNECTING') AND c.started_at IS NULL AND p.status='CAPTURED'
+			ON CONFLICT(payment_attempt_id) DO NOTHING`, now, showID); err != nil {
+			return Show{}, fmt.Errorf("schedule refunds for unopened calls: %w", err)
+		}
+		if _, err := tx.Exec(ctx, `
 			UPDATE calls SET status = 'ENDED', ended_at = $1, updated_at = $1
-			WHERE show_id = $2 AND status IN ('CREATED','CONNECTING','LIVE')`, now, showID); err != nil {
+			WHERE show_id = $2 AND status IN ('PAYMENT_PENDING','CREATED','CONNECTING','LIVE')`, now, showID); err != nil {
 			return Show{}, fmt.Errorf("close active call: %w", err)
 		}
 		if _, err := tx.Exec(ctx, `

@@ -147,18 +147,48 @@ func (r *PostgresRepository) Reconcile(ctx context.Context, intentID string, sta
 	}
 	switch status {
 	case StatusCaptured:
+		// Serialize capture reconciliation with ending the show. Without this lock,
+		// each transaction can observe the other's previous state and miss the
+		// refund for a capture that completes while the show is ending.
+		var showStatus string
+		if err := tx.QueryRow(ctx, `SELECT status FROM shows WHERE id=$1 FOR SHARE`, showID).Scan(&showStatus); err != nil {
+			return err
+		}
 		if _, err := tx.Exec(ctx, `UPDATE payment_attempts SET status='CAPTURED',captured_at=COALESCE(captured_at,$2),updated_at=$2 WHERE id=$1`, attemptID, now); err != nil {
 			return err
 		}
-		var callID, entryID string
+		var callID, entryID, callStatus string
+		var startedAt *time.Time
 		var rank int
 		var position int64
-		err := tx.QueryRow(ctx, `SELECT c.id,q.id,q.priority_rank,q.queue_position FROM calls c JOIN queue_entries q ON q.id=c.queue_entry_id WHERE c.payment_attempt_id=$1 AND c.status='PAYMENT_PENDING' FOR UPDATE OF c,q`, attemptID).Scan(&callID, &entryID, &rank, &position)
+		err := tx.QueryRow(ctx, `SELECT c.id,q.id,q.priority_rank,q.queue_position,c.status,c.started_at
+			FROM calls c JOIN queue_entries q ON q.id=c.queue_entry_id
+			WHERE c.payment_attempt_id=$1 FOR UPDATE OF c,q`, attemptID).Scan(&callID, &entryID, &rank, &position, &callStatus, &startedAt)
 		if errors.Is(err, pgx.ErrNoRows) {
 			return tx.Commit(ctx)
 		}
 		if err != nil {
 			return err
+		}
+		shouldRefund := startedAt == nil && showStatus != "LIVE"
+		if callStatus != "PAYMENT_PENDING" && !shouldRefund {
+			return tx.Commit(ctx)
+		}
+		if shouldRefund {
+			if _, err := tx.Exec(ctx, `UPDATE calls SET status='FAILED',ended_at=COALESCE(ended_at,$2),updated_at=$2 WHERE id=$1 AND status='PAYMENT_PENDING'`, callID, now); err != nil {
+				return err
+			}
+			if _, err := tx.Exec(ctx, `UPDATE queue_entries SET status='ENDED',updated_at=$2 WHERE id=$1 AND status IN ('WAITING','SELECTED','CONNECTING','LIVE')`, entryID, now); err != nil {
+				return err
+			}
+			if _, err := tx.Exec(ctx, `
+				INSERT INTO payment_refunds(payment_attempt_id,call_id,stripe_payment_intent_id,amount_cents,currency,reason,next_attempt_at,requested_at,updated_at)
+				SELECT p.id,$2,p.stripe_payment_intent_id,p.amount_cents,p.currency,'show_ended_before_call_started',$3,$3,$3
+				FROM payment_attempts p WHERE p.id=$1
+				ON CONFLICT(payment_attempt_id) DO NOTHING`, attemptID, callID, now); err != nil {
+				return err
+			}
+			return tx.Commit(ctx)
 		}
 		if _, err := tx.Exec(ctx, `UPDATE queue_entries SET status='SELECTED',selected_at=COALESCE(selected_at,$2),updated_at=$2 WHERE id=$1`, entryID, now); err != nil {
 			return err

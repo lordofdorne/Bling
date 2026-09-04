@@ -214,4 +214,15 @@ func TestConcurrentSelectionCreatesExactlyOneActiveCall(t *testing.T) {
 	if paymentStatus != "CAPTURED" {
 		t.Fatalf("payment status=%q", paymentStatus)
 	}
+	if _, err := paidRepository.Transition(ctx, activeShow.ID, paidCall.ID, creatorID, StatusFailed, time.Now().UTC()); err != nil {
+		t.Fatal(err)
+	}
+	var refundCount int
+	var refundStatus, refundReason string
+	if err := pool.QueryRow(ctx, `SELECT count(*),min(status),min(reason) FROM payment_refunds WHERE payment_attempt_id=$1`, attemptID).Scan(&refundCount, &refundStatus, &refundReason); err != nil {
+		t.Fatal(err)
+	}
+	if refundCount != 1 || refundStatus != "REQUESTED" || refundReason != "call_failed_before_live" {
+		t.Fatalf("refund count=%d status=%q reason=%q", refundCount, refundStatus, refundReason)
+	}
 }
