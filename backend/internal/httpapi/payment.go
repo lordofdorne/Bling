@@ -12,8 +12,8 @@ import (
 	paymentdomain "github.com/bling-app/bling/backend/internal/payment"
 	payoutdomain "github.com/bling-app/bling/backend/internal/payout"
 	queuedomain "github.com/bling-app/bling/backend/internal/queue"
-	stripe "github.com/stripe/stripe-go/v82"
-	"github.com/stripe/stripe-go/v82/webhook"
+	stripe "github.com/stripe/stripe-go/v85"
+	"github.com/stripe/stripe-go/v85/webhook"
 )
 
 type paymentHandler struct {

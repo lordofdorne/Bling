@@ -34,7 +34,16 @@ func TestPrepareSnapshotsCreatorDestinationAndThirtyPercentFee(t *testing.T) {
 	if err := pool.QueryRow(ctx, `INSERT INTO users(username,email,password_hash) VALUES($1,$2,'integration-test-only') RETURNING id`, "payment_"+suffix, "payment_"+suffix+"@example.com").Scan(&creatorID); err != nil {
 		t.Fatal(err)
 	}
-	defer func() { _, _ = pool.Exec(context.Background(), `DELETE FROM users WHERE id=$1`, creatorID) }()
+	defer func() {
+		cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cleanupCancel()
+		_, _ = pool.Exec(cleanupCtx, `UPDATE payment_attempts SET queue_entry_id=NULL WHERE show_id IN (SELECT id FROM shows WHERE creator_id=$1)`, creatorID)
+		_, _ = pool.Exec(cleanupCtx, `UPDATE queue_entries SET payment_attempt_id=NULL WHERE show_id IN (SELECT id FROM shows WHERE creator_id=$1)`, creatorID)
+		_, _ = pool.Exec(cleanupCtx, `DELETE FROM calls WHERE show_id IN (SELECT id FROM shows WHERE creator_id=$1)`, creatorID)
+		_, _ = pool.Exec(cleanupCtx, `DELETE FROM queue_entries WHERE show_id IN (SELECT id FROM shows WHERE creator_id=$1)`, creatorID)
+		_, _ = pool.Exec(cleanupCtx, `DELETE FROM payment_attempts WHERE show_id IN (SELECT id FROM shows WHERE creator_id=$1)`, creatorID)
+		_, _ = pool.Exec(cleanupCtx, `DELETE FROM users WHERE id=$1`, creatorID)
+	}()
 	if err := pool.QueryRow(ctx, `INSERT INTO shows(creator_id,status,started_at) VALUES($1,'LIVE',now()) RETURNING id`, creatorID).Scan(&showID); err != nil {
 		t.Fatal(err)
 	}

@@ -36,6 +36,8 @@ Every supported Stripe event is claimed in a durable event ledger before process
 5. Run PostgreSQL, Redis, migrations, the API, and the web app as usual. On the creator dashboard, choose **Set up payouts** and complete Stripe's test onboarding, including a test payout account.
 6. Configure a paid tier on a draft Hotline and start it. In Stripe's payment form use test card `4242 4242 4242 4242`, any future date, and any three-digit CVC. Never use a real card in test mode.
 
+The CLI profile used by `stripe listen --print-secret`, `stripe listen`, and `stripe trigger` must be the same. Bling uses the Dahlia generation of Stripe's Go SDK so it can strictly validate and deserialize events emitted by a Dahlia-versioned Stripe account; keep the SDK and configured webhook endpoint on the same Stripe API release train during future upgrades.
+
 The caller page should say the card is authorized, the Stripe Dashboard should show an uncaptured payment, and selecting the caller should change it to succeeded before the audio call opens. Leaving the queue cancels and releases the authorization. Failing the selected call before it reaches `LIVE` should create a succeeded full refund with a transfer reversal and application-fee refund. Stripe's payment, refund, dispute, account, and connected payout webhooks reconcile interrupted API requests idempotently.
 
 ## Operational rules

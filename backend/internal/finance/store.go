@@ -98,7 +98,7 @@ func (r *PostgresRepository) MarkRefundResult(ctx context.Context, request Refun
 		status = RefundPending
 	}
 	next := now.Add(5 * time.Minute)
-	_, err := r.pool.Exec(ctx, `UPDATE payment_refunds SET stripe_refund_id=NULLIF($2,''),status=$3,failure_code=NULLIF($4,''),next_attempt_at=$5,processed_at=CASE WHEN $3 IN ('SUCCEEDED','FAILED') THEN $6 ELSE NULL END,updated_at=$6 WHERE id=$1`, request.ID, result.ID, status, result.FailureCode, next, now)
+	_, err := r.pool.Exec(ctx, `UPDATE payment_refunds SET stripe_refund_id=NULLIF($2,''),status=$3,failure_code=NULLIF($4,''),next_attempt_at=$5,processed_at=CASE WHEN $3 IN ('SUCCEEDED','FAILED') THEN $6::timestamptz ELSE NULL::timestamptz END,updated_at=$6 WHERE id=$1`, request.ID, result.ID, status, result.FailureCode, next, now)
 	return err
 }
 
@@ -107,7 +107,7 @@ func (r *PostgresRepository) MarkRefundRetry(ctx context.Context, request Refund
 	_, err := r.pool.Exec(ctx, `UPDATE payment_refunds SET
 		status=CASE WHEN $5 >= 10 THEN 'FAILED' ELSE 'RETRY' END,
 		failure_code=$2,next_attempt_at=$3,
-		processed_at=CASE WHEN $5 >= 10 THEN $4 ELSE NULL END,
+		processed_at=CASE WHEN $5 >= 10 THEN $4::timestamptz ELSE NULL::timestamptz END,
 		updated_at=$4 WHERE id=$1`, request.ID, code, now.Add(delay), now, request.Attempts)
 	return err
 }
