@@ -3,6 +3,9 @@ import { Link, Navigate, useNavigate } from "react-router-dom";
 import { ApiError } from "../lib/api";
 import { useLogin, useMe, useRegister } from "../lib/auth";
 
+import { Brand } from "./ViewerShell";
+import { UiIcon } from "./UiIcon";
+
 type AuthPageProps = { mode: "login" | "register" };
 
 export function AuthPage({ mode }: AuthPageProps) {
@@ -42,86 +45,119 @@ export function AuthPage({ mode }: AuthPageProps) {
 
   return (
     <main className="page auth-page">
-      <Link className="brand" to="/">
-        Bling<span>.</span>
-      </Link>
-      <section className="auth-card">
-        <p className="eyebrow">Creator access</p>
-        <h1>{mode === "login" ? "Welcome back." : "Open your Hotline."}</h1>
-        <p className="auth-intro">
-          {mode === "login"
-            ? "Sign in to manage your live caller queue."
-            : "Create the account behind your public Bling URL."}
-        </p>
-        <form className="auth-form" onSubmit={submit}>
-          {mode === "register" && (
+      <header className="auth-header">
+        <Brand />
+        <Link className="text-button" to="/">
+          Back to discover <UiIcon name="arrow" size={16} />
+        </Link>
+      </header>
+      <div className="auth-layout">
+        <section className="auth-story">
+          <p className="eyebrow">Closer to your community</p>
+          <h2>
+            A big stage.
+            <br />A personal
+            <br />
+            <em>connection.</em>
+          </h2>
+          <p>The best part of going live? The people on the other end.</p>
+          <div className="auth-art" aria-hidden="true">
+            <span className="auth-orbit" />
+            <span className="auth-art-call">
+              <UiIcon name="call" size={52} />
+            </span>
+            <span className="auth-art-spark">
+              <UiIcon name="spark" size={30} />
+            </span>
+            <span className="auth-art-label">
+              <span className="live-dot" />
+              Good conversations start here.
+            </span>
+          </div>
+          <span className="auth-story-footer">
+            Your voice. Your space. Your Bling.
+          </span>
+        </section>
+        <section className="auth-card">
+          <p className="eyebrow">Creator access</p>
+          <h1>{mode === "login" ? "Welcome back." : "Open your Hotline."}</h1>
+          <p className="auth-intro">
+            {mode === "login"
+              ? "Sign in to manage your live caller queue."
+              : "Create the account behind your public Bling URL."}
+          </p>
+          <form className="auth-form" onSubmit={submit}>
+            {mode === "register" && (
+              <label>
+                Username
+                <input
+                  name="username"
+                  value={username}
+                  onChange={(event) => setUsername(event.target.value)}
+                  autoComplete="username"
+                  minLength={3}
+                  maxLength={30}
+                  pattern="[a-z0-9_]+"
+                  required
+                />
+                <small>3–30 lowercase letters, numbers, or underscores.</small>
+              </label>
+            )}
             <label>
-              Username
+              Email
               <input
-                name="username"
-                value={username}
-                onChange={(event) => setUsername(event.target.value)}
-                autoComplete="username"
-                minLength={3}
-                maxLength={30}
-                pattern="[a-z0-9_]+"
+                name="email"
+                type="email"
+                value={email}
+                onChange={(event) => setEmail(event.target.value)}
+                autoComplete="email"
+                maxLength={254}
                 required
               />
-              <small>3–30 lowercase letters, numbers, or underscores.</small>
             </label>
-          )}
-          <label>
-            Email
-            <input
-              name="email"
-              type="email"
-              value={email}
-              onChange={(event) => setEmail(event.target.value)}
-              autoComplete="email"
-              maxLength={254}
-              required
-            />
-          </label>
-          <label>
-            Password
-            <input
-              name="password"
-              type="password"
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-              autoComplete={
-                mode === "login" ? "current-password" : "new-password"
-              }
-              minLength={mode === "register" ? 12 : undefined}
-              maxLength={72}
-              required
-            />
-            {mode === "register" && <small>Use at least 12 characters.</small>}
-          </label>
-          {error && (
-            <div className="form-error" role="alert">
-              {error}
-            </div>
-          )}
-          <button
-            className="primary-button"
-            type="submit"
-            disabled={activeMutation.isPending}
-          >
-            {activeMutation.isPending
-              ? "Please wait…"
-              : mode === "login"
-                ? "Sign in"
-                : "Create account"}
-          </button>
-        </form>
-        <p className="auth-switch">
-          {mode === "login" ? "New to Bling?" : "Already have an account?"}{" "}
-          <Link to={mode === "login" ? "/register" : "/login"}>
-            {mode === "login" ? "Create an account" : "Sign in"}
-          </Link>
-        </p>
-      </section>
+            <label>
+              Password
+              <input
+                name="password"
+                type="password"
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                autoComplete={
+                  mode === "login" ? "current-password" : "new-password"
+                }
+                minLength={mode === "register" ? 12 : undefined}
+                maxLength={72}
+                required
+              />
+              {mode === "register" && (
+                <small>Use at least 12 characters.</small>
+              )}
+            </label>
+            {error && (
+              <div className="form-error" role="alert">
+                {error}
+              </div>
+            )}
+            <button
+              className="primary-button"
+              type="submit"
+              disabled={activeMutation.isPending}
+            >
+              {activeMutation.isPending
+                ? "Please wait…"
+                : mode === "login"
+                  ? "Sign in"
+                  : "Create account"}
+            </button>
+          </form>
+          <p className="auth-switch">
+            {mode === "login" ? "New to Bling?" : "Already have an account?"}{" "}
+            <Link to={mode === "login" ? "/register" : "/login"}>
+              {mode === "login" ? "Create an account" : "Sign in"}
+            </Link>
+          </p>
+        </section>
+      </div>
     </main>
   );
 }

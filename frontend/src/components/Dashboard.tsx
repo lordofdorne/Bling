@@ -19,6 +19,8 @@ import {
   useTierConfiguration,
 } from "../lib/shows";
 import { CallAudioPanel } from "./CallAudioPanel";
+import { UiIcon } from "./UiIcon";
+import { Brand } from "./ViewerShell";
 
 function CallerList({ showID }: { showID: string }) {
   const queue = useCreatorQueue(showID);
@@ -415,202 +417,374 @@ export function Dashboard() {
   }
 
   return (
-    <main className="page dashboard-page">
-      <nav className="nav">
-        <Link className="brand" to="/">
-          Bling<span>.</span>
-        </Link>
-        <button
-          className="button secondary"
-          type="button"
-          onClick={signOut}
-          disabled={logout.isPending}
-        >
-          {logout.isPending ? "Signing out…" : "Sign out"}
-        </button>
-      </nav>
-      <section className="dashboard-content">
-        <p className="eyebrow">Creator workspace</p>
-        <h1>Welcome, {username}.</h1>
-        <p className="lede">
-          Open your Hotline when you are ready to take live calls from your
-          audience.
-        </p>
-
-        <section className="show-card payout-card" aria-label="Creator payouts">
-          <p className="eyebrow">Creator payouts</p>
-          {payouts.isPending ? (
-            <div className="status">Checking Stripe payout status…</div>
-          ) : payouts.isError ? (
-            <div className="form-error" role="alert">
-              Unable to load payout status.
+    <div className="studio-shell">
+      <a className="skip-link" href="#studio-main">
+        Skip to studio
+      </a>
+      <header className="studio-header">
+        <div className="studio-brand">
+          <Brand />
+          <span>CREATOR STUDIO</span>
+        </div>
+        <div className="studio-header-actions">
+          <Link className="text-button" to="/">
+            Explore Bling <UiIcon name="arrow" size={15} />
+          </Link>
+          <span className="account-avatar">
+            {username.slice(0, 2).toUpperCase()}
+          </span>
+        </div>
+      </header>
+      <div className="studio-layout">
+        <aside className="studio-sidebar" aria-label="Creator navigation">
+          <div>
+            <p className="nav-label">Your workspace</p>
+            <a className="active" href="#studio-main">
+              <UiIcon name="home" />
+              Overview
+            </a>
+            <a href="#hotline-controls">
+              <UiIcon name="broadcast" />
+              Stream manager
+            </a>
+            <a href="#payment-activity">
+              <UiIcon name="wallet" />
+              Payment activity
+            </a>
+            <a href="#payouts">
+              <UiIcon name="settings" />
+              Payout settings
+            </a>
+            <div className="sidebar-rule" />
+            <p className="nav-label">Your channel</p>
+            <Link to={`/u/${username}`}>
+              <UiIcon name="people" />
+              View public page <UiIcon name="arrow" size={14} />
+            </Link>
+            <a href="#account">
+              <UiIcon name="settings" />
+              Account details
+            </a>
+          </div>
+          <div className="studio-sidebar-bottom">
+            <div className="studio-tip">
+              <UiIcon name="spark" />
+              <strong>
+                A good show starts
+                <br />
+                with a conversation.
+              </strong>
+              <p>Share your link. Open the line. Make someone’s day.</p>
             </div>
-          ) : payouts.data.ready ? (
-            <>
-              <h2>Stripe payouts are ready.</h2>
-              <p>
-                You receive {100 - payouts.data.platformFeePercent}% of each
-                paid call. Bling’s platform fee is{" "}
-                {payouts.data.platformFeePercent}%.
+            <button
+              className="text-button"
+              type="button"
+              onClick={signOut}
+              disabled={logout.isPending}
+            >
+              <UiIcon name="logout" size={18} />
+              {logout.isPending ? "Signing out…" : "Sign out"}
+            </button>
+          </div>
+        </aside>
+        <main id="studio-main" className="dashboard-content">
+          <div className="studio-title">
+            <div>
+              <p className="eyebrow">Your channel, at a glance</p>
+              <h1>Welcome, {username}.</h1>
+              <p className="lede">
+                A little preparation. A great conversation. Let’s make it
+                happen.
               </p>
-            </>
-          ) : (
-            <>
-              <h2>
-                {payouts.data.connected
-                  ? "Finish Stripe payout setup"
-                  : "Connect Stripe to accept paid calls"}
-              </h2>
-              <p>
-                Set your own price for each tier. You receive{" "}
-                {100 - payouts.data.platformFeePercent}% of every paid call and
-                Bling keeps {payouts.data.platformFeePercent}%.
-              </p>
-              <button
-                className="primary-button"
-                type="button"
-                onClick={() => payoutOnboarding.mutate()}
-                disabled={payoutOnboarding.isPending}
-              >
-                {payoutOnboarding.isPending
-                  ? "Opening Stripe…"
-                  : payouts.data.connected
-                    ? "Continue Stripe setup"
-                    : "Set up payouts"}
-              </button>
-              {payoutOnboarding.isError && (
+            </div>
+            <Link className="button secondary" to={`/u/${username}`}>
+              View channel <UiIcon name="arrow" size={16} />
+            </Link>
+          </div>
+          <div className="studio-overview" aria-label="Channel overview">
+            <article>
+              <span>
+                <UiIcon name="broadcast" size={18} />
+                Hotline status
+              </span>
+              <strong>
+                {currentShow.isPending
+                  ? "Loading…"
+                  : currentShow.isError
+                    ? "Unavailable"
+                    : activeShow?.status === "LIVE"
+                      ? "On air"
+                      : activeShow?.status === "CREATED"
+                        ? "In preparation"
+                        : "Offline"}
+              </strong>
+              <small>
+                {activeShow?.status === "LIVE"
+                  ? "Your audience can join the line"
+                  : "Your next conversation starts here"}
+              </small>
+              <span
+                className={`metric-indicator ${activeShow?.status === "LIVE" ? "on-air" : ""}`}
+              />
+            </article>
+            <article>
+              <span>
+                <UiIcon name="wallet" size={18} />
+                Payout account
+              </span>
+              <strong>
+                {payouts.isPending
+                  ? "Loading…"
+                  : payouts.isError
+                    ? "Unavailable"
+                    : payouts.data.ready
+                      ? "Connected"
+                      : "Set up payouts"}
+              </strong>
+              <small>
+                {payouts.data
+                  ? `${100 - payouts.data.platformFeePercent}% creator share per paid call`
+                  : "Connect Stripe to receive earnings"}
+              </small>
+            </article>
+            <article>
+              <span>
+                <UiIcon name="people" size={18} />
+                Grow your community
+              </span>
+              <strong>Make it personal.</strong>
+              <small>Invite your audience to your public page</small>
+              <UiIcon name="spark" size={34} />
+            </article>
+          </div>
+          <div className="studio-panels">
+            <section
+              id="hotline-controls"
+              className="show-card controls-card"
+              aria-label="Hotline controls"
+            >
+              <div className="panel-heading">
+                <span>
+                  <UiIcon name="broadcast" size={18} />
+                  Stream manager
+                </span>
+                <span className="panel-label">LIVE CONTROL ROOM</span>
+              </div>
+              {currentShow.isPending ? (
+                <div className="status">Loading show status…</div>
+              ) : currentShow.isError ? (
                 <div className="form-error" role="alert">
-                  {payoutOnboarding.error.message}
+                  Unable to load your Hotline status.
+                </div>
+              ) : activeShow?.status === "LIVE" ? (
+                <>
+                  <div className="show-card-heading">
+                    <div>
+                      <div className="live-badge">
+                        <span /> Hotline live
+                      </div>
+                      <h2>Your audience can join.</h2>
+                    </div>
+                    <button
+                      className="danger-button"
+                      type="button"
+                      onClick={() => endShow.mutate(activeShow.id)}
+                      disabled={endShow.isPending}
+                    >
+                      {endShow.isPending ? "Ending…" : "End Hotline"}
+                    </button>
+                  </div>
+                  <p>
+                    Public URL: <strong>/u/{username}</strong>
+                  </p>
+                  <CallerList showID={activeShow.id} />
+                </>
+              ) : activeShow?.status === "CREATED" ? (
+                <TierConfiguration
+                  showID={activeShow.id}
+                  starting={startShow.isPending}
+                  payoutsReady={payouts.data?.ready ?? false}
+                  onStart={() => startShow.mutate(activeShow.id)}
+                />
+              ) : (
+                <div className="studio-offline">
+                  <div className="studio-offline-art" aria-hidden="true">
+                    <span className="studio-ring ring-one" />
+                    <span className="studio-ring ring-two" />
+                    <span className="studio-mic">
+                      <UiIcon name="call" size={36} />
+                    </span>
+                    <span className="offline-art-label">
+                      YOUR NEXT GREAT CONVERSATION
+                    </span>
+                  </div>
+                  <span className="offline-pill">OFF AIR</span>
+                  <h2>No active Hotline</h2>
+                  <p>
+                    Create a draft to configure caller priority, duration, and
+                    pricing before opening your public page.
+                  </p>
+                  <button
+                    className="primary-button"
+                    type="button"
+                    onClick={() => createShow.mutate()}
+                    disabled={createShow.isPending}
+                  >
+                    <UiIcon name="plus" size={17} />
+                    {createShow.isPending ? "Creating…" : "Set up Hotline"}
+                  </button>
                 </div>
               )}
-            </>
-          )}
-        </section>
-
-        {paymentActivity.data?.payoutFailure && (
-          <section className="show-card" aria-label="Payout problem">
-            <p className="eyebrow">Payout needs attention</p>
-            <h2>Stripe could not send your latest payout.</h2>
-            <p role="alert">
-              Update your payout details in Stripe before another bank transfer
-              can be sent. Reference:{" "}
-              {paymentActivity.data.payoutFailure.failureCode}
-            </p>
-            <button
-              className="primary-button"
-              type="button"
-              onClick={() => payoutOnboarding.mutate()}
-              disabled={payoutOnboarding.isPending}
-            >
-              Update payout details
-            </button>
-          </section>
-        )}
-
-        <section className="show-card" aria-label="Payment activity">
-          <p className="eyebrow">Payment activity</p>
-          <h2>Recent paid calls</h2>
-          {paymentActivity.isPending ? (
-            <div className="status">Loading payment activity…</div>
-          ) : paymentActivity.isError ? (
-            <div className="form-error" role="alert">
-              Unable to load payment activity.
-            </div>
-          ) : paymentActivity.data.activity.length === 0 ? (
-            <p>No paid calls yet.</p>
-          ) : (
-            <ol className="payment-activity-list">
-              {paymentActivity.data.activity.map((activity) => (
-                <li key={activity.paymentAttemptId}>
-                  <div>
-                    <strong>{formatPrice(activity.amountCents)}</strong>
-                    <span>{activityLabel(activity)}</span>
-                  </div>
-                  <span>
-                    Creator share:{" "}
-                    {formatPrice(
-                      activity.amountCents - activity.platformFeeCents,
-                    )}
-                  </span>
-                </li>
-              ))}
-            </ol>
-          )}
-        </section>
-
-        <section className="show-card" aria-label="Hotline controls">
-          {currentShow.isPending ? (
-            <div className="status">Loading show status…</div>
-          ) : currentShow.isError ? (
-            <div className="form-error" role="alert">
-              Unable to load your Hotline status.
-            </div>
-          ) : activeShow?.status === "LIVE" ? (
-            <>
-              <div className="show-card-heading">
-                <div>
-                  <div className="live-badge">
-                    <span /> Hotline live
-                  </div>
-                  <h2>Your audience can join.</h2>
+              {(createShow.isError || startShow.isError || endShow.isError) && (
+                <div className="form-error" role="alert">
+                  Unable to update your Hotline. Please try again.
                 </div>
-                <button
-                  className="danger-button"
-                  type="button"
-                  onClick={() => endShow.mutate(activeShow.id)}
-                  disabled={endShow.isPending}
-                >
-                  {endShow.isPending ? "Ending…" : "End Hotline"}
-                </button>
-              </div>
-              <p>
-                Public URL: <strong>/u/{username}</strong>
-              </p>
-              <CallerList showID={activeShow.id} />
-            </>
-          ) : activeShow?.status === "CREATED" ? (
-            <TierConfiguration
-              showID={activeShow.id}
-              starting={startShow.isPending}
-              payoutsReady={payouts.data?.ready ?? false}
-              onStart={() => startShow.mutate(activeShow.id)}
-            />
-          ) : (
-            <>
-              <h2>No active Hotline</h2>
-              <p>
-                Create a draft to configure caller priority, duration, and
-                future pricing before opening your public page.
-              </p>
-              <button
-                className="primary-button"
-                type="button"
-                onClick={() => createShow.mutate()}
-                disabled={createShow.isPending}
+              )}
+            </section>
+
+            <section
+              id="payouts"
+              className="show-card payout-card"
+              aria-label="Creator payouts"
+            >
+              <p className="eyebrow">Creator payouts</p>
+              {payouts.isPending ? (
+                <div className="status">Checking Stripe payout status…</div>
+              ) : payouts.isError ? (
+                <div className="form-error" role="alert">
+                  Unable to load payout status.
+                </div>
+              ) : payouts.data.ready ? (
+                <>
+                  <h2>Stripe payouts are ready.</h2>
+                  <p>
+                    You receive {100 - payouts.data.platformFeePercent}% of each
+                    paid call. Bling’s platform fee is{" "}
+                    {payouts.data.platformFeePercent}%.
+                  </p>
+                </>
+              ) : (
+                <>
+                  <h2>
+                    {payouts.data.connected
+                      ? "Finish Stripe payout setup"
+                      : "Connect Stripe to accept paid calls"}
+                  </h2>
+                  <p>
+                    Set your own price for each tier. You receive{" "}
+                    {100 - payouts.data.platformFeePercent}% of every paid call
+                    and Bling keeps {payouts.data.platformFeePercent}%.
+                  </p>
+                  <button
+                    className="primary-button"
+                    type="button"
+                    onClick={() => payoutOnboarding.mutate()}
+                    disabled={payoutOnboarding.isPending}
+                  >
+                    {payoutOnboarding.isPending
+                      ? "Opening Stripe…"
+                      : payouts.data.connected
+                        ? "Continue Stripe setup"
+                        : "Set up payouts"}
+                  </button>
+                  {payoutOnboarding.isError && (
+                    <div className="form-error" role="alert">
+                      {payoutOnboarding.error.message}
+                    </div>
+                  )}
+                </>
+              )}
+            </section>
+
+            {paymentActivity.data?.payoutFailure && (
+              <section
+                className="show-card payout-problem"
+                aria-label="Payout problem"
               >
-                {createShow.isPending ? "Creating…" : "Set up Hotline"}
-              </button>
-            </>
-          )}
-          {(createShow.isError || startShow.isError || endShow.isError) && (
+                <p className="eyebrow">Payout needs attention</p>
+                <h2>Stripe could not send your latest payout.</h2>
+                <p role="alert">
+                  Update your payout details in Stripe before another bank
+                  transfer can be sent. Reference:{" "}
+                  {paymentActivity.data.payoutFailure.failureCode}
+                </p>
+                <button
+                  className="primary-button"
+                  type="button"
+                  onClick={() => payoutOnboarding.mutate()}
+                  disabled={payoutOnboarding.isPending}
+                >
+                  Update payout details
+                </button>
+              </section>
+            )}
+
+            <section
+              id="payment-activity"
+              className="show-card activity-card"
+              aria-label="Payment activity"
+            >
+              <p className="eyebrow">Payment activity</p>
+              <h2>Recent paid calls</h2>
+              {paymentActivity.isPending ? (
+                <div className="status">Loading payment activity…</div>
+              ) : paymentActivity.isError ? (
+                <div className="form-error" role="alert">
+                  Unable to load payment activity.
+                </div>
+              ) : paymentActivity.data.activity.length === 0 ? (
+                <div className="payment-empty">
+                  <span className="feature-icon">
+                    <UiIcon name="wallet" size={22} />
+                  </span>
+                  <h3>No paid calls yet.</h3>
+                  <p>
+                    Your paid call activity will appear here after your first
+                    conversation.
+                  </p>
+                </div>
+              ) : (
+                <ol className="payment-activity-list">
+                  {paymentActivity.data.activity.map((activity) => (
+                    <li key={activity.paymentAttemptId}>
+                      <div>
+                        <strong>{formatPrice(activity.amountCents)}</strong>
+                        <span>{activityLabel(activity)}</span>
+                      </div>
+                      <span>
+                        Creator share:{" "}
+                        {formatPrice(
+                          activity.amountCents - activity.platformFeeCents,
+                        )}
+                      </span>
+                    </li>
+                  ))}
+                </ol>
+              )}
+            </section>
+          </div>
+          <div id="account" className="account-card">
+            <span>Public URL</span>
+            <strong>/u/{username}</strong>
+            <span>Account email</span>
+            <strong>{me.data?.email}</strong>
+          </div>
+          {logout.isError && (
             <div className="form-error" role="alert">
-              Unable to update your Hotline. Please try again.
+              Unable to sign out. Please try again.
             </div>
           )}
-        </section>
-
-        <div className="account-card">
-          <span>Public URL</span>
-          <strong>/u/{username}</strong>
-          <span>Account email</span>
-          <strong>{me.data?.email}</strong>
-        </div>
-        {logout.isError && (
-          <div className="form-error" role="alert">
-            Unable to sign out. Please try again.
-          </div>
-        )}
-      </section>
-    </main>
+          <footer className="studio-footer">
+            <span>
+              <UiIcon name="call" size={14} />
+              Your voice. Your community.
+            </span>
+            <Link to="/">
+              Back to Bling <UiIcon name="arrow" size={14} />
+            </Link>
+          </footer>
+        </main>
+      </div>
+    </div>
   );
 }

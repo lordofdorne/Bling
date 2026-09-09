@@ -6,7 +6,7 @@ import {
   useStripe,
 } from "@stripe/react-stripe-js";
 import { loadStripe } from "@stripe/stripe-js";
-import { useParams } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
 import {
   QueueTier,
   useJoinQueue,
@@ -19,6 +19,10 @@ import { useLiveShow } from "../lib/shows";
 import { useViewerCall } from "../lib/calls";
 import { CallAudioPanel } from "./CallAudioPanel";
 import { PaymentAuthorization, useAuthorizePayment } from "../lib/payments";
+
+import { ViewerShell } from "./ViewerShell";
+import { FollowButton } from "./SocialPreview";
+import { UiIcon } from "./UiIcon";
 
 const emptyTiers: QueueTier[] = [];
 
@@ -370,44 +374,80 @@ export function PublicHotline() {
   const { username = "" } = useParams();
   const liveShow = useLiveShow(username.toLowerCase());
 
-  if (liveShow.isPending) {
-    return (
-      <main className="page centered">
-        <div className="status">Checking the Hotline…</div>
-      </main>
-    );
-  }
-  if (liveShow.isError) {
-    return (
-      <main className="page centered">
-        <div className="form-error" role="alert">
-          Unable to load this Hotline. Please try again.
-        </div>
-      </main>
-    );
-  }
-  if (!liveShow.data) {
-    return (
-      <main className="page centered">
-        <p className="eyebrow">@{username}</p>
-        <h1>Hotline is currently closed.</h1>
-        <p className="lede">Come back when this creator is live.</p>
-      </main>
-    );
-  }
   return (
-    <main className="page hotline-page">
-      <section className="hotline-heading">
-        <div className="live-badge">
-          <span /> Live now
+    <ViewerShell discoveryPreview={false}>
+      <Link className="back-link" to="/">
+        ← Back to discover
+      </Link>
+      {liveShow.isPending ? (
+        <div className="channel-state">
+          <div className="status">Checking the Hotline…</div>
         </div>
-        <p className="eyebrow">@{username}</p>
-        <h1>The Hotline is open.</h1>
-        <p className="lede">
-          Join the line for a chance to speak with the host live.
-        </p>
-      </section>
-      <CallerQueue showID={liveShow.data.id} />
-    </main>
+      ) : liveShow.isError ? (
+        <div className="channel-state">
+          <div className="form-error" role="alert">
+            Unable to load this Hotline. Please try again.
+          </div>
+        </div>
+      ) : !liveShow.data ? (
+        <section className="channel-state channel-offline">
+          <span className="feature-icon">
+            <UiIcon name="broadcast" size={32} />
+          </span>
+          <p className="eyebrow">@{username}</p>
+          <h1>Hotline is currently closed.</h1>
+          <p className="lede">Come back when this creator is live.</p>
+          <FollowButton username={username} />
+          <p className="preview-caption">
+            Follow preview · saved on this device. Live alerts are coming soon.
+          </p>
+        </section>
+      ) : (
+        <div className="hotline-page">
+          <section className="hotline-heading">
+            <div className="channel-live-art" aria-hidden="true">
+              <div className="channel-live-rings" />
+              <span className="studio-mic">
+                <UiIcon name="call" size={42} />
+              </span>
+              <span className="sound-bars">
+                <i />
+                <i />
+                <i />
+                <i />
+                <i />
+              </span>
+              <span className="channel-art-caption">
+                LESS DISTANCE. MORE CONNECTION.
+              </span>
+            </div>
+            <div className="live-badge">
+              <span /> Live now
+            </div>
+            <p className="eyebrow">@{username}</p>
+            <h1>The Hotline is open.</h1>
+            <p className="lede">
+              Join the line for a chance to speak with the host live.
+            </p>
+            <FollowButton username={username} />
+            <p className="preview-caption">
+              Follow preview · saved on this device
+            </p>
+            <div className="hotline-how">
+              <span>
+                <b>01</b> Choose your tier
+              </span>
+              <span>
+                <b>02</b> Join the line
+              </span>
+              <span>
+                <b>03</b> Have your moment
+              </span>
+            </div>
+          </section>
+          <CallerQueue showID={liveShow.data.id} />
+        </div>
+      )}
+    </ViewerShell>
   );
 }
