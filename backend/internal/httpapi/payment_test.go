@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	stripe "github.com/stripe/stripe-go/v82"
+	stripe "github.com/stripe/stripe-go/v85"
 )
 
 func TestStripeWebhookRejectsInvalidSignature(t *testing.T) {

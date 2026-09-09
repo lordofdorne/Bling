@@ -118,3 +118,12 @@ Acceptance: paid Hotlines cannot start without a payout-ready creator; each Paym
 - Creator payment activity, payout-failure warnings, and operational metrics
 
 Acceptance: terminating an unopened captured call commits exactly one refund request; repeated workers and webhook deliveries cannot create duplicate refunds; calls that reached `LIVE` are not automatically refunded; dispute, payout failure, and refund status are creator-scoped and observable.
+
+## PR 14 — Stripe sandbox hardening
+
+- Align the Stripe Go SDK with the account's Dahlia webhook event generation
+- Correct PostgreSQL timestamp typing for refund results and terminal retries
+- Exercise pending and failed refund persistence in an integration test
+- Reliably remove circular queue/payment fixtures after integration tests
+
+Acceptance: signed Stripe CLI events receive `204` and enter the durable event ledger; refund persistence works for pending and terminal states; the full race suite leaves no Stripe test fixtures behind.

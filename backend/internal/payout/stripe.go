@@ -3,9 +3,9 @@ package payout
 import (
 	"context"
 
-	stripe "github.com/stripe/stripe-go/v82"
-	"github.com/stripe/stripe-go/v82/account"
-	"github.com/stripe/stripe-go/v82/accountlink"
+	stripe "github.com/stripe/stripe-go/v85"
+	"github.com/stripe/stripe-go/v85/account"
+	"github.com/stripe/stripe-go/v85/accountlink"
 )
 
 type StripeGateway struct{}

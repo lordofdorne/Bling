@@ -33,7 +33,16 @@ func TestFinancialEventLedgerAndCreatorActivity(t *testing.T) {
 	if err := pool.QueryRow(ctx, `INSERT INTO users(username,email,password_hash) VALUES($1,$2,'integration-test-only') RETURNING id`, "finance_"+suffix, "finance_"+suffix+"@example.com").Scan(&creatorID); err != nil {
 		t.Fatal(err)
 	}
-	defer func() { _, _ = pool.Exec(context.Background(), `DELETE FROM users WHERE id=$1`, creatorID) }()
+	defer func() {
+		cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cleanupCancel()
+		_, _ = pool.Exec(cleanupCtx, `UPDATE payment_attempts SET queue_entry_id=NULL WHERE show_id IN (SELECT id FROM shows WHERE creator_id=$1)`, creatorID)
+		_, _ = pool.Exec(cleanupCtx, `UPDATE queue_entries SET payment_attempt_id=NULL WHERE show_id IN (SELECT id FROM shows WHERE creator_id=$1)`, creatorID)
+		_, _ = pool.Exec(cleanupCtx, `DELETE FROM calls WHERE show_id IN (SELECT id FROM shows WHERE creator_id=$1)`, creatorID)
+		_, _ = pool.Exec(cleanupCtx, `DELETE FROM queue_entries WHERE show_id IN (SELECT id FROM shows WHERE creator_id=$1)`, creatorID)
+		_, _ = pool.Exec(cleanupCtx, `DELETE FROM payment_attempts WHERE show_id IN (SELECT id FROM shows WHERE creator_id=$1)`, creatorID)
+		_, _ = pool.Exec(cleanupCtx, `DELETE FROM users WHERE id=$1`, creatorID)
+	}()
 	accountID := "acct_finance_" + suffix
 	if _, err := pool.Exec(ctx, `INSERT INTO creator_payout_accounts(creator_id,stripe_account_id,charges_enabled,payouts_enabled,details_submitted) VALUES($1,$2,true,true,true)`, creatorID, accountID); err != nil {
 		t.Fatal(err)
@@ -48,8 +57,37 @@ func TestFinancialEventLedgerAndCreatorActivity(t *testing.T) {
 	if err := pool.QueryRow(ctx, `INSERT INTO payment_attempts(show_id,tier_id,viewer_token_hash,idempotency_key_hash,stripe_payment_intent_id,destination_account_id,amount_cents,platform_fee_bps,platform_fee_cents,status,captured_at) VALUES($1,$2,$3,$4,$5,$6,2500,3000,750,'CAPTURED',now()) RETURNING id`, showID, tierID, []byte("viewer"), []byte("attempt"), intentID, accountID).Scan(&attemptID); err != nil {
 		t.Fatal(err)
 	}
+	var entryID, callID, refundID string
+	if err := pool.QueryRow(ctx, `INSERT INTO queue_entries(show_id,tier_id,display_name,topic,status,session_token_hash,join_key_hash,tier_name,priority_rank,call_duration_seconds,payment_attempt_id)
+		VALUES($1,$2,'Finance caller','Refund persistence','ENDED',$3,$4,'VIP',100,120,$5) RETURNING id`, showID, tierID, []byte("finance-viewer"), []byte("finance-join"), attemptID).Scan(&entryID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(ctx, `UPDATE payment_attempts SET queue_entry_id=$2 WHERE id=$1`, attemptID, entryID); err != nil {
+		t.Fatal(err)
+	}
+	if err := pool.QueryRow(ctx, `INSERT INTO calls(show_id,queue_entry_id,status,ended_at,payment_attempt_id) VALUES($1,$2,'ENDED',now(),$3) RETURNING id`, showID, entryID, attemptID).Scan(&callID); err != nil {
+		t.Fatal(err)
+	}
+	if err := pool.QueryRow(ctx, `INSERT INTO payment_refunds(payment_attempt_id,call_id,stripe_payment_intent_id,amount_cents,currency,reason) VALUES($1,$2,$3,2500,'usd','integration_test') RETURNING id`, attemptID, callID, intentID).Scan(&refundID); err != nil {
+		t.Fatal(err)
+	}
 
 	repository := NewPostgresRepository(pool)
+	request := RefundRequest{ID: refundID, Attempts: 10}
+	if err := repository.MarkRefundResult(ctx, request, RefundResult{ID: "re_" + suffix, Status: RefundPending}, time.Now().UTC()); err != nil {
+		t.Fatalf("persist pending refund result: %v", err)
+	}
+	if err := repository.MarkRefundRetry(ctx, request, "provider_error", time.Now().UTC()); err != nil {
+		t.Fatalf("persist terminal refund failure: %v", err)
+	}
+	var refundStatus string
+	var processedAt *time.Time
+	if err := pool.QueryRow(ctx, `SELECT status,processed_at FROM payment_refunds WHERE id=$1`, refundID).Scan(&refundStatus, &processedAt); err != nil {
+		t.Fatal(err)
+	}
+	if refundStatus != "FAILED" || processedAt == nil {
+		t.Fatalf("refund status=%q processed_at=%v", refundStatus, processedAt)
+	}
 	claimed, err := repository.ClaimEvent(ctx, "evt_"+suffix, "charge.dispute.created", "", time.Now().UTC())
 	if err != nil || claimed != EventClaimed {
 		t.Fatalf("first claim=%v err=%v", claimed, err)

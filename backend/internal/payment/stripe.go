@@ -3,8 +3,8 @@ package payment
 import (
 	"context"
 
-	stripe "github.com/stripe/stripe-go/v82"
-	"github.com/stripe/stripe-go/v82/paymentintent"
+	stripe "github.com/stripe/stripe-go/v85"
+	"github.com/stripe/stripe-go/v85/paymentintent"
 )
 
 type StripeGateway struct{}
