@@ -3,8 +3,7 @@ import { AuthPage } from "./components/AuthPage";
 import { Dashboard } from "./components/Dashboard";
 import { ProtectedRoute } from "./components/ProtectedRoute";
 import { PublicHotline } from "./components/PublicHotline";
-import { DiscoverPage, CreatorPreview } from "./components/DiscoverPage";
-import { SocialPreviewProvider } from "./components/SocialPreview";
+import { DiscoverPage, LegacyCreatorRedirect } from "./components/DiscoverPage";
 
 function NotFound() {
   return (
@@ -20,12 +19,12 @@ function NotFound() {
 
 export function App() {
   return (
-    <SocialPreviewProvider>
+    <>
       <Routes>
         <Route path="/" element={<DiscoverPage />} />
         <Route path="/following" element={<DiscoverPage view="following" />} />
         <Route path="/browse" element={<DiscoverPage view="browse" />} />
-        <Route path="/discover/:username" element={<CreatorPreview />} />
+        <Route path="/discover/:username" element={<LegacyCreatorRedirect />} />
         <Route path="/login" element={<AuthPage mode="login" />} />
         <Route path="/register" element={<AuthPage mode="register" />} />
         <Route
@@ -39,6 +38,6 @@ export function App() {
         <Route path="/u/:username" element={<PublicHotline />} />
         <Route path="*" element={<NotFound />} />
       </Routes>
-    </SocialPreviewProvider>
+    </>
   );
 }

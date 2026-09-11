@@ -15,13 +15,20 @@ import {
   useQueueTiers,
   useViewerQueue,
 } from "../lib/queue";
+import { ApiError } from "../lib/api";
 import { useLiveShow } from "../lib/shows";
 import { useViewerCall } from "../lib/calls";
 import { CallAudioPanel } from "./CallAudioPanel";
 import { PaymentAuthorization, useAuthorizePayment } from "../lib/payments";
 
 import { ViewerShell } from "./ViewerShell";
-import { FollowButton } from "./SocialPreview";
+import { FollowButton } from "./FollowButton";
+import {
+  useCreatorProfile,
+  useChannelPresence,
+  formatCount,
+} from "../lib/social";
+import { CreatorAvatar, CreatorCover } from "./CreatorIdentity";
 import { UiIcon } from "./UiIcon";
 
 const emptyTiers: QueueTier[] = [];
@@ -373,12 +380,24 @@ function formatPrice(cents: number) {
 export function PublicHotline() {
   const { username = "" } = useParams();
   const liveShow = useLiveShow(username.toLowerCase());
+  const profile = useCreatorProfile(username.toLowerCase());
+  useChannelPresence(username.toLowerCase(), Boolean(liveShow.data));
 
   return (
-    <ViewerShell discoveryPreview={false}>
+    <ViewerShell>
       <Link className="back-link" to="/">
         ← Back to discover
       </Link>
+      {profile.data && (
+        <div className="public-profile-bar">
+          <CreatorAvatar profile={profile.data} />
+          <div>
+            <h2>{profile.data.displayName}</h2>
+            <p>{profile.data.category}</p>
+          </div>
+        </div>
+      )}
+      {profile.isError && !(profile.error instanceof ApiError && profile.error.status === 404) && <div className="form-error" role="alert">Could not load channel details. <button className="text-button" onClick={()=>void profile.refetch()}>Retry profile</button></div>}
       {liveShow.isPending ? (
         <div className="channel-state">
           <div className="status">Checking the Hotline…</div>
@@ -397,16 +416,23 @@ export function PublicHotline() {
           <p className="eyebrow">@{username}</p>
           <h1>Hotline is currently closed.</h1>
           <p className="lede">Come back when this creator is live.</p>
-          <FollowButton username={username} />
-          <p className="preview-caption">
-            Follow preview · saved on this device. Live alerts are coming soon.
-          </p>
+          {profile.data && <FollowButton profile={profile.data} />}
+          {profile.data && (
+            <p className="muted">
+              {profile.data.bio || `${profile.data.displayName}'s channel`} ·{" "}
+              {formatCount(profile.data.followerCount)} followers
+            </p>
+          )}
         </section>
       ) : (
         <div className="hotline-page">
           <section className="hotline-heading">
             <div className="channel-live-art" aria-hidden="true">
-              <div className="channel-live-rings" />
+              {profile.data?.coverUrl ? (
+                <CreatorCover profile={profile.data} />
+              ) : (
+                <div className="channel-live-rings" />
+              )}
               <span className="studio-mic">
                 <UiIcon name="call" size={42} />
               </span>
@@ -426,13 +452,21 @@ export function PublicHotline() {
             </div>
             <p className="eyebrow">@{username}</p>
             <h1>The Hotline is open.</h1>
+            {profile.data?.bio && (
+              <p className="channel-bio">{profile.data.bio}</p>
+            )}
             <p className="lede">
               Join the line for a chance to speak with the host live.
             </p>
-            <FollowButton username={username} />
-            <p className="preview-caption">
-              Follow preview · saved on this device
-            </p>
+            {profile.data && <FollowButton profile={profile.data} />}
+            {profile.data && (
+              <p className="muted">
+                {formatCount(profile.data.followerCount)} followers
+                {profile.data.channelVisitors !== null
+                  ? ` · ${formatCount(profile.data.channelVisitors)} on this channel page`
+                  : ""}
+              </p>
+            )}
             <div className="hotline-how">
               <span>
                 <b>01</b> Choose your tier

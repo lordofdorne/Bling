@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"net/netip"
 	"os"
 	"strconv"
 	"strings"
@@ -11,6 +12,7 @@ import (
 )
 
 type Config struct {
+	SocialTrustedProxyCIDRs []netip.Prefix
 	Environment             string
 	HTTPAddr                string
 	DatabaseURL             string
@@ -70,6 +72,13 @@ func Load() (Config, error) {
 		StripePublishableKey: strings.TrimSpace(os.Getenv("STRIPE_PUBLISHABLE_KEY")),
 		StripeWebhookSecret:  strings.TrimSpace(os.Getenv("STRIPE_WEBHOOK_SECRET")),
 		StripeConnectCountry: strings.ToUpper(envOrDefault("STRIPE_CONNECT_COUNTRY", "US")),
+	}
+	for _, raw := range splitCSV(os.Getenv("SOCIAL_TRUSTED_PROXY_CIDRS")) {
+		prefix, err := netip.ParsePrefix(raw)
+		if err != nil {
+			return Config{}, fmt.Errorf("invalid SOCIAL_TRUSTED_PROXY_CIDRS entry: %w", err)
+		}
+		cfg.SocialTrustedProxyCIDRs = append(cfg.SocialTrustedProxyCIDRs, prefix.Masked())
 	}
 	stunURLs := splitCSV(envOrDefault("STUN_URLS", "stun:stun.l.google.com:19302"))
 	if len(stunURLs) == 0 {

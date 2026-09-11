@@ -1,8 +1,16 @@
 import { useRef, useState, type ReactNode } from "react";
 import { Link, NavLink, useNavigate, useSearchParams } from "react-router-dom";
-import { creators, portrait } from "../data/discovery";
+import {
+  creatorItems,
+  formatCount,
+  useCreators,
+  useFollowingCount,
+  useNotifications,
+} from "../lib/social";
+import { useMe } from "../lib/auth";
+import { CreatorAvatar } from "./CreatorIdentity";
+import { NotificationsPanel } from "./NotificationsPanel";
 import { UiIcon } from "./UiIcon";
-import { usePreviewFollows } from "../ui/preview-follows";
 
 export function Brand() {
   return (
@@ -14,20 +22,16 @@ export function Brand() {
     </Link>
   );
 }
-export function ViewerShell({
-  children,
-  discoveryPreview = true,
-}: {
-  children: ReactNode;
-  discoveryPreview?: boolean;
-}) {
+export function ViewerShell({ children }: { children: ReactNode }) {
   const notificationButton = useRef<HTMLButtonElement>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
-  const { following } = usePreviewFollows();
-  const liveFollowing = creators.filter(
-    (creator) => creator.live && following.includes(creator.username),
-  );
+  const me = useMe();
+  const following = useFollowingCount();
+  const recommended = useCreators();
+  const creators = creatorItems(recommended.data?.pages).slice(0, 5);
+  const notifications = useNotifications();
+  const unread = notifications.data?.pages[0]?.unreadCount ?? 0;
   const [params] = useSearchParams();
   const navigate = useNavigate();
   return (
@@ -96,9 +100,7 @@ export function ViewerShell({
               onClick={() => setNotificationsOpen(!notificationsOpen)}
             >
               <UiIcon name="bell" />
-              {liveFollowing.length > 0 && (
-                <span className="notification-dot" />
-              )}
+              {unread > 0 && <span className="notification-dot" />}
             </button>
             {notificationsOpen && (
               <section
@@ -119,31 +121,15 @@ export function ViewerShell({
                     <UiIcon name="close" size={16} />
                   </button>
                 </div>
-                <p className="muted">Preview · updates from example creators</p>
-                {liveFollowing.length ? (
-                  liveFollowing.map((creator) => (
-                    <Link
-                      className="notification-item"
-                      key={creator.username}
-                      to={`/discover/${creator.username}`}
-                      onClick={() => setNotificationsOpen(false)}
-                    >
-                      <img src={portrait(creator, 80)} alt="" />
-                      <span>
-                        <strong>{creator.name} is live</strong>
-                        <small>{creator.title}</small>
-                      </span>
-                      <span className="live-dot" />
-                    </Link>
-                  ))
-                ) : (
-                  <p>Follow a creator to see their live updates here.</p>
-                )}
+                <NotificationsPanel close={() => setNotificationsOpen(false)} />
               </section>
             )}
           </div>
-          <Link className="button secondary nav-signin" to="/login">
-            Sign in
+          <Link
+            className="button secondary nav-signin"
+            to={me.data ? "/dashboard" : "/login?next=%2Ffollowing"}
+          >
+            {me.data ? me.data.username : "Sign in"}
           </Link>
         </div>
       </header>
@@ -162,8 +148,8 @@ export function ViewerShell({
             <NavLink to="/following" onClick={() => setMenuOpen(false)}>
               <UiIcon name="heart" />
               Following
-              {following.length > 0 && (
-                <span className="nav-count">{following.length}</span>
+              {(following.data ?? 0) > 0 && (
+                <span className="nav-count">{following.data}</span>
               )}
             </NavLink>
             <NavLink to="/browse" onClick={() => setMenuOpen(false)}>
@@ -175,26 +161,43 @@ export function ViewerShell({
               <p className="nav-label">Recommended</p>
               <UiIcon name="broadcast" size={14} />
             </div>
-            {creators.slice(0, 5).map((creator) => (
+            {creators.map((creator) => (
               <Link
                 className="sidebar-creator"
-                to={`/discover/${creator.username}`}
+                to={`/u/${creator.username}`}
                 key={creator.username}
                 onClick={() => setMenuOpen(false)}
               >
-                <span className="avatar-image">
-                  <img src={portrait(creator, 80)} alt="" />
-                  {creator.live && <i />}
-                </span>
+                <CreatorAvatar profile={creator} />
                 <span>
-                  <strong>{creator.name}</strong>
+                  <strong>{creator.displayName}</strong>
                   <small>{creator.category}</small>
                 </span>
                 <span className="sidebar-audience">
-                  {creator.live ? creator.audience : "Offline"}
+                  {creator.isLive
+                    ? "Live"
+                    : `${formatCount(creator.followerCount)} followers`}
                 </span>
               </Link>
             ))}
+            {recommended.isPending && (
+              <p className="sidebar-feedback" role="status">
+                Loading creators…
+              </p>
+            )}
+            {recommended.isError && (
+              <button
+                className="sidebar-feedback text-button"
+                onClick={() => void recommended.refetch()}
+              >
+                Retry loading creators
+              </button>
+            )}
+            {!recommended.isPending &&
+              !recommended.isError &&
+              creators.length === 0 && (
+                <p className="sidebar-feedback">New voices are on their way.</p>
+              )}
             <Link
               className="sidebar-more"
               to="/browse"
@@ -226,11 +229,7 @@ export function ViewerShell({
             <span>
               <span className="live-dot" /> Made for real connection.
             </span>
-            <span>
-              {discoveryPreview
-                ? "Discovery preview · example creators · follows saved on this device"
-                : "Follow preview · follows saved on this device"}
-            </span>
+            <span>Your voice. Your community.</span>
           </footer>
         </main>
       </div>

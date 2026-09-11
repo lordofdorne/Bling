@@ -59,6 +59,10 @@ export function useLogout() {
   return useMutation({
     mutationFn: () =>
       apiRequest<void>("/api/v1/auth/logout", { method: "POST" }),
-    onSuccess: () => queryClient.setQueryData(meKey, null),
+    onSuccess: async () => {
+      await queryClient.cancelQueries({ queryKey: ["social"] });
+      queryClient.removeQueries({ queryKey: ["social"] });
+      queryClient.setQueryData(meKey, null);
+    },
   });
 }

@@ -15,6 +15,7 @@ import (
 	queuedomain "github.com/bling-app/bling/backend/internal/queue"
 	"github.com/bling-app/bling/backend/internal/realtime"
 	showdomain "github.com/bling-app/bling/backend/internal/show"
+	"github.com/bling-app/bling/backend/internal/social"
 	"github.com/go-chi/chi/v5"
 	chimiddleware "github.com/go-chi/chi/v5/middleware"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -29,7 +30,7 @@ type redisDependency struct{ client *redis.Client }
 
 func (d redisDependency) Ping(ctx context.Context) error { return d.client.Ping(ctx).Err() }
 
-func NewRouter(logger *slog.Logger, postgres *pgxpool.Pool, redisClient *redis.Client, cfg config.Config, queueService *queuedomain.Service, realtimeHub *realtime.Hub, callService *calldomain.Service, signalHub *realtime.SignalHub, paymentService *paymentdomain.Service, payoutService *payoutdomain.Service, financeService *financedomain.Service) http.Handler {
+func NewRouter(logger *slog.Logger, postgres *pgxpool.Pool, redisClient *redis.Client, cfg config.Config, queueService *queuedomain.Service, realtimeHub *realtime.Hub, callService *calldomain.Service, signalHub *realtime.SignalHub, paymentService *paymentdomain.Service, payoutService *payoutdomain.Service, financeService *financedomain.Service, socialService *social.Service) http.Handler {
 	authHandler := authHandler{
 		service:      auth.NewService(auth.NewPostgresStore(postgres), cfg.BcryptCost, cfg.SessionTTL),
 		limiter:      auth.NewRedisRateLimiter(redisClient),
@@ -50,19 +51,20 @@ func NewRouter(logger *slog.Logger, postgres *pgxpool.Pool, redisClient *redis.C
 	callHandler := callHandler{service: callService, logger: logger}
 	signalGuard := &realtimeHandler{limiter: auth.NewRedisRateLimiter(redisClient), logger: logger, rateLimit: cfg.RealtimeConnectLimit, rateWindow: cfg.RealtimeRateLimitWindow}
 	signalHandler := callSignalHandler{service: callService, hub: signalHub, logger: logger, allowedOrigins: cfg.AllowedOrigins, heartbeat: cfg.RealtimeHeartbeat, writeTimeout: cfg.RealtimeWriteTimeout, guard: signalGuard, iceServers: cfg.RTCICEServers, turnURL: cfg.TURNURL, turnSharedSecret: cfg.TURNSharedSecret, turnCredentialTTL: cfg.TURNCredentialTTL, presence: realtime.NewPresenceStore(redisClient, cfg.CallPresenceTTL)}
-	metrics := &metricsHandler{pool: postgres, logger: logger}
+	socialAPI := &socialHandler{trustedProxies: cfg.SocialTrustedProxyCIDRs, service: socialService, authentication: authHandler.service, limiter: auth.NewRedisRateLimiter(redisClient), logger: logger, cookieSecure: cfg.CookieSecure}
+	metrics := &metricsHandler{pool: postgres, logger: logger, social: socialAPI}
 	return newRouterWithCalls(logger, healthHandler{
 		postgres: postgresDependency{pool: postgres},
 		redis:    redisDependency{client: redisClient},
 		timeout:  cfg.ReadinessTimeout,
-	}, &authHandler, &showHandler, &queueHandler, &queueRealtimeHandler, &callHandler, &signalHandler, &paymentHandler, &payoutHandler, metrics, cfg.AllowedOrigins)
+	}, &authHandler, &showHandler, &queueHandler, &queueRealtimeHandler, &callHandler, &signalHandler, &paymentHandler, &payoutHandler, metrics, cfg.AllowedOrigins, socialAPI)
 }
 
 func newRouter(logger *slog.Logger, health healthHandler, authentication *authHandler, shows *showHandler, queues *queueHandler, realtimeUpdates *realtimeHandler, allowedOrigins []string) http.Handler {
 	return newRouterWithCalls(logger, health, authentication, shows, queues, realtimeUpdates, nil, nil, nil, nil, nil, allowedOrigins)
 }
 
-func newRouterWithCalls(logger *slog.Logger, health healthHandler, authentication *authHandler, shows *showHandler, queues *queueHandler, realtimeUpdates *realtimeHandler, calls *callHandler, signals *callSignalHandler, payments *paymentHandler, payouts *payoutHandler, metrics *metricsHandler, allowedOrigins []string) http.Handler {
+func newRouterWithCalls(logger *slog.Logger, health healthHandler, authentication *authHandler, shows *showHandler, queues *queueHandler, realtimeUpdates *realtimeHandler, calls *callHandler, signals *callSignalHandler, payments *paymentHandler, payouts *payoutHandler, metrics *metricsHandler, allowedOrigins []string, socialHandlers ...*socialHandler) http.Handler {
 	router := chi.NewRouter()
 	router.Use(chimiddleware.RequestID)
 	router.Use(chimiddleware.Recoverer)
@@ -78,6 +80,11 @@ func newRouterWithCalls(logger *slog.Logger, health healthHandler, authenticatio
 		router.Route("/api/v1", func(api chi.Router) {
 			api.Mount("/auth", authentication.routes())
 			api.Get("/me", authentication.me)
+			for _, handler := range socialHandlers {
+				if handler != nil {
+					handler.mount(api)
+				}
+			}
 			if payments != nil {
 				api.Post("/payments/webhook", payments.webhook)
 				api.Post("/shows/{showID}/payments/authorize", payments.authorize)

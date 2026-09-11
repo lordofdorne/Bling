@@ -42,8 +42,13 @@ describe("App routes", () => {
   it("renders an open public Hotline", async () => {
     vi.stubGlobal(
       "fetch",
-      vi.fn().mockResolvedValue(
-        Response.json({
+      vi.fn(async (input: RequestInfo | URL) => {
+        if (!String(input).includes("/live-show")) {
+          return new Response(null, {
+            status: String(input) === "/api/v1/me" ? 401 : 404,
+          });
+        }
+        return Response.json({
           data: {
             show: {
               id: "show-1",
@@ -55,8 +60,8 @@ describe("App routes", () => {
               updatedAt: "2026-08-24T12:00:00Z",
             },
           },
-        }),
-      ),
+        });
+      }),
     );
     renderAt("/u/alice");
     expect(

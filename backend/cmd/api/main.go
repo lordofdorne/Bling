@@ -19,6 +19,7 @@ import (
 	payoutdomain "github.com/bling-app/bling/backend/internal/payout"
 	queuedomain "github.com/bling-app/bling/backend/internal/queue"
 	"github.com/bling-app/bling/backend/internal/realtime"
+	"github.com/bling-app/bling/backend/internal/social"
 )
 
 func main() {
@@ -77,9 +78,12 @@ func main() {
 	)
 	go queueService.RunOutbox(ctx)
 
+	socialService := social.NewService(social.NewStore(postgres), redisClient, logger)
+	go socialService.Run(ctx)
+
 	server := &http.Server{
 		Addr:              cfg.HTTPAddr,
-		Handler:           httpapi.NewRouter(logger, postgres, redisClient, cfg, queueService, realtimeHub, callService, signalHub, paymentService, payoutService, financeService),
+		Handler:           httpapi.NewRouter(logger, postgres, redisClient, cfg, queueService, realtimeHub, callService, signalHub, paymentService, payoutService, financeService, socialService),
 		ReadHeaderTimeout: cfg.ReadHeaderTimeout,
 		ReadTimeout:       cfg.ReadTimeout,
 		WriteTimeout:      cfg.WriteTimeout,

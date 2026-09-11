@@ -1,0 +1,13 @@
+DROP TRIGGER IF EXISTS shows_social_projection ON shows;
+DROP FUNCTION IF EXISTS project_social_show();
+DROP TABLE IF EXISTS notification_reads;
+DROP TABLE IF EXISTS creator_live_events;
+DROP TRIGGER IF EXISTS follows_count ON creator_follows;
+DROP FUNCTION IF EXISTS update_follow_shard();
+DROP FUNCTION IF EXISTS mark_social_dirty(UUID);
+DROP TABLE IF EXISTS social_dirty_creators;
+DROP TABLE IF EXISTS creator_follower_shards;
+DROP TABLE IF EXISTS creator_follows;
+DROP TRIGGER IF EXISTS users_social_profile ON users;
+DROP FUNCTION IF EXISTS initialize_social_profile();
+DROP TABLE IF EXISTS creator_profiles;

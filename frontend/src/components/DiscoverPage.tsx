@@ -1,18 +1,17 @@
-import { Link, useParams, useSearchParams } from "react-router-dom";
-import { creators, portrait, type Creator } from "../data/discovery";
-import { FollowButton } from "./SocialPreview";
-import { usePreviewFollows } from "../ui/preview-follows";
+import { Link, Navigate, useParams, useSearchParams } from "react-router-dom";
+import { useMe } from "../lib/auth";
+import {
+  categories,
+  creatorItems,
+  formatCount,
+  useCreators,
+  type CreatorProfile,
+} from "../lib/social";
+import { FollowButton } from "./FollowButton";
+import { CreatorAvatar, CreatorCover } from "./CreatorIdentity";
 import { ViewerShell } from "./ViewerShell";
 import { UiIcon } from "./UiIcon";
 
-const categories = [
-  "All",
-  "Just chatting",
-  "Music",
-  "Gaming",
-  "Creative",
-  "Tech",
-];
 const categoryIcons = [
   "discover",
   "call",
@@ -21,24 +20,27 @@ const categoryIcons = [
   "spark",
   "code",
 ] as const;
-function CreatorCard({ creator }: { creator: Creator }) {
+function CreatorCard({ creator }: { creator: CreatorProfile }) {
   return (
     <article className="creator-card">
       <Link
-        className={`creator-cover cover-${creator.color}`}
-        to={`/discover/${creator.username}`}
-        aria-label={`Visit ${creator.name}`}
+        className={`creator-cover cover-${creator.category === "Music" ? "sage" : creator.category === "Gaming" ? "sand" : "lavender"}`}
+        to={`/u/${creator.username}`}
+        aria-label={`Visit ${creator.displayName}`}
       >
-        <img src={portrait(creator)} alt={creator.name} loading="lazy" />
+        <CreatorCover profile={creator} />
         <div className="cover-shade" />
-        <span className={creator.live ? "live-pill" : "offline-pill"}>
-          {creator.live ? "LIVE" : "OFFLINE"}
+        <span className={creator.isLive ? "live-pill" : "offline-pill"}>
+          {creator.isLive ? "LIVE" : "OFFLINE"}
         </span>
-        <span className="cover-topic">{creator.tag}</span>
-        {creator.live && (
-          <span className="viewer-count">
+        <span className="cover-topic">{creator.category}</span>
+        {creator.isLive && creator.channelVisitors !== null && (
+          <span
+            className="viewer-count"
+            title="People on this channel page in the last 90 seconds"
+          >
             <UiIcon name="people" size={13} />
-            {creator.audience}
+            {formatCount(creator.channelVisitors)} on page
           </span>
         )}
         <span className="cover-arrow">
@@ -47,24 +49,22 @@ function CreatorCard({ creator }: { creator: Creator }) {
       </Link>
       <div className="creator-details">
         <Link
-          className="avatar-image"
-          to={`/discover/${creator.username}`}
-          aria-label={`${creator.name} profile`}
+          to={`/u/${creator.username}`}
+          aria-label={`${creator.displayName} profile`}
         >
-          <img src={portrait(creator, 80)} alt="" loading="lazy" />
+          <CreatorAvatar profile={creator} />
         </Link>
         <div className="creator-meta">
-          <Link to={`/discover/${creator.username}`}>
-            <h3>{creator.title}</h3>
+          <Link to={`/u/${creator.username}`}>
+            <h3>{creator.displayName}</h3>
           </Link>
-          <span>
-            {creator.name} <UiIcon name="verified" size={13} />
-          </span>
+          <span>@{creator.username}</span>
           <small>
-            {creator.category} <span>· English</span>
+            {formatCount(creator.followerCount)}{" "}
+            {creator.followerCount === 1 ? "follower" : "followers"}
           </small>
         </div>
-        <FollowButton username={creator.username} compact />
+        <FollowButton profile={creator} compact />
       </div>
     </article>
   );
@@ -75,33 +75,23 @@ export function DiscoverPage({
   view?: "home" | "following" | "browse";
 }) {
   const [params, setParams] = useSearchParams();
-  const { following } = usePreviewFollows();
+  const me = useMe();
   const category = params.get("category") ?? "All";
+  const query = params.get("q") ?? "";
   const liveOnly = params.get("live") === "true";
-  const query = (params.get("q") ?? "").trim().toLowerCase();
-  const filtered = creators.filter(
-    (creator) =>
-      (view !== "following" || following.includes(creator.username)) &&
-      (category === "All" || creator.category === category) &&
-      (!liveOnly || creator.live) &&
-      (!query ||
-        `${creator.name} ${creator.category} ${creator.title}`
-          .toLowerCase()
-          .includes(query)),
-  );
-  const savedChannels =
-    view === "following" && category === "All" && !liveOnly
-      ? following.filter(
-          (username) =>
-            !creators.some((creator) => creator.username === username) &&
-            (!query || username.toLowerCase().includes(query)),
-        )
-      : [];
-  const resultCount = filtered.length + savedChannels.length;
-  const feature = creators[0];
+  const discovery = useCreators({
+    q: query,
+    category: category === "All" ? undefined : category,
+    live: liveOnly,
+    following: view === "following",
+  });
+  const items = creatorItems(discovery.data?.pages);
+  const feature = items.find((p) => p.isLive);
+  const signedOut = view === "following" && !me.isPending && !me.data;
   function chooseCategory(value: string) {
     setParams((current) => {
       const next = new URLSearchParams(current);
+      next.delete("cursor");
       if (value === "All") next.delete("category");
       else next.set("category", value);
       return next;
@@ -117,7 +107,7 @@ export function DiscoverPage({
               ? "Your people. Your place."
               : view === "browse"
                 ? "Find your corner."
-                : "Good company. Live now."}
+                : "Good company. Real connection."}
           </h1>
           <p>
             {view === "following"
@@ -127,9 +117,8 @@ export function DiscoverPage({
                 : "Find a conversation you love. Be a part of it."}
           </p>
         </div>
-        <span className="preview-label">Discovery preview</span>
       </div>
-      {view === "home" && !query && category === "All" && (
+      {view === "home" && !query && category === "All" && feature && (
         <section className="featured-live" aria-label="Featured creator">
           <div className="featured-copy">
             <div className="featured-kicker">
@@ -141,32 +130,31 @@ export function DiscoverPage({
               <br />
               More <em>connecting.</em>
             </h2>
-            <p>{feature.description}</p>
+            <p>
+              {feature.bio ||
+                `The line is open. Join ${feature.displayName} for a real conversation.`}
+            </p>
             <div className="featured-person">
-              <span className="avatar-image">
-                <img src={portrait(feature, 80)} alt="" />
-              </span>
+              <CreatorAvatar profile={feature} />
               <span>
-                <strong>
-                  {feature.name} <UiIcon name="verified" size={14} />
-                </strong>
-                <small>Just chatting · {feature.audience} hanging out</small>
+                <strong>{feature.displayName}</strong>
+                <small>
+                  {feature.category} · {formatCount(feature.followerCount)}{" "}
+                  followers
+                </small>
               </span>
             </div>
             <div className="featured-actions">
-              <Link className="primary-button" to="/discover/maya">
+              <Link className="primary-button" to={`/u/${feature.username}`}>
                 <UiIcon name="call" size={17} />
                 Drop into the conversation
                 <UiIcon name="arrow" size={17} />
               </Link>
-              <FollowButton username="maya" />
+              <FollowButton profile={feature} />
             </div>
           </div>
           <div className="featured-visual">
-            <img
-              src={portrait(feature, 1000)}
-              alt="Featured example creator Maya Chen"
-            />
+            <CreatorCover profile={feature} />
             <div className="featured-image-shade" />
             <span className="image-caption">
               A seat at the conversation.
@@ -188,11 +176,11 @@ export function DiscoverPage({
       )}
       <section className="feed-section" aria-label="Creator discovery">
         <div className="category-tabs" aria-label="Filter by category">
-          {categories.map((item, index) => (
+          {["All", ...categories].map((item, index) => (
             <button
-              className={category === item ? "selected" : ""}
               key={item}
               aria-pressed={category === item}
+              className={category === item ? "selected" : ""}
               onClick={() => chooseCategory(item)}
             >
               <UiIcon name={categoryIcons[index]} size={16} />
@@ -208,7 +196,7 @@ export function DiscoverPage({
           <div>
             <h2>
               {query
-                ? `Results for “${params.get("q")}”`
+                ? `Results for “${query}”`
                 : view === "following"
                   ? "From your following"
                   : category !== "All"
@@ -218,8 +206,8 @@ export function DiscoverPage({
             </h2>
             <p>
               {view === "following"
-                ? "Followed here. Ready when you are."
-                : "Real people. Open lines. Something for everyone."}
+                ? "Your follows are saved across your devices."
+                : "Live creators first, then the most followed."}
             </p>
           </div>
           <div className="discovery-controls">
@@ -238,37 +226,63 @@ export function DiscoverPage({
               <span className="live-dot" />
               Live now
             </button>
-            <span className="result-count">
-              {resultCount} {resultCount === 1 ? "creator" : "creators"}
-            </span>
           </div>
         </div>
-        {resultCount ? (
-          <div className="creator-grid">
-            {filtered.map((creator) => (
-              <CreatorCard key={creator.username} creator={creator} />
-            ))}
-            {savedChannels.map((username) => (
-              <article className="saved-channel" key={username}>
-                <span className="feature-icon">
-                  <UiIcon name="broadcast" size={25} />
-                </span>
-                <h3>@{username}</h3>
-                <p>
-                  Saved to your following. Live status updates are coming soon.
-                </p>
-                <div>
-                  <Link
-                    className="button secondary"
-                    to={`/u/${encodeURIComponent(username)}`}
-                  >
-                    Visit channel <UiIcon name="arrow" size={15} />
-                  </Link>
-                  <FollowButton username={username} compact />
-                </div>
-              </article>
-            ))}
+        {signedOut ? (
+          <div className="discovery-empty">
+            <span className="feature-icon">
+              <UiIcon name="heart" size={26} />
+            </span>
+            <h2>Your people are waiting.</h2>
+            <p>Sign in to follow creators and see when they go live.</p>
+            <Link className="primary-button" to="/login?next=%2Ffollowing">
+              Sign in
+            </Link>
+            <Link className="text-link" to="/register?next=%2Ffollowing">
+              Create a viewer account
+            </Link>
           </div>
+        ) : me.isError || (discovery.isError && !discovery.data) ? (
+          <div className="discovery-empty" role="alert">
+            <h2>We couldn’t load creators.</h2>
+            <p>Please try again in a moment.</p>
+            <button
+              className="button secondary"
+              onClick={() =>
+                void (me.isError ? me.refetch() : discovery.refetch())
+              }
+            >
+              Try again
+            </button>
+          </div>
+        ) : discovery.isPending ? (
+          <div className="discovery-empty" role="status">
+            Finding your next conversation…
+          </div>
+        ) : items.length ? (
+          <>
+            <div className="creator-grid">
+              {items.map((creator) => (
+                <CreatorCard creator={creator} key={creator.id} />
+              ))}
+            </div>
+            {discovery.hasNextPage && (
+              <div className="load-more">
+                <button
+                  className="button secondary"
+                  disabled={discovery.isFetchingNextPage}
+                  onClick={() => void discovery.fetchNextPage()}
+                >
+                  {discovery.isFetchingNextPage
+                    ? "Loading…"
+                    : "Load more creators"}
+                </button>
+              </div>
+            )}
+            {discovery.isFetchNextPageError && (
+              <p role="alert">Couldn’t load more creators. Try again.</p>
+            )}
+          </>
         ) : (
           <div className="discovery-empty">
             <span className="feature-icon">
@@ -278,17 +292,21 @@ export function DiscoverPage({
               />
             </span>
             <h2>
-              {view === "following" && !following.length
+              {view === "following"
                 ? "Make yourself at home."
-                : "No creators found."}
+                : "A new conversation starts with you."}
             </h2>
             <p>
-              {view === "following" && !following.length
-                ? "Follow your favorite creators and their live conversations will appear here."
-                : "Try another topic or clear your filters to explore more creators."}
+              {view === "following"
+                ? "Follow creators to build your feed, or clear your filters to see more."
+                : "No creators match these filters yet. Explore all channels or open your own Hotline."}
             </p>
             <Link className="primary-button" to="/">
-              Explore creators <UiIcon name="arrow" size={17} />
+              Explore all creators
+              <UiIcon name="arrow" size={17} />
+            </Link>
+            <Link className="text-link" to="/dashboard">
+              Open creator studio
             </Link>
           </div>
         )}
@@ -304,98 +322,16 @@ export function DiscoverPage({
             <p>Your favorite creators are one call away.</p>
           </div>
           <Link className="button secondary" to="/following">
-            Find your people <UiIcon name="arrow" size={16} />
+            Find your people
+            <UiIcon name="arrow" size={16} />
           </Link>
         </section>
       )}
     </ViewerShell>
   );
 }
-export function CreatorPreview() {
-  const { username } = useParams();
-  const creator = creators.find((item) => item.username === username);
-  if (!creator)
-    return (
-      <ViewerShell>
-        <div className="discovery-empty">
-          <h1>Creator not found.</h1>
-          <Link className="primary-button" to="/">
-            Explore creators
-          </Link>
-        </div>
-      </ViewerShell>
-    );
-  return (
-    <ViewerShell>
-      <Link className="back-link" to="/">
-        ← Back to discover
-      </Link>
-      <div className="profile-layout">
-        <section>
-          <div className={`profile-cover cover-${creator.color}`}>
-            <img src={portrait(creator, 1000)} alt={creator.name} />
-            <span className={creator.live ? "live-pill" : "offline-pill"}>
-              {creator.live ? "LIVE PREVIEW" : "OFFLINE"}
-            </span>
-            <div className="profile-cover-copy">
-              <span className="sound-bars">
-                <i />
-                <i />
-                <i />
-                <i />
-                <i />
-              </span>
-              <h1>{creator.title}</h1>
-              <span>{creator.category}</span>
-            </div>
-          </div>
-          <div className="profile-heading">
-            <div className="featured-person">
-              <span className="avatar-image">
-                <img src={portrait(creator, 100)} alt="" />
-              </span>
-              <div>
-                <h2>
-                  {creator.name} <UiIcon name="verified" size={18} />
-                </h2>
-                <p>@{creator.username}</p>
-              </div>
-            </div>
-            <FollowButton username={creator.username} />
-          </div>
-          <section className="profile-about">
-            <h3>About {creator.name.split(" ")[0]}</h3>
-            <p>{creator.description}</p>
-            <span className="topic-tag">{creator.tag}</span>
-          </section>
-        </section>
-        <aside className="queue-card preview-queue">
-          <span className="feature-icon">
-            <UiIcon name="call" size={24} />
-          </span>
-          <p className="eyebrow">A conversation away</p>
-          <h2>
-            {creator.live
-              ? "You’re in good company."
-              : "Catch the next conversation."}
-          </h2>
-          <p>
-            Follow {creator.name.split(" ")[0]} to add them to your feed and see
-            their live updates.
-          </p>
-          <FollowButton username={creator.username} />
-          <div className="preview-note">
-            <UiIcon name="info" size={17} />
-            <p>
-              This is an example creator. Following is saved on this device;
-              live calls and notifications will connect when discovery launches.
-            </p>
-          </div>
-          <Link className="text-link" to="/following">
-            See your following
-          </Link>
-        </aside>
-      </div>
-    </ViewerShell>
-  );
+// Preserve previously shared discovery links, now backed by real channels.
+export function LegacyCreatorRedirect() {
+  const { username = "" } = useParams();
+  return <Navigate replace to={`/u/${encodeURIComponent(username)}`} />;
 }

@@ -18,6 +18,7 @@ import {
   useStartShow,
   useTierConfiguration,
 } from "../lib/shows";
+import { ProfileEditor } from "./ProfileEditor";
 import { CallAudioPanel } from "./CallAudioPanel";
 import { UiIcon } from "./UiIcon";
 import { Brand } from "./ViewerShell";
@@ -461,6 +462,10 @@ export function Dashboard() {
               <UiIcon name="people" />
               View public page <UiIcon name="arrow" size={14} />
             </Link>
+            <a href="#profile">
+              <UiIcon name="people" />
+              Public profile
+            </a>
             <a href="#account">
               <UiIcon name="settings" />
               Account details
@@ -763,6 +768,7 @@ export function Dashboard() {
               )}
             </section>
           </div>
+          <ProfileEditor />
           <div id="account" className="account-card">
             <span>Public URL</span>
             <strong>/u/{username}</strong>

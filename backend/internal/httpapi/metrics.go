@@ -9,6 +9,7 @@ import (
 )
 
 type metricsHandler struct {
+	social *socialHandler
 	pool   *pgxpool.Pool
 	logger *slog.Logger
 }
@@ -31,8 +32,21 @@ func (h metricsHandler) serve(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "metrics unavailable", http.StatusServiceUnavailable)
 		return
 	}
+	var socialPending int64
+	var socialOldest float64
+	if h.social != nil {
+		if err := h.pool.QueryRow(r.Context(), `SELECT count(*),COALESCE(EXTRACT(EPOCH FROM now()-min(queued_at)),0)::float8 FROM social_dirty_creators`).Scan(&socialPending, &socialOldest); err != nil {
+			h.logger.Error("social backlog metrics failed", "error", err)
+			http.Error(w, "metrics unavailable", 503)
+			return
+		}
+	}
 	w.Header().Set("Content-Type", "text/plain; version=0.0.4; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
+	if h.social != nil {
+		_, _ = fmt.Fprint(w, h.social.metrics())
+		_, _ = fmt.Fprintf(w, "# TYPE bling_social_projection_pending gauge\nbling_social_projection_pending %d\n# TYPE bling_social_projection_oldest_seconds gauge\nbling_social_projection_oldest_seconds %f\n", socialPending, socialOldest)
+	}
 	_, _ = fmt.Fprintf(w, "# TYPE bling_queue_waiting gauge\nbling_queue_waiting %d\n", waiting)
 	_, _ = fmt.Fprintf(w, "# TYPE bling_calls_active gauge\nbling_calls_active %d\n", activeCalls)
 	_, _ = fmt.Fprintf(w, "# TYPE bling_calls_in_reconnect_grace gauge\nbling_calls_in_reconnect_grace %d\n", reconnecting)

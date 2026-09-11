@@ -1,5 +1,5 @@
 import { type FormEvent, useState } from "react";
-import { Link, Navigate, useNavigate } from "react-router-dom";
+import { Link, Navigate, useNavigate, useSearchParams } from "react-router-dom";
 import { ApiError } from "../lib/api";
 import { useLogin, useMe, useRegister } from "../lib/auth";
 
@@ -10,6 +10,16 @@ type AuthPageProps = { mode: "login" | "register" };
 
 export function AuthPage({ mode }: AuthPageProps) {
   const navigate = useNavigate();
+  const [params] = useSearchParams();
+  const requested = params.get("next") ?? "/dashboard";
+  // Restrict continuation to known local app paths, never external URLs.
+  const destination =
+    /^\/(?:following|browse|dashboard|u\/[a-z0-9_]{3,30})?(?:\?[^\\]*)?$/.test(
+      requested,
+    )
+      ? requested
+      : "/dashboard";
+  const viewerIntent = destination !== "/dashboard";
   const me = useMe();
   const login = useLogin();
   const register = useRegister();
@@ -19,7 +29,7 @@ export function AuthPage({ mode }: AuthPageProps) {
   const [password, setPassword] = useState("");
 
   if (me.data) {
-    return <Navigate to="/dashboard" replace />;
+    return <Navigate to={destination} replace />;
   }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -30,7 +40,7 @@ export function AuthPage({ mode }: AuthPageProps) {
       } else {
         await login.mutateAsync({ email, password });
       }
-      navigate("/dashboard", { replace: true });
+      navigate(destination, { replace: true });
     } catch {
       // Mutation state renders the server's safe error message.
     }
@@ -79,12 +89,22 @@ export function AuthPage({ mode }: AuthPageProps) {
           </span>
         </section>
         <section className="auth-card">
-          <p className="eyebrow">Creator access</p>
-          <h1>{mode === "login" ? "Welcome back." : "Open your Hotline."}</h1>
-          <p className="auth-intro">
+          <p className="eyebrow">
+            {viewerIntent ? "Your Bling account" : "Creator access"}
+          </p>
+          <h1>
             {mode === "login"
-              ? "Sign in to manage your live caller queue."
-              : "Create the account behind your public Bling URL."}
+              ? "Welcome back."
+              : viewerIntent
+                ? "Find your people."
+                : "Open your Hotline."}
+          </h1>
+          <p className="auth-intro">
+            {viewerIntent
+              ? "Follow creators, build your feed, and catch their next live conversation."
+              : mode === "login"
+                ? "Sign in to manage your live caller queue."
+                : "Create the account behind your public Bling URL."}
           </p>
           <form className="auth-form" onSubmit={submit}>
             {mode === "register" && (
@@ -152,7 +172,9 @@ export function AuthPage({ mode }: AuthPageProps) {
           </form>
           <p className="auth-switch">
             {mode === "login" ? "New to Bling?" : "Already have an account?"}{" "}
-            <Link to={mode === "login" ? "/register" : "/login"}>
+            <Link
+              to={`${mode === "login" ? "/register" : "/login"}?next=${encodeURIComponent(destination)}`}
+            >
               {mode === "login" ? "Create an account" : "Sign in"}
             </Link>
           </p>
