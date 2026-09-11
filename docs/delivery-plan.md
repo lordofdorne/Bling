@@ -100,7 +100,7 @@ Acceptance: a paid caller cannot enter with a missing, reused, wrong-tier, wrong
 
 ## PR 12 — Stripe Connect creator payouts
 
-- Stripe Express onboarding and signed account capability reconciliation
+- Stripe Connect onboarding (Accounts v2) and account capability reconciliation
 - Creator-controlled per-tier pricing with paid-tier readiness gates
 - Destination charges to the creator's connected account
 - Immutable 30% Bling application-fee snapshot and verification

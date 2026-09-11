@@ -8,7 +8,9 @@ Creator authentication is available through `/register`, `/login`, and the prote
 
 Authenticated creators can create, start, inspect, and end a Hotline from the dashboard. Viewers can join or leave with an anonymous recovery cookie and recover their current position after refreshing. A creator can manually choose a waiting caller or randomly choose within the highest available priority tier. PostgreSQL serializes selection, guarantees exactly one active call per show, and enforces call expiry; Redis stores the hot candidate index and carries ephemeral invalidation and participant-scoped signaling events. After both participants explicitly allow microphone access, native browser WebRTC carries audio directly between them. The creator sees caller names and topics, while public viewers can only read their own queue entry and call.
 
-Before going live, a creator can configure one to five ordered caller tiers with availability, duration, and price. Creators onboard to Stripe Express, receive 70% of every paid call, and Bling takes a fixed 30% platform fee. Paid callers authorize a card through Stripe before queue admission and are charged only after the creator selects them; free tiers work without Stripe. Queue admission snapshots the price, payout destination, fee, and caller identity so terms cannot change afterward. Captured calls that never reach `LIVE` are automatically refunded with the creator transfer and platform fee reversed. See [docs/payments.md](docs/payments.md) and [docs/tier-configuration.md](docs/tier-configuration.md).
+Before going live, a creator can configure one to five ordered caller tiers with availability, duration, and price. Creators onboard through Stripe Connect (Accounts v2 recipient accounts with an Express dashboard), receive 70% of every paid call, and Bling takes a fixed 30% platform fee. Paid callers authorize a card through Stripe before queue admission and are charged only after the creator selects them; free tiers work without Stripe. Queue admission snapshots the price, payout destination, fee, and caller identity so terms cannot change afterward. Captured calls that never reach `LIVE` are automatically refunded with the creator transfer and platform fee reversed. See [docs/payments.md](docs/payments.md) and [docs/tier-configuration.md](docs/tier-configuration.md).
+
+Viewers can create accounts, publish a public creator profile, and discover creators through a searchable, category- and live-filtered directory with cursor pagination. Follows are stored in PostgreSQL, so they survive reloads and move across devices. A following feed lists live creators first. Going live writes one durable in-app update per show with a fixed cost regardless of follower count, and viewers can mark those updates read. A live channel page reports approximate channel-page visitors, which are deduplicated per actor and expire after 90 seconds; they are not broadcast viewer counts. See [docs/social-architecture.md](docs/social-architecture.md).
 
 ## Prerequisites
 
@@ -72,8 +74,19 @@ make migrate-down
 
 The schema encodes core invariants with foreign keys, check constraints, and partial unique indexes, including one live show per creator, one active call per show, idempotent queue admission, and immutable tier/duration snapshots on each caller entry.
 
+Both commands target the local `bling` database defined by the compose `migrate` service. To exercise a migration against an isolated database instead, override the entrypoint:
+
+```bash
+docker compose run --rm --entrypoint migrate migrate -path /migrations \
+  -database 'postgres://bling:bling@postgres:5432/bling_social_test?sslmode=disable' up
+```
+
+Rollback preconditions and what each social migration drops are documented in [docs/operations.md](docs/operations.md).
+
 ## Delivery roadmap
 
 The implementation is intentionally split into reviewable slices. See [docs/delivery-plan.md](docs/delivery-plan.md) for scope and acceptance criteria for each PR.
+
+A proposal to hold creator earnings on the platform and pay them out monthly, rather than splitting each charge at capture, is under review in [docs/creator-balance-plan.md](docs/creator-balance-plan.md). It is not implemented.
 
 New pull requests use the repository review template to record verification, operational impact, and deliberately deferred work.

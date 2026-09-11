@@ -92,7 +92,16 @@ docker compose run --rm migrate down 1
 
 This drops social profiles, follows, notifications and read state; it preserves original accounts, shows, queues, calls and payments. Reapplying recreates profiles from accounts but cannot restore dropped follows/read state. Do not roll back just to restart a server.
 
-The local `bling` database was backed up to `/private/tmp/bling-before-social-20260910.dump` and migrated to version 10 on 2026-09-10. The existing API on 8080 and previews on 5173 were left running because an active call was present. The updated preview is `http://127.0.0.1:5174/`, with its API on 18081. Both use the actual local database. For the same temporary arrangement:
+That compose service has the `bling` database baked into its entrypoint, so the command above always targets the real local database. To rehearse a rollback against an isolated database, override the entrypoint and name the database explicitly:
+
+```sh
+docker compose run --rm --entrypoint migrate migrate -path /migrations \
+  -database 'postgres://bling:bling@postgres:5432/bling_social_test?sslmode=disable' down 1
+```
+
+The cycle was rehearsed this way on 2026-09-10. `down 1` moved the schema to version 9 and left no social table, trigger, or function behind while `users`, `shows`, `queue_entries`, and `calls` stayed in place; `up` returned it to version 10 with every social object recreated. The real `bling` database was untouched and remained at version 10. Both directions finished in under a second on an empty database, which says nothing about production duration: the backfill, index creation, and trigger installation take locks proportional to existing account and show volume.
+
+The local `bling` database was backed up to `/private/tmp/bling-before-social-20260910.dump` and migrated to version 10 on 2026-09-10. The updated preview was reviewed in a browser against that database on the same day. The existing API on 8080 and preview on 5173 were left running so the migration would not interrupt a call in flight. The call that prompted this turned out to be a stale local `CREATED` row from 2026-08-31 with no expiry rather than a live conversation, so the pre-social API on 8080 has simply been running against the version 10 schema since the migration. That is the additive-schema compatibility the rollout order depends on, observed rather than only asserted. The updated preview is `http://127.0.0.1:5174/`, with its API on 18081. Both use the actual local database. For the same temporary arrangement:
 
 ```sh
 # Terminal 1, backend/

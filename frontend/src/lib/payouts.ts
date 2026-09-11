@@ -3,6 +3,11 @@ import { apiRequest } from "./api";
 
 export type PayoutStatus = {
   connected: boolean;
+  /**
+   * Stripe v2 `stripe_balance.stripe_transfers` capability status: "active",
+   * "pending", "restricted" or "unsupported". Only "active" permits paid calls.
+   */
+  transfersStatus: string;
   chargesEnabled: boolean;
   payoutsEnabled: boolean;
   detailsSubmitted: boolean;

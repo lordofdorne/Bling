@@ -94,6 +94,10 @@ func supportedStripeEvent(eventType stripe.EventType) bool {
 func (h paymentHandler) processEvent(r *http.Request, event stripe.Event) error {
 	switch event.Type {
 	case "account.updated":
+		// Only the account ID is taken from the event. Bling's connected
+		// accounts are Accounts v2 recipients, and this event carries the v1
+		// account shape, so the payout service re-reads authoritative state
+		// through the v2 API rather than trusting the payload's fields.
 		var account stripe.Account
 		if err := json.Unmarshal(event.Data.Raw, &account); err != nil {
 			return err
@@ -101,11 +105,7 @@ func (h paymentHandler) processEvent(r *http.Request, event stripe.Event) error 
 		if h.payouts == nil {
 			return nil
 		}
-		due := []string{}
-		if account.Requirements != nil {
-			due = append(due, account.Requirements.CurrentlyDue...)
-		}
-		return h.payouts.Reconcile(r.Context(), payoutdomain.StripeAccount{ID: account.ID, ChargesEnabled: account.ChargesEnabled, PayoutsEnabled: account.PayoutsEnabled, DetailsSubmitted: account.DetailsSubmitted, RequirementsDue: due})
+		return h.payouts.Reconcile(r.Context(), account.ID)
 	case "payment_intent.succeeded":
 		return h.reconcilePaymentIntent(r, event, paymentdomain.StatusCaptured)
 	case "payment_intent.canceled":

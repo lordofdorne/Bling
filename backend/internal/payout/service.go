@@ -56,7 +56,7 @@ func (s *Service) OnboardingLink(ctx context.Context, creatorID, email string) (
 	}
 	account, err := s.repository.ByCreator(ctx, creatorID)
 	if errors.Is(err, ErrAccountNotFound) {
-		created, createErr := s.gateway.CreateExpressAccount(ctx, creatorID, email, s.country)
+		created, createErr := s.gateway.CreateConnectedAccount(ctx, creatorID, email, s.country)
 		if createErr != nil {
 			return "", fmt.Errorf("create Stripe connected account: %w", createErr)
 		}
@@ -86,18 +86,36 @@ func (s *Service) OnboardingLink(ctx context.Context, creatorID, email string) (
 	return url, nil
 }
 
-func (s *Service) Reconcile(ctx context.Context, value StripeAccount) error {
-	if value.ID == "" {
+// Reconcile refreshes a connected account from Stripe after a webhook.
+//
+// The webhook payload itself is deliberately not trusted for account state. An
+// account.updated event carries the v1 account shape, whose charges_enabled and
+// payouts_enabled fields do not describe the v2 recipient capability Bling
+// depends on; writing them straight through would corrupt readiness. Only the
+// account ID is taken from the event, and the authoritative state is re-read
+// through the v2 API.
+func (s *Service) Reconcile(ctx context.Context, accountID string) error {
+	if accountID == "" {
 		return ErrAccountNotFound
 	}
-	account, err := s.repository.ByStripeAccountID(ctx, value.ID)
+	account, err := s.repository.ByStripeAccountID(ctx, accountID)
 	if errors.Is(err, ErrAccountNotFound) {
 		return nil
 	}
 	if err != nil {
 		return err
 	}
-	_, err = s.repository.Upsert(ctx, account.CreatorID, value, s.now().UTC())
+	if !s.Enabled() {
+		return nil
+	}
+	refreshed, err := s.gateway.RetrieveAccount(ctx, accountID)
+	if err != nil {
+		return fmt.Errorf("refresh Stripe connected account: %w", err)
+	}
+	if refreshed.ID != accountID {
+		return fmt.Errorf("refresh Stripe connected account: account identity changed")
+	}
+	_, err = s.repository.Upsert(ctx, account.CreatorID, refreshed, s.now().UTC())
 	return err
 }
 
@@ -106,5 +124,5 @@ func statusFor(account Account) Status {
 	if requirements == nil {
 		requirements = []string{}
 	}
-	return Status{Connected: true, ChargesEnabled: account.ChargesEnabled, PayoutsEnabled: account.PayoutsEnabled, DetailsSubmitted: account.DetailsSubmitted, Ready: account.Ready(), RequirementsDue: requirements, PlatformFeePercent: PlatformFeePercent}
+	return Status{Connected: true, TransfersStatus: account.TransfersStatus, ChargesEnabled: account.ChargesEnabled, PayoutsEnabled: account.PayoutsEnabled, DetailsSubmitted: account.DetailsSubmitted, Ready: account.Ready(), RequirementsDue: requirements, PlatformFeePercent: PlatformFeePercent}
 }
