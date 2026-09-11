@@ -21,7 +21,6 @@ Viewers can create accounts, publish a public creator profile, and discover crea
 ## Local setup
 
 ```bash
-cp .env.example .env
 make db-up
 make migrate
 cd frontend && npm install
