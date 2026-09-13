@@ -33,6 +33,11 @@ import { UiIcon } from "./UiIcon";
 
 const emptyTiers: QueueTier[] = [];
 
+function formatCallLength(seconds: number) {
+  const minutes = seconds / 60;
+  return `${Number(minutes.toFixed(2))} ${minutes === 1 ? "minute" : "minutes"}`;
+}
+
 function CallerQueue({ showID }: { showID: string }) {
   const tiers = useQueueTiers(showID);
   const viewer = useViewerQueue(showID);
@@ -78,12 +83,17 @@ function CallerQueue({ showID }: { showID: string }) {
         aria-label="Your call status"
       >
         <p className="eyebrow">You’ve been selected</p>
-        <div className="position-number">You’re up</div>
+        <div className="queue-status-badge">
+          <UiIcon name="call" size={18} />
+          You’re up
+        </div>
         <h2>The host chose your call.</h2>
         <p>Your microphone remains off until you choose to connect.</p>
         <div className="queue-summary">
           <strong>{call.data.caller.tierName}</strong>
-          <span>{call.data.callDurationSeconds}s reserved</span>
+          <span>
+            {formatCallLength(call.data.callDurationSeconds)} reserved
+          </span>
         </div>
         <CallAudioPanel call={call.data} role="viewer" />
       </section>
@@ -105,18 +115,21 @@ function CallerQueue({ showID }: { showID: string }) {
     return (
       <section
         className="queue-card queue-confirmation"
-        aria-label="Your queue status"
+        aria-label="Your call request status"
       >
-        <p className="eyebrow">You’re in line</p>
-        <div className="position-number">#{state.position}</div>
+        <p className="eyebrow">Call request sent</p>
+        <div className="queue-status-badge">
+          <UiIcon name="check" size={18} />
+          The host can see you
+        </div>
         <h2>Keep this tab open.</h2>
         <p>
-          The host can see your request. Your place is safely restored if you
-          refresh.
+          The host reviews every request and chooses who to call. Your request
+          is safely restored if you refresh.
         </p>
         <div className="queue-summary">
           <strong>{state.entry.tierName}</strong>
-          <span>{state.entry.callDurationSeconds}s call</span>
+          <span>{formatCallLength(state.entry.callDurationSeconds)} call</span>
         </div>
         <button
           className="danger-button"
@@ -124,7 +137,7 @@ function CallerQueue({ showID }: { showID: string }) {
           onClick={() => leave.mutate()}
           disabled={leave.isPending}
         >
-          {leave.isPending ? "Leaving…" : "Leave the line"}
+          {leave.isPending ? "Removing…" : "Withdraw request"}
         </button>
         {leave.isError && (
           <div className="form-error" role="alert">
@@ -167,7 +180,7 @@ function CallerQueue({ showID }: { showID: string }) {
 
   return (
     <section className="queue-card">
-      <h2>Join the caller line</h2>
+      <h2>Request a call</h2>
       <p>Tell the host who you are and what you want to talk about.</p>
       <form className="auth-form" onSubmit={submit}>
         <label>
@@ -191,7 +204,7 @@ function CallerQueue({ showID }: { showID: string }) {
         {availableTiers.length > 0 && (
           <fieldset className="caller-tier-options">
             <legend>Choose your tier</legend>
-            {availableTiers.map((tier, index) => (
+            {availableTiers.map((tier) => (
               <label className="caller-tier-option" key={tier.id}>
                 <input
                   type="radio"
@@ -203,8 +216,8 @@ function CallerQueue({ showID }: { showID: string }) {
                 <span>
                   <strong>{tier.name}</strong>
                   <small>
-                    {tier.callDurationSeconds}s · {formatPrice(tier.priceCents)}
-                    {index === 0 ? " · Highest priority" : ""}
+                    {formatCallLength(tier.callDurationSeconds)} ·{" "}
+                    {formatPrice(tier.priceCents)}
                   </small>
                 </span>
               </label>
@@ -226,7 +239,7 @@ function CallerQueue({ showID }: { showID: string }) {
             ? "Preparing…"
             : (selectedTier?.priceCents ?? 0) > 0
               ? "Continue to payment"
-              : "Join the line"}
+              : "Send call request"}
         </button>
         {(join.isError || authorize.isError) && (
           <div className="form-error" role="alert">
@@ -397,7 +410,20 @@ export function PublicHotline() {
           </div>
         </div>
       )}
-      {profile.isError && !(profile.error instanceof ApiError && profile.error.status === 404) && <div className="form-error" role="alert">Could not load channel details. <button className="text-button" onClick={()=>void profile.refetch()}>Retry profile</button></div>}
+      {profile.isError &&
+        !(
+          profile.error instanceof ApiError && profile.error.status === 404
+        ) && (
+          <div className="form-error" role="alert">
+            Could not load channel details.{" "}
+            <button
+              className="text-button"
+              onClick={() => void profile.refetch()}
+            >
+              Retry profile
+            </button>
+          </div>
+        )}
       {liveShow.isPending ? (
         <div className="channel-state">
           <div className="status">Checking the Hotline…</div>

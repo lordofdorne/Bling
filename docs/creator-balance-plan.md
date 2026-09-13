@@ -1,44 +1,68 @@
-# Proposed: platform-held creator balances with monthly payouts
+# Proposed: platform-held creator balances, Bling-run payout setup, monthly payouts
 
-Status: **proposal, not implemented.** Written 2026-09-10 for review. No code or schema in this document exists yet.
+Status: **superseded.** This original proposal is retained for decision history. The approved, implementation-grade source of truth is [creator-payout-implementation-runbook.md](creator-payout-implementation-runbook.md); its embedded-onboarding and payout-saga decisions replace conflicting details below.
 
-## Goal
+## What a creator experiences
 
-A creator signs up for Bling, goes live, and earns immediately, with no Stripe step. Earnings accumulate as a balance Bling holds. Identity verification is collected only when they are about to be paid. Bling pays out once a month.
+1. Signs up for Bling. No payment setup of any kind.
+2. Goes live and takes paid calls immediately. Earnings appear as a balance in the creator studio.
+3. Before their first payout, fills in a **Bling** form: name, address, date of birth, SSN last 4, and bank account.
+4. Gets paid at the end of the month.
 
-## What is and is not possible
+The creator never sees a Stripe page, never creates a Stripe account, and never leaves Bling. Stripe is infrastructure Bling uses, not a product the creator signs up for.
 
-Holding funds and paying monthly is a standard, fully supported pattern. Removing verification entirely is not: anyone who receives money must be identity-verified, which is a regulatory requirement rather than a Stripe limitation. The realistic target is therefore **deferral**, not elimination — nothing at signup, a short identity step before the first payout.
+## The one thing that cannot be removed
 
-For most US individuals that step is name, date of birth, SSN last 4, and a bank account.
+Whoever receives money has to be identity-verified. That is a legal requirement and no processor can waive it. What *is* removable — and what this plan removes — is the creator ever dealing with Stripe: the redirect, the Stripe-branded onboarding, the Stripe dashboard, the Stripe account.
 
-## Why this forces a change to the charge pattern
+So the data still gets collected. It is collected by Bling, in Bling's own interface, as part of "set up your payout details."
 
-Today Bling uses **destination charges**: at capture, Stripe moves the creator's share to their connected account and returns a 30% application fee. A destination charge requires a transfer-ready connected account *at the moment of payment*. That requirement is precisely what forces creators to set up Stripe before they can earn.
+## How it works
 
-**Separate charges and transfers** removes it. The payment lands wholly in Bling's balance; transfers are created later, on Bling's schedule. This is what makes deferral possible.
+### Account configuration
 
-One rule comes with it: with separate charges and transfers, the platform's cut is taken by **transferring less**, never with `application_fee_amount`. Using both together is incorrect.
+Connected accounts are created as they are today, with two changes:
 
-The Accounts v2 recipient accounts already implemented are the correct account type for this pattern, so that work carries over unchanged.
+| Setting | Now | Proposed |
+| --- | --- | --- |
+| `dashboard` | `express` | `none` |
+| Requirement collection | Stripe (hosted onboarding) | `application` (Bling collects) |
+| Fees / losses collector | `application` | unchanged |
+| Capability | `stripe_balance.stripe_transfers` | unchanged |
 
-## Money flow
+This is Stripe's white-label configuration. The three accounts already sitting in the sandbox use exactly this shape, so it is known to work on this platform.
+
+Accounts are created silently when a creator first earns — not when they sign up, and not by any action they take.
+
+### Collecting payout details without holding the sensitive data
+
+The identity fields go straight from the creator's browser to Stripe using **account tokens**: Stripe.js tokenizes the form client-side and Bling's servers receive only a token, which is attached to the connected account.
+
+This matters. Date of birth, SSN, and bank numbers never reach Bling's servers, logs, or database, which keeps the sensitive-data burden roughly where it is today. Building the form the naive way — posting an SSN to Bling's API — would be a materially different security and compliance posture. The plan is the tokenized version.
+
+Bling stores only what it needs to show status: which fields are outstanding, and whether the account can receive transfers.
+
+### Holding funds and paying monthly
+
+Today Bling uses **destination charges**: at capture, Stripe immediately splits the payment to the creator's account. A destination charge requires a transfer-ready account *at the moment of payment*, which is exactly what forces payout setup to happen before a creator can earn.
+
+**Separate charges and transfers** removes that. The payment lands wholly in Bling's balance and stays there. Transfers are created later, on Bling's schedule.
+
+One rule comes with it: the platform's cut is taken by **transferring less**, never with `application_fee_amount`. Using both together is incorrect.
 
 | Stage | Today | Proposed |
 | --- | --- | --- |
-| Caller admitted | Card authorized; destination account and fee snapshotted | Unchanged |
-| Creator selects caller | Captured; Stripe splits to creator, fee to Bling | Captured wholly into the Bling balance |
-| Call ends | — | Ledger credits the creator their 70% once the refund window closes |
-| Refund (never reached `LIVE`) | Refund with `reverse_transfer` and `refund_application_fee` | Refund the charge; no transfer to reverse |
+| Caller admitted | Card authorized, fee snapshotted | Unchanged |
+| Creator selects caller | Captured, split to creator immediately | Captured wholly into Bling's balance |
+| Call ends | — | Ledger credits the creator 70% once the refund window closes |
+| Refund before `LIVE` | Refund with `reverse_transfer` and `refund_application_fee` | Refund the charge; no transfer to reverse |
 | Month end | — | One transfer per creator for their available balance |
 
-Refund handling gets materially simpler and safer: money that was never moved does not have to be clawed back.
-
-Fee arithmetic is unchanged — 30% of the tier price, integer cents, rounding down — but it is applied when the ledger entry is written rather than sent to Stripe at capture.
+Refunds get simpler and safer: money that never moved does not have to be clawed back. Fee arithmetic is unchanged — 30%, integer cents, rounding down — just applied when the ledger entry is written instead of at capture.
 
 ## Ledger
 
-Balances are derived from an append-only entry table rather than a mutable counter column, so every movement is auditable and no update can silently lose money.
+Balances derive from append-only entries rather than a mutable counter, so every movement is auditable and no update can silently lose money.
 
 ```
 creator_ledger_entries
@@ -60,52 +84,63 @@ payout_items   (id, run_id, creator_id, amount_cents, stripe_transfer_id,
                 status, failure_code, idempotency_key UNIQUE)
 ```
 
-Balance is `SUM(amount_cents)` per creator, indexed on `creator_id`. Available balance additionally requires `available_at <= now()`. If summation becomes hot, add a periodic rollup rather than a mutable balance column.
+Balance is `SUM(amount_cents)` per creator, indexed on `creator_id`; available balance additionally requires `available_at <= now()`. If summation becomes hot, add a periodic rollup rather than a mutable column.
 
-`idempotency_key` is what makes the ledger safe to retry: a redelivered webhook or a re-run payout job cannot double-credit or double-pay.
+`idempotency_key` is what makes this safe to retry: a redelivered webhook or a re-run payout job cannot double-credit or double-pay.
 
-**`available_at` matters.** A credit becomes available only once the call has ended and its refund window has passed. Paying out money that may still be refunded creates negative balances that are hard to recover.
+**`available_at` is load-bearing.** A credit becomes available only after the call ends and its refund window passes. Paying out money that might still be refunded creates negative balances that are painful to recover.
 
-## Payout run
+## Monthly payout run
 
-A monthly job, safe to re-run:
+A job that is safe to re-run and safe to run concurrently:
 
-1. Select creators whose available balance meets a configured minimum.
-2. Skip any whose transfers capability is not `active`; their balance simply rolls to the next run.
-3. Create one Stripe transfer per creator, keyed `bling-payout-<creator_id>-<period>`, so a retry or overlapping replica cannot pay twice.
-4. Write a `PAYOUT` debit and a `payout_item` in the same transaction as the transfer record.
-5. On failure, mark the item failed and leave the balance intact for the next run.
+1. Select creators whose available balance meets the configured minimum.
+2. Skip any whose transfers capability is not `active` — their balance rolls to the next run untouched.
+3. Create one transfer per creator, keyed `bling-payout-<creator_id>-<period>`, so a retry or a second replica cannot pay twice.
+4. Write the `PAYOUT` debit and the `payout_item` in the same transaction as the transfer record.
+5. On failure, mark the item failed and leave the balance intact for next time.
 
-Concurrency follows the existing worker pattern: PostgreSQL row locks with `SKIP LOCKED`, so multiple API replicas can run it without coordination.
+Concurrency follows the existing worker pattern — row locks with `SKIP LOCKED` — so replicas need no coordination.
 
-## Changes to existing behavior
+## What Bling takes on
 
-- **The readiness gate is removed.** `charges_enabled AND payouts_enabled AND details_submitted` is currently inlined in payment, queue and show SQL to block paid tiers without a ready payout account. Under this model a creator may run paid tiers before onboarding; readiness moves from *earning* to *withdrawing*.
-- **Onboarding moves to first withdrawal**, triggered by the creator or by the first payout run that finds them eligible.
-- **Disputes** already debit the Bling balance. The dispute must additionally reverse the creator's ledger credit if it has not been paid out, and create a negative balance if it has. That negative balance needs a stated policy.
+Worth stating plainly, because this is the real cost of the white-label model:
 
-## Onboarding experience
+- **Requirement remediation.** When Stripe later asks for more information, there is no Stripe UI to send the creator to. Bling must surface the outstanding fields and collect them. This is the main reason Stripe's default guidance steers platforms toward hosted onboarding, and it is an ongoing obligation, not a one-time build.
+- **Support and disputes.** No Stripe dashboard for creators means every "where is my money" question arrives at Bling.
+- **Losses.** Already the case — the platform is the losses collector.
 
-The current hosted Stripe link is what makes this feel like "setting up Stripe" — it redirects to a Stripe-branded page. Connect **embedded components** keep identity collection inside the creator studio, which reads as setting up a Bling account. This is a frontend addition plus a client-secret endpoint, and is separable from the ledger work: the ledger can ship first with the existing hosted link, deferred.
+## Changes to what already exists
+
+- The readiness gate `charges_enabled AND payouts_enabled AND details_submitted`, currently inlined in payment, queue and show SQL, no longer blocks paid tiers. Readiness moves from *earning* to *withdrawing*.
+- Account creation switches from `dashboard: express` to the white-label configuration above. The single sandbox account created under the current code would be recreated; no real money has moved.
+- Disputes must reverse the creator's ledger credit if it has not been paid out, and create a negative balance if it has.
 
 ## Operational surface
 
-New metrics: total held balance, unpaid balance older than one cycle, payout run duration, failed payout items, creators with a balance but no verified account. Alert on failed items and on balances aging past two cycles.
+New metrics: total held balance, balance unpaid beyond one cycle, payout run duration, failed payout items, and creators carrying a balance with no verified account. Alert on failed items and on balances aging past two cycles.
 
-## Open questions for you
+## Open questions
 
-1. **Payout schedule and minimum.** Calendar month end, or rolling 30 days? Minimum payout amount?
-2. **Refund window.** How long after a call ends before its earnings become available?
-3. **Unclaimed balances.** What happens to a creator who earns but never verifies? Reminder cadence, and a cutoff policy.
+1. **Schedule and minimum.** Calendar month end or rolling 30 days? Minimum payout amount?
+2. **Refund window.** How long after a call ends before earnings become available?
+3. **Unclaimed balances.** A creator earns but never completes payout details: reminder cadence, and a cutoff policy.
 4. **Negative balances** from disputes on already-paid earnings: absorb, or carry against future earnings?
-5. **Compliance.** Holding creator funds for a month is a normal marketplace arrangement, but the holding period and the unclaimed-funds policy are worth confirming with Stripe and your counsel. That confirmation should happen before this ships, not after.
+5. **Compliance.** Holding creator funds for a month and collecting KYC data as the platform are both standard marketplace arrangements, but the holding period, the unclaimed-funds policy, and the white-label responsibilities are worth confirming with Stripe and your counsel before this ships.
 
 ## Non-goals
 
-Instant or daily payouts, creator-initiated withdrawal on demand, multi-currency, and non-US creators. Each is additive later.
+Instant or on-demand withdrawal, multi-currency, non-US creators, and business (non-individual) accounts. Each is additive later.
 
 ## Rollout
 
-The schema is additive and can ship before the charge-flow change. Suggested order: ledger tables and entry writing alongside the existing destination charges (dual-write, no behavior change) → verify ledger totals against Stripe → switch capture to separate charges → remove the readiness gate → enable the payout run → optionally move onboarding to embedded components.
+The schema is additive and can land before any behavior changes. Suggested order:
 
-Because `creator_payout_accounts` currently holds a single test row and no real money has moved, this is the cheapest point at which to make the change.
+1. Ledger tables, written alongside the existing destination charges — dual-write, no behavior change.
+2. Verify ledger totals reconcile against Stripe.
+3. Switch capture to separate charges and transfers.
+4. Switch account creation to the white-label configuration and build the tokenized payout-details form.
+5. Remove the readiness gate so creators earn before setup.
+6. Enable the monthly payout run.
+
+Steps 1 and 2 are reversible and prove the accounting before any money moves differently. Because `creator_payout_accounts` holds one test row and no real money has moved, this is the cheapest moment to make the change.

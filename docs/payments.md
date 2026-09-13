@@ -1,53 +1,59 @@
-# Stripe payments
+# Stripe payments and creator payouts
 
-Bling uses Stripe PaymentIntents with manual capture. A paid caller authorizes the tier price before joining the queue; Stripe places a temporary hold, but no money is captured yet. When the host selects that caller, the API first reserves the call in PostgreSQL, captures the exact snapshotted amount with an idempotency key, and only then changes the call to `CREATED`, publishes selection, and permits signaling.
+Bling uses Stripe PaymentIntents with manual capture. A paid caller authorizes the tier price before joining the queue. Stripe captures the exact snapshotted amount only after the creator selects that caller; free tiers never call Stripe.
 
-Free tiers never call Stripe. Paid tiers fail closed when Stripe is not configured or the creator has not completed payout onboarding.
+## Platform charges and earnings
 
-## Creator payouts and platform fee
+New payment attempts use the `PLATFORM` flow. Their PaymentIntents contain neither `transfer_data.destination` nor `application_fee_amount`, so the captured payment remains in Bling's platform balance. The attempt snapshots the 3,000-basis-point fee and whole-cent fee amount. When the call first reaches `LIVE`, one immutable ledger entry credits the creator with gross less that fee. The credit becomes available after `CREATOR_EARNINGS_HOLD`.
 
-Creators connect a Stripe connected account from the dashboard. Accounts are created through the Accounts v2 API (`POST /v2/core/accounts`) as recipient accounts with an Express dashboard, because Stripe rejects v1 `type=express` creation for new Connect integrations. Bling stays merchant of record and the platform collects both fees and losses, so only the `stripe_balance.stripe_transfers` capability is requested; a merchant configuration is deliberately not requested, as it is unnecessary for this model and lengthens onboarding. Bling creates destination charges: the creator's connected account receives the call proceeds and Stripe returns a fixed 30% application fee to Bling. Stripe processing fees are paid by the Bling platform, so the creator's contractual share is 70% of the call price.
+Creators may create paid tiers, go live, and earn without payout setup. Readiness only controls monthly transfers. Historical `DESTINATION` attempts remain supported: their original connected-account destination and application fee are still verified, reconciled, and refunded correctly.
 
-Paid-call readiness follows the v2 capability status, not the deprecated v1 `charges_enabled` and `payouts_enabled` fields. `creator_payout_accounts.transfers_status` records the capability verbatim and only `active` admits paid callers. The three boolean columns remain because the readiness predicate is inlined in payment, queue and show SQL; they are now derived from the transfers capability, and `charges_enabled` mirrors it rather than describing a capability of its own, since a recipient account never accepts charges itself. `account.updated` webhooks supply only an account ID: that event carries the v1 account shape, so the payout service re-reads authoritative state through the v2 API instead of writing the payload's fields. Stripe's v2 capability events (`v2.core.account[configuration.recipient].capability_status_updated`) are delivered as thin events through a separate event-destination mechanism and are not yet wired up; readiness stays correct because the status endpoint refreshes from Stripe on every read.
+The complete data model, state machines, rollout, and operating contract are in [creator-payout-implementation-runbook.md](creator-payout-implementation-runbook.md).
 
-Every paid authorization snapshots the destination account, the 3,000-basis-point fee policy, the whole-cent application fee, and the creator's tier price. The fee uses integer cents and rounds down when 30% is fractional. These fields are verified against Stripe before queue admission and cannot be changed by later tier edits.
+The implementation plan for caller-saved payment methods, Link, and explicit creator bank-account readiness is in [saved-payments-and-bank-payouts-plan.md](saved-payments-and-bank-payouts-plan.md).
 
-Paid Hotlines cannot start until Stripe reports `details_submitted`, `charges_enabled`, and `payouts_enabled`. The signed `account.updated` webhook keeps those capabilities current. Account Links are generated only for the signed-in creator, use fixed application return URLs, and are treated as single-use redirects.
+## Payout setup
 
-## Refund and recovery policy
+The dashboard creates a short-lived Stripe Account Session for the signed-in creator and renders Connect embedded onboarding inside Bling. Newly created Accounts v2 recipients request only the `stripe_balance.stripe_transfers` capability and use no Stripe dashboard. Stripe collects identity, bank, document, validation, and service-agreement information directly; Bling does not receive or log it.
 
-If a paid call is captured but never reaches `LIVE`, ending or failing that call schedules a full refund in the same PostgreSQL transaction. A background worker creates the Stripe refund with `reverse_transfer=true` and `refund_application_fee=true`, so the creator transfer and Bling's fee are both returned as part of the reversal. Calls that reached `LIVE` are never refunded automatically; later customer-support refunds require an explicit policy and endpoint.
+An onboarding exit or return is never treated as completion. Bling retrieves the account and requires an active transfers capability. Currently-due and past-due user requirements block transfer readiness; eventually-due requirements do not create a setup loop.
 
-Refund requests use a stable Stripe idempotency key, exponential retries, and a ten-attempt ceiling for provider errors. Pending Stripe refunds are polled with the same key and reconciled from `refund.created`, `refund.updated`, and `refund.failed` events.
+## Monthly transfer worker
 
-Every supported Stripe event is claimed in a durable event ledger before processing. Completed event IDs are ignored on redelivery, failed processing can retry, and stale processing claims become reclaimable after five minutes. Dispute and connected-account payout events are retained for creator activity, operational alerts, and support investigation.
+The worker is off unless `CREATOR_PAYOUTS_ENABLED=true`. On `CREATOR_PAYOUT_DAY`, it creates one run for the previous calendar month, reserves each verified creator's available balance above `CREATOR_PAYOUT_MINIMUM_CENTS`, and sends one idempotent Stripe transfer per payout item. `SKIP LOCKED`, unique run/item constraints, stable Stripe idempotency keys, and immutable payout-reservation ledger entries make concurrent and repeated execution safe.
 
-## Local test mode
+The transfer moves money from Bling to the connected Stripe balance. A later connected-account payout moves that balance to the creator's bank and is tracked separately through payout webhooks.
 
-1. Create or open a Stripe sandbox with Connect enabled and copy its test secret and publishable keys into `.env` as `STRIPE_SECRET_KEY` and `STRIPE_PUBLISHABLE_KEY`. Set `STRIPE_CONNECT_COUNTRY` to the two-letter launch country (the local default is `US`).
-2. Install and authenticate the Stripe CLI.
-3. In a separate terminal, forward signed events:
+Defaults:
 
-   ```sh
-   stripe listen \
-     --forward-to localhost:8080/api/v1/payments/webhook \
-     --forward-connect-to localhost:8080/api/v1/payments/webhook
-   ```
+```text
+CREATOR_EARNINGS_HOLD=168h
+CREATOR_PAYOUT_MINIMUM_CENTS=2500
+CREATOR_PAYOUT_DAY=1
+CREATOR_PAYOUT_CURRENCY=usd
+CREATOR_PAYOUTS_ENABLED=false
+```
 
-4. Copy the printed `whsec_...` value into `.env` as `STRIPE_WEBHOOK_SECRET`, then restart the API.
-5. Run PostgreSQL, Redis, migrations, the API, and the web app as usual. On the creator dashboard, choose **Set up payouts** and complete Stripe's test onboarding, including a test payout account.
-6. Configure a paid tier on a draft Hotline and start it. In Stripe's payment form use test card `4242 4242 4242 4242`, any future date, and any three-digit CVC. Never use a real card in test mode.
+## Refund and dispute policy
 
-The CLI profile used by `stripe listen --print-secret`, `stripe listen`, and `stripe trigger` must be the same. Bling uses the Dahlia generation of Stripe's Go SDK so it can strictly validate and deserialize events emitted by a Dahlia-versioned Stripe account; keep the SDK and configured webhook endpoint on the same Stripe API release train during future upgrades.
+If a captured call never reaches `LIVE`, Bling schedules a full refund and creates no earning. A `PLATFORM` refund does not request a transfer or application-fee reversal because neither exists. Historical `DESTINATION` refunds retain both reversal flags.
 
-The caller page should say the card is authorized, the Stripe Dashboard should show an uncaptured payment, and selecting the caller should change it to succeeded before the audio call opens. Leaving the queue cancels and releases the authorization. Failing the selected call before it reaches `LIVE` should create a succeeded full refund with a transfer reversal and application-fee refund. Stripe's payment, refund, dispute, account, and connected payout webhooks reconcile interrupted API requests idempotently.
+If a refund succeeds after an earning exists, a database trigger adds one creator-share reversal. Open disputes add one dispute debit; a won or prevented dispute adds one release. Unique business-event keys make webhook redelivery safe. Negative balances carry against future earnings.
+
+## Local sandbox flow
+
+1. Configure Stripe test secret, publishable, and webhook keys in `.env` and keep `CREATOR_PAYOUTS_ENABLED=false`.
+2. Run `make db-up`, `make migrate`, the API, and the frontend.
+3. Forward platform and connected events to `/api/v1/payments/webhook` with the Stripe CLI.
+4. Create a paid tier without payout setup, authorize test card `4242 4242 4242 4242`, select the caller, and transition the call to `LIVE`.
+5. Confirm the charge has no destination and `/api/v1/payouts/balance` reports the pending creator share.
+6. Open **Set up payouts** and finish the embedded test onboarding. Confirm a page refresh still reports the account ready.
+7. Test a payout run with a controlled clock or manual worker invocation before enabling the production scheduler.
 
 ## Operational rules
 
-- Do not log client secrets, card details, Stripe signatures, or API keys.
-- Configure the webhook endpoint with the raw signing secret for each environment.
-- Configure the Stripe event destination to receive events from both the platform account and connected accounts; `account.updated` is a connected-account event.
-- Authorization holds expire on card-network timelines. Canceled or failed intents are removed from the queue by webhook reconciliation.
-- The database amount, currency, show, tier, viewer identity, and one-time queue claim are all verified before admission.
-- The connected-account destination and 30% application fee are also verified before admission.
-- Automatic refunds cover only captured calls that never reached `LIVE`. Manual/partial refund authorization, dispute evidence submission, negative-balance funding, and tax reporting remain separate operational work.
+- Never log Account Session secrets, PaymentIntent client secrets, card or bank data, identity data, Stripe signatures, or API keys.
+- Reconcile platform charges, refunds, disputes, transfers, connected payouts, and ledger liability every payout cycle.
+- Maintain enough available platform balance and a loss reserve for refunds and disputes. Aggregate monthly transfers can temporarily fail when the Stripe platform balance is unavailable.
+- Configure tax reporting, unclaimed balances, creator terms, and support procedures before production payouts.
+- Ask Stripe about funds segregation availability; the system does not assume that private-preview feature exists.

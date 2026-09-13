@@ -144,9 +144,10 @@ describe("App routes", () => {
       target: { value: "My launch" },
     });
     fireEvent.click(screen.getByLabelText(/Standard/));
-    fireEvent.click(screen.getByRole("button", { name: "Join the line" }));
+    fireEvent.click(screen.getByRole("button", { name: "Send call request" }));
 
-    expect(await screen.findByText("#1")).toBeInTheDocument();
+    expect(await screen.findByText("The host can see you")).toBeInTheDocument();
+    expect(screen.queryByText("#1")).not.toBeInTheDocument();
     const joinCall = fetchMock.mock.calls.find(
       ([input, init]) =>
         String(input).endsWith("/queue") && init?.method === "POST",
@@ -157,7 +158,7 @@ describe("App routes", () => {
     expect(JSON.parse(String(joinCall?.[1]?.body)).tierId).toBe("tier-1");
   });
 
-  it("restores a caller position after refresh", async () => {
+  it("restores a caller request after refresh without showing a position", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(async (input: RequestInfo | URL) => {
@@ -191,8 +192,9 @@ describe("App routes", () => {
       }),
     );
     renderAt("/u/alice");
-    expect(await screen.findByText("#3")).toBeInTheDocument();
-    expect(screen.getByText(/safely restored/i)).toBeInTheDocument();
+    expect(await screen.findByText("The host can see you")).toBeInTheDocument();
+    expect(screen.queryByText("#3")).not.toBeInTheDocument();
+    expect(screen.getByText(/request is safely restored/i)).toBeInTheDocument();
   });
 
   it("renders a not-found state", () => {
@@ -260,7 +262,9 @@ describe("App routes", () => {
     expect(
       await screen.findByRole("heading", { name: "Welcome, alice." }),
     ).toBeInTheDocument();
-    expect(screen.getByText("/u/alice")).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: /View public page/ }),
+    ).toHaveAttribute("href", "/u/alice");
   });
 
   it("shows a safe registration error from the API", async () => {
@@ -479,14 +483,15 @@ describe("App routes", () => {
     );
 
     renderAt("/dashboard");
+    expect(await screen.findByText("Refunded")).toBeInTheDocument();
+    expect(screen.getByText("Creator share: $17.50")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("link", { name: "Payout settings" }));
     expect(
-      await screen.findByRole("heading", { name: "Stripe payouts are ready." }),
+      await screen.findByRole("heading", { name: "Your payouts are ready." }),
     ).toBeInTheDocument();
     expect(
       screen.getByText(/receive 70% of each paid call/i),
     ).toBeInTheDocument();
-    expect(screen.getByText("Refunded")).toBeInTheDocument();
-    expect(screen.getByText("Creator share: $17.50")).toBeInTheDocument();
   });
 
   it("ends the active Hotline", async () => {

@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useMemo, useState } from "react";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useLogout, useMe } from "../lib/auth";
 import {
   useActiveCall,
@@ -7,7 +7,11 @@ import {
   useSelectRandomCaller,
 } from "../lib/calls";
 import { useCreatorQueue, useQueueEvents } from "../lib/queue";
-import { usePayoutOnboarding, usePayoutStatus } from "../lib/payouts";
+import {
+  useCreatorBalance,
+  usePayoutAccountSession,
+  usePayoutStatus,
+} from "../lib/payouts";
 import { PaymentActivity, usePaymentActivity } from "../lib/finance";
 import {
   HotlineTier,
@@ -22,13 +26,37 @@ import { ProfileEditor } from "./ProfileEditor";
 import { CallAudioPanel } from "./CallAudioPanel";
 import { UiIcon } from "./UiIcon";
 import { Brand } from "./ViewerShell";
+import { PayoutSetup } from "./PayoutSetup";
 
 function CallerList({ showID }: { showID: string }) {
   const queue = useCreatorQueue(showID);
   const activeCall = useActiveCall(showID);
   const selectCaller = useSelectCaller(showID);
   const selectRandom = useSelectRandomCaller(showID);
+  const [search, setSearch] = useState("");
   useQueueEvents(showID, "creator", true);
+  const entries = useMemo(() => queue.data ?? [], [queue.data]);
+  const sortedEntries = useMemo(
+    () =>
+      [...entries].sort(
+        (left, right) =>
+          right.priorityRank - left.priorityRank ||
+          left.joinedAt.localeCompare(right.joinedAt),
+      ),
+    [entries],
+  );
+  const normalizedSearch = search.trim().toLocaleLowerCase();
+  const visibleEntries = useMemo(
+    () =>
+      normalizedSearch
+        ? sortedEntries.filter((entry) =>
+            [entry.displayName, entry.topic, entry.tierName].some((value) =>
+              value.toLocaleLowerCase().includes(normalizedSearch),
+            ),
+          )
+        : sortedEntries,
+    [normalizedSearch, sortedEntries],
+  );
   if (queue.isPending || activeCall.isPending)
     return <div className="status">Loading caller queue…</div>;
   if (queue.isError || activeCall.isError)
@@ -37,13 +65,12 @@ function CallerList({ showID }: { showID: string }) {
         Unable to load the caller queue.
       </div>
     );
-  const entries = queue.data ?? [];
   const call = activeCall.data;
   return (
-    <section className="caller-list" aria-label="Caller queue">
+    <section className="caller-list" aria-label="Caller requests">
       <div className="caller-list-heading">
         <div>
-          <h2>Caller queue</h2>
+          <h2>Caller requests</h2>
           <span>{entries.length} waiting</span>
         </div>
         {!call && entries.length > 0 && (
@@ -53,7 +80,7 @@ function CallerList({ showID }: { showID: string }) {
             onClick={() => selectRandom.mutate(undefined)}
             disabled={selectRandom.isPending}
           >
-            {selectRandom.isPending ? "Choosing…" : "Choose priority random"}
+            {selectRandom.isPending ? "Choosing…" : "Pick a random caller"}
           </button>
         )}
       </div>
@@ -63,7 +90,8 @@ function CallerList({ showID }: { showID: string }) {
           <strong>{call.caller.displayName}</strong>
           <p>{call.caller.topic}</p>
           <span>
-            {call.caller.tierName} · {call.callDurationSeconds}s reserved
+            {call.caller.tierName} ·{" "}
+            {formatCallLength(call.callDurationSeconds)} reserved
           </span>
           {call.status === "PAYMENT_PENDING" ? (
             <p>
@@ -80,30 +108,59 @@ function CallerList({ showID }: { showID: string }) {
           Share your public URL. Callers will appear here.
         </p>
       ) : (
-        <ol>
-          {entries.map((entry) => (
-            <li key={entry.id}>
-              <div>
-                <strong>{entry.displayName}</strong>
-                <span>
-                  {entry.tierName} · {entry.callDurationSeconds}s ·{" "}
-                  {entry.tierPriceCents > 0
-                    ? `${formatPrice(entry.tierPriceCents)} authorized`
-                    : "Free"}
-                </span>
-              </div>
-              <p>{entry.topic}</p>
-              <button
-                className="button secondary"
-                type="button"
-                onClick={() => selectCaller.mutate(entry.id)}
-                disabled={Boolean(call) || selectCaller.isPending}
-              >
-                Select caller
-              </button>
-            </li>
-          ))}
-        </ol>
+        <>
+          <div className="caller-list-toolbar">
+            <label className="caller-search">
+              <span className="sr-only">Search caller requests</span>
+              <UiIcon name="search" size={17} />
+              <input
+                type="search"
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                placeholder="Search name, topic, or tier"
+                autoComplete="off"
+              />
+            </label>
+            <span className="caller-result-count" aria-live="polite">
+              {visibleEntries.length === entries.length
+                ? `${entries.length} requests`
+                : `${visibleEntries.length} of ${entries.length}`}
+            </span>
+          </div>
+          {visibleEntries.length === 0 ? (
+            <div className="caller-search-empty">
+              <UiIcon name="search" size={20} />
+              <strong>No matching callers</strong>
+              <span>Try another name, topic, or tier.</span>
+            </div>
+          ) : (
+            <ol className="caller-request-list">
+              {visibleEntries.map((entry) => (
+                <li key={entry.id}>
+                  <div>
+                    <strong>{entry.displayName}</strong>
+                    <span>
+                      {entry.tierName} ·{" "}
+                      {formatCallLength(entry.callDurationSeconds)} ·{" "}
+                      {entry.tierPriceCents > 0
+                        ? `${formatPrice(entry.tierPriceCents)} authorized`
+                        : "Free"}
+                    </span>
+                  </div>
+                  <p>{entry.topic}</p>
+                  <button
+                    className="button secondary"
+                    type="button"
+                    onClick={() => selectCaller.mutate(entry.id)}
+                    disabled={Boolean(call) || selectCaller.isPending}
+                  >
+                    Select caller
+                  </button>
+                </li>
+              ))}
+            </ol>
+          )}
+        </>
       )}
       {(selectCaller.isError || selectRandom.isError) && (
         <div className="form-error" role="alert">
@@ -121,6 +178,11 @@ function formatPrice(cents: number) {
   }).format(cents / 100);
 }
 
+function formatCallLength(seconds: number) {
+  const minutes = seconds / 60;
+  return `${Number(minutes.toFixed(2))} ${minutes === 1 ? "minute" : "minutes"}`;
+}
+
 function activityLabel(activity: PaymentActivity) {
   if (activity.disputeStatus) return `Dispute: ${activity.disputeStatus}`;
   if (activity.refundStatus === "SUCCEEDED") return "Refunded";
@@ -132,18 +194,32 @@ function activityLabel(activity: PaymentActivity) {
 type TierDraft = Pick<
   HotlineTier,
   "name" | "callDurationSeconds" | "priceCents" | "enabled"
-> & { key: string };
+> & { key: string; durationInput: string; priceInput: string };
+
+function durationInputFromSeconds(seconds: number) {
+  return Number((seconds / 60).toFixed(2)).toString();
+}
+
+function priceInputFromCents(cents: number) {
+  return (cents / 100).toFixed(2);
+}
+
+function centsFromPriceInput(value: string) {
+  if (!/^\d*(?:\.\d{0,2})?$/.test(value)) return null;
+  if (value === "" || value === ".") return 0;
+  const dollars = Number(value);
+  if (!Number.isFinite(dollars) || dollars > 10_000) return null;
+  return Math.round(dollars * 100);
+}
 
 function TierConfiguration({
   showID,
   onStart,
   starting,
-  payoutsReady,
 }: {
   showID: string;
   onStart: () => void;
   starting: boolean;
-  payoutsReady: boolean;
 }) {
   const configuration = useTierConfiguration(showID);
   if (configuration.isPending)
@@ -163,7 +239,6 @@ function TierConfiguration({
       initialTiers={configuration.data}
       onStart={onStart}
       starting={starting}
-      payoutsReady={payoutsReady}
     />
   );
 }
@@ -173,13 +248,11 @@ function TierConfigurationForm({
   initialTiers,
   onStart,
   starting,
-  payoutsReady,
 }: {
   showID: string;
   initialTiers: HotlineTier[];
   onStart: () => void;
   starting: boolean;
-  payoutsReady: boolean;
 }) {
   const save = useSaveTierConfiguration(showID);
   const [tiers, setTiers] = useState<TierDraft[]>(() =>
@@ -187,15 +260,13 @@ function TierConfigurationForm({
       key: tier.id,
       name: tier.name,
       callDurationSeconds: tier.callDurationSeconds,
+      durationInput: durationInputFromSeconds(tier.callDurationSeconds),
       priceCents: tier.priceCents,
+      priceInput: priceInputFromCents(tier.priceCents),
       enabled: tier.enabled,
     })),
   );
   const [dirty, setDirty] = useState(false);
-
-  const hasEnabledPaidTier = tiers.some(
-    (tier) => tier.enabled && tier.priceCents > 0,
-  );
 
   function update(index: number, patch: Partial<TierDraft>) {
     setTiers((current) =>
@@ -257,32 +328,74 @@ function TierConfigurationForm({
               />
             </label>
             <label>
-              Call length (seconds)
+              Call length (minutes)
               <input
-                type="number"
-                min={30}
-                max={3600}
-                value={tier.callDurationSeconds}
-                onChange={(event) =>
+                type="text"
+                inputMode="decimal"
+                autoComplete="off"
+                aria-label={`${tier.name || `Tier ${index + 1}`} call length in minutes`}
+                value={tier.durationInput}
+                onFocus={(event) => event.currentTarget.select()}
+                onChange={(event) => {
+                  const value = event.target.value;
+                  if (!/^\d*(?:\.\d{0,2})?$/.test(value)) return;
+                  const minutes = Number(value);
+                  if (
+                    value !== "" &&
+                    (!Number.isFinite(minutes) || minutes > 60)
+                  ) {
+                    return;
+                  }
                   update(index, {
-                    callDurationSeconds: Number(event.target.value),
-                  })
-                }
+                    durationInput: value,
+                    ...(minutes > 0
+                      ? { callDurationSeconds: Math.round(minutes * 60) }
+                      : {}),
+                  });
+                }}
+                onBlur={() => {
+                  const minutes = Number(tier.durationInput);
+                  const seconds =
+                    !Number.isFinite(minutes) || minutes < 0.5
+                      ? 30
+                      : Math.min(3600, Math.round(minutes * 60));
+                  const normalized = durationInputFromSeconds(seconds);
+                  if (
+                    seconds !== tier.callDurationSeconds ||
+                    normalized !== tier.durationInput
+                  ) {
+                    update(index, {
+                      callDurationSeconds: seconds,
+                      durationInput: normalized,
+                    });
+                  }
+                }}
               />
+              <small>Choose between 0.5 and 60 minutes.</small>
             </label>
             <label>
               Price (USD)
               <input
-                type="number"
-                min={0}
-                max={10000}
-                step="0.01"
-                value={(tier.priceCents / 100).toFixed(2)}
-                onChange={(event) =>
+                type="text"
+                inputMode="decimal"
+                autoComplete="off"
+                aria-label={`${tier.name || `Tier ${index + 1}`} price in USD`}
+                value={tier.priceInput}
+                onFocus={(event) => event.currentTarget.select()}
+                onChange={(event) => {
+                  const priceCents = centsFromPriceInput(event.target.value);
+                  if (priceCents === null) return;
                   update(index, {
-                    priceCents: Math.round(Number(event.target.value) * 100),
-                  })
-                }
+                    priceInput: event.target.value,
+                    priceCents,
+                  });
+                }}
+                onBlur={() => {
+                  const normalized = priceInputFromCents(tier.priceCents);
+                  if (normalized !== tier.priceInput) {
+                    update(index, { priceInput: normalized });
+                  }
+                }}
               />
               <small>Use $0 for free or at least $0.50 for a paid tier.</small>
             </label>
@@ -341,7 +454,9 @@ function TierConfigurationForm({
                 key: crypto.randomUUID(),
                 name: `Tier ${current.length + 1}`,
                 callDurationSeconds: 300,
+                durationInput: "5",
                 priceCents: 0,
+                priceInput: "0.00",
                 enabled: true,
               },
             ]);
@@ -364,24 +479,12 @@ function TierConfigurationForm({
           className="primary-button"
           type="button"
           onClick={onStart}
-          disabled={
-            dirty ||
-            starting ||
-            tiers.length === 0 ||
-            (hasEnabledPaidTier && !payoutsReady)
-          }
-          aria-describedby={
-            hasEnabledPaidTier && !payoutsReady ? "payouts-required" : undefined
-          }
+          disabled={dirty || starting || tiers.length === 0}
         >
           {starting ? "Starting…" : "Start Hotline"}
         </button>
       </div>
-      {hasEnabledPaidTier && !payoutsReady && (
-        <p className="tier-save-hint" id="payouts-required">
-          Finish Stripe payout setup before starting with paid tiers.
-        </p>
-      )}
+
       {dirty && (
         <p className="tier-save-hint">Save tier changes before going live.</p>
       )}
@@ -394,19 +497,218 @@ function TierConfigurationForm({
   );
 }
 
+type SettingsSection = "profile" | "payouts" | "account";
+
+function CreatorPayoutSettings() {
+  const payouts = usePayoutStatus();
+  const payoutSession = usePayoutAccountSession();
+  const creatorBalance = useCreatorBalance();
+  const paymentActivity = usePaymentActivity();
+
+  return (
+    <section
+      className="show-card payout-card settings-section-card"
+      aria-label="Creator payouts"
+    >
+      <div className="settings-section-heading">
+        <span className="feature-icon">
+          <UiIcon name="wallet" size={21} />
+        </span>
+        <div>
+          <h2>Payouts</h2>
+          <p>Review your balance and manage where your monthly payout goes.</p>
+        </div>
+      </div>
+      {creatorBalance.data && (
+        <div className="balance-summary" aria-label="Creator balance">
+          <div>
+            <span>Available</span>
+            <strong>
+              {formatPrice(creatorBalance.data.balance.availableCents)}
+            </strong>
+          </div>
+          <div>
+            <span>Pending</span>
+            <strong>
+              {formatPrice(creatorBalance.data.balance.pendingCents)}
+            </strong>
+          </div>
+          <div>
+            <span>Total balance</span>
+            <strong>
+              {formatPrice(creatorBalance.data.balance.totalCents)}
+            </strong>
+          </div>
+        </div>
+      )}
+      {paymentActivity.data?.payoutFailure && (
+        <div className="settings-alert" role="alert">
+          <strong>Your latest payout needs attention.</strong>
+          <span>
+            Update your payout details before another bank transfer can be sent.
+            Reference: {paymentActivity.data.payoutFailure.failureCode}
+          </span>
+        </div>
+      )}
+      <div className="settings-divider" />
+      {payouts.isPending ? (
+        <div className="status">Checking payout status…</div>
+      ) : payouts.isError ? (
+        <div className="form-error" role="alert">
+          Unable to load payout status.
+        </div>
+      ) : payouts.data.ready ? (
+        <div className="payout-ready-row">
+          <span className="feature-icon success">
+            <UiIcon name="check" size={20} />
+          </span>
+          <div>
+            <h3>Your payouts are ready.</h3>
+            <p>
+              You receive {100 - payouts.data.platformFeePercent}% of each paid
+              call. Available balances are sent monthly. Bling’s platform fee is{" "}
+              {payouts.data.platformFeePercent}%.
+            </p>
+          </div>
+        </div>
+      ) : payoutSession.data ? (
+        <PayoutSetup
+          session={payoutSession.data}
+          onExit={() => {
+            payoutSession.reset();
+            void payouts.refetch();
+          }}
+        />
+      ) : (
+        <div className="payout-setup-copy">
+          <div>
+            <h3>
+              {payouts.data.connected
+                ? "Finish your payout setup"
+                : "Set up monthly payouts"}
+            </h3>
+            <p>
+              You can earn before doing this. Securely add your identity and
+              bank details when you are ready to get paid. You receive{" "}
+              {100 - payouts.data.platformFeePercent}% of every paid call.
+            </p>
+          </div>
+          <button
+            className="primary-button"
+            type="button"
+            onClick={() => payoutSession.mutate()}
+            disabled={payoutSession.isPending}
+          >
+            {payoutSession.isPending
+              ? "Opening secure setup…"
+              : payouts.data.connected
+                ? "Continue payout setup"
+                : "Set up payouts"}
+          </button>
+          {payoutSession.isError && (
+            <div className="form-error" role="alert">
+              {payoutSession.error.message}
+            </div>
+          )}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function CreatorAccountSettings({ username }: { username: string }) {
+  const me = useMe();
+  return (
+    <section className="show-card settings-section-card" aria-label="Account">
+      <div className="settings-section-heading">
+        <span className="feature-icon">
+          <UiIcon name="settings" size={21} />
+        </span>
+        <div>
+          <h2>Account</h2>
+          <p>Your sign-in details and permanent channel address.</p>
+        </div>
+      </div>
+      <dl className="account-settings-list">
+        <div>
+          <dt>Username</dt>
+          <dd>@{username}</dd>
+        </div>
+        <div>
+          <dt>Email address</dt>
+          <dd>{me.data?.email}</dd>
+        </div>
+        <div>
+          <dt>Public channel</dt>
+          <dd>
+            <Link to={`/u/${username}`}>/u/{username}</Link>
+          </dd>
+        </div>
+      </dl>
+    </section>
+  );
+}
+
+function CreatorSettings({
+  section,
+  username,
+}: {
+  section: SettingsSection;
+  username: string;
+}) {
+  const tabs: { id: SettingsSection; label: string }[] = [
+    { id: "profile", label: "Profile" },
+    { id: "payouts", label: "Payouts" },
+    { id: "account", label: "Account" },
+  ];
+  return (
+    <div className="settings-page">
+      <header className="settings-title">
+        <p className="eyebrow">Creator studio</p>
+        <h1>Settings</h1>
+        <p>Manage your public presence, payouts, and account.</p>
+      </header>
+      <nav className="settings-tabs" aria-label="Settings sections">
+        {tabs.map((tab) => (
+          <Link
+            key={tab.id}
+            to={`/dashboard/settings/${tab.id}`}
+            className={section === tab.id ? "active" : undefined}
+            aria-current={section === tab.id ? "page" : undefined}
+          >
+            {tab.label}
+          </Link>
+        ))}
+      </nav>
+      <div className="settings-panel">
+        {section === "profile" && <ProfileEditor />}
+        {section === "payouts" && <CreatorPayoutSettings />}
+        {section === "account" && (
+          <CreatorAccountSettings username={username} />
+        )}
+      </div>
+    </div>
+  );
+}
+
 export function Dashboard() {
   const me = useMe();
   const logout = useLogout();
   const navigate = useNavigate();
+  const location = useLocation();
   const username = me.data?.username ?? "";
   const currentShow = useCurrentShow();
   const createShow = useCreateShow();
   const startShow = useStartShow(username);
   const endShow = useEndShow(username);
   const payouts = usePayoutStatus();
-  const payoutOnboarding = usePayoutOnboarding();
   const paymentActivity = usePaymentActivity();
   const activeShow = currentShow.data;
+  const settingsMatch = location.pathname.match(
+    /^\/dashboard\/settings(?:\/(profile|payouts|account))?\/?$/,
+  );
+  const isSettings = Boolean(settingsMatch);
+  const settingsSection = (settingsMatch?.[1] ?? "profile") as SettingsSection;
 
   async function signOut() {
     try {
@@ -440,36 +742,60 @@ export function Dashboard() {
         <aside className="studio-sidebar" aria-label="Creator navigation">
           <div>
             <p className="nav-label">Your workspace</p>
-            <a className="active" href="#studio-main">
+            <Link
+              className={!isSettings ? "active" : undefined}
+              to="/dashboard"
+            >
               <UiIcon name="home" />
               Overview
-            </a>
-            <a href="#hotline-controls">
+            </Link>
+            <Link to="/dashboard#hotline-controls">
               <UiIcon name="broadcast" />
               Stream manager
-            </a>
-            <a href="#payment-activity">
+            </Link>
+            <Link to="/dashboard#payment-activity">
               <UiIcon name="wallet" />
               Payment activity
-            </a>
-            <a href="#payouts">
+            </Link>
+            <Link
+              className={
+                isSettings && settingsSection === "payouts"
+                  ? "active"
+                  : undefined
+              }
+              to="/dashboard/settings/payouts"
+            >
               <UiIcon name="settings" />
               Payout settings
-            </a>
+            </Link>
             <div className="sidebar-rule" />
             <p className="nav-label">Your channel</p>
             <Link to={`/u/${username}`}>
               <UiIcon name="people" />
               View public page <UiIcon name="arrow" size={14} />
             </Link>
-            <a href="#profile">
+            <Link
+              className={
+                isSettings && settingsSection === "profile"
+                  ? "active"
+                  : undefined
+              }
+              to="/dashboard/settings/profile"
+            >
               <UiIcon name="people" />
               Public profile
-            </a>
-            <a href="#account">
+            </Link>
+            <Link
+              className={
+                isSettings && settingsSection === "account"
+                  ? "active"
+                  : undefined
+              }
+              to="/dashboard/settings/account"
+            >
               <UiIcon name="settings" />
               Account details
-            </a>
+            </Link>
           </div>
           <div className="studio-sidebar-bottom">
             <div className="studio-tip">
@@ -493,288 +819,211 @@ export function Dashboard() {
           </div>
         </aside>
         <main id="studio-main" className="dashboard-content">
-          <div className="studio-title">
-            <div>
-              <p className="eyebrow">Your channel, at a glance</p>
-              <h1>Welcome, {username}.</h1>
-              <p className="lede">
-                A little preparation. A great conversation. Let’s make it
-                happen.
-              </p>
-            </div>
-            <Link className="button secondary" to={`/u/${username}`}>
-              View channel <UiIcon name="arrow" size={16} />
-            </Link>
-          </div>
-          <div className="studio-overview" aria-label="Channel overview">
-            <article>
-              <span>
-                <UiIcon name="broadcast" size={18} />
-                Hotline status
-              </span>
-              <strong>
-                {currentShow.isPending
-                  ? "Loading…"
-                  : currentShow.isError
-                    ? "Unavailable"
-                    : activeShow?.status === "LIVE"
-                      ? "On air"
-                      : activeShow?.status === "CREATED"
-                        ? "In preparation"
-                        : "Offline"}
-              </strong>
-              <small>
-                {activeShow?.status === "LIVE"
-                  ? "Your audience can join the line"
-                  : "Your next conversation starts here"}
-              </small>
-              <span
-                className={`metric-indicator ${activeShow?.status === "LIVE" ? "on-air" : ""}`}
-              />
-            </article>
-            <article>
-              <span>
-                <UiIcon name="wallet" size={18} />
-                Payout account
-              </span>
-              <strong>
-                {payouts.isPending
-                  ? "Loading…"
-                  : payouts.isError
-                    ? "Unavailable"
-                    : payouts.data.ready
-                      ? "Connected"
-                      : "Set up payouts"}
-              </strong>
-              <small>
-                {payouts.data
-                  ? `${100 - payouts.data.platformFeePercent}% creator share per paid call`
-                  : "Connect Stripe to receive earnings"}
-              </small>
-            </article>
-            <article>
-              <span>
-                <UiIcon name="people" size={18} />
-                Grow your community
-              </span>
-              <strong>Make it personal.</strong>
-              <small>Invite your audience to your public page</small>
-              <UiIcon name="spark" size={34} />
-            </article>
-          </div>
-          <div className="studio-panels">
-            <section
-              id="hotline-controls"
-              className="show-card controls-card"
-              aria-label="Hotline controls"
-            >
-              <div className="panel-heading">
-                <span>
-                  <UiIcon name="broadcast" size={18} />
-                  Stream manager
-                </span>
-                <span className="panel-label">LIVE CONTROL ROOM</span>
+          {isSettings ? (
+            <CreatorSettings section={settingsSection} username={username} />
+          ) : (
+            <>
+              <div className="studio-title">
+                <div>
+                  <p className="eyebrow">Your channel, at a glance</p>
+                  <h1>Welcome, {username}.</h1>
+                  <p className="lede">
+                    A little preparation. A great conversation. Let’s make it
+                    happen.
+                  </p>
+                </div>
+                <Link className="button secondary" to={`/u/${username}`}>
+                  View channel <UiIcon name="arrow" size={16} />
+                </Link>
               </div>
-              {currentShow.isPending ? (
-                <div className="status">Loading show status…</div>
-              ) : currentShow.isError ? (
-                <div className="form-error" role="alert">
-                  Unable to load your Hotline status.
-                </div>
-              ) : activeShow?.status === "LIVE" ? (
-                <>
-                  <div className="show-card-heading">
-                    <div>
-                      <div className="live-badge">
-                        <span /> Hotline live
-                      </div>
-                      <h2>Your audience can join.</h2>
-                    </div>
-                    <button
-                      className="danger-button"
-                      type="button"
-                      onClick={() => endShow.mutate(activeShow.id)}
-                      disabled={endShow.isPending}
-                    >
-                      {endShow.isPending ? "Ending…" : "End Hotline"}
-                    </button>
-                  </div>
-                  <p>
-                    Public URL: <strong>/u/{username}</strong>
-                  </p>
-                  <CallerList showID={activeShow.id} />
-                </>
-              ) : activeShow?.status === "CREATED" ? (
-                <TierConfiguration
-                  showID={activeShow.id}
-                  starting={startShow.isPending}
-                  payoutsReady={payouts.data?.ready ?? false}
-                  onStart={() => startShow.mutate(activeShow.id)}
-                />
-              ) : (
-                <div className="studio-offline">
-                  <div className="studio-offline-art" aria-hidden="true">
-                    <span className="studio-ring ring-one" />
-                    <span className="studio-ring ring-two" />
-                    <span className="studio-mic">
-                      <UiIcon name="call" size={36} />
+              <div className="studio-overview" aria-label="Channel overview">
+                <article>
+                  <span>
+                    <UiIcon name="broadcast" size={18} />
+                    Hotline status
+                  </span>
+                  <strong>
+                    {currentShow.isPending
+                      ? "Loading…"
+                      : currentShow.isError
+                        ? "Unavailable"
+                        : activeShow?.status === "LIVE"
+                          ? "On air"
+                          : activeShow?.status === "CREATED"
+                            ? "In preparation"
+                            : "Offline"}
+                  </strong>
+                  <small>
+                    {activeShow?.status === "LIVE"
+                      ? "Your audience can join the line"
+                      : "Your next conversation starts here"}
+                  </small>
+                  <span
+                    className={`metric-indicator ${activeShow?.status === "LIVE" ? "on-air" : ""}`}
+                  />
+                </article>
+                <article>
+                  <span>
+                    <UiIcon name="wallet" size={18} />
+                    Payout account
+                  </span>
+                  <strong>
+                    {payouts.isPending
+                      ? "Loading…"
+                      : payouts.isError
+                        ? "Unavailable"
+                        : payouts.data.ready
+                          ? "Connected"
+                          : "Set up payouts"}
+                  </strong>
+                  <small>
+                    {payouts.data
+                      ? `${100 - payouts.data.platformFeePercent}% creator share per paid call`
+                      : "Earn now and set up monthly payouts when ready"}
+                  </small>
+                </article>
+                <article>
+                  <span>
+                    <UiIcon name="people" size={18} />
+                    Grow your community
+                  </span>
+                  <strong>Make it personal.</strong>
+                  <small>Invite your audience to your public page</small>
+                  <UiIcon name="spark" size={34} />
+                </article>
+              </div>
+              <div className="studio-panels">
+                <section
+                  id="hotline-controls"
+                  className="show-card controls-card"
+                  aria-label="Hotline controls"
+                >
+                  <div className="panel-heading">
+                    <span>
+                      <UiIcon name="broadcast" size={18} />
+                      Stream manager
                     </span>
-                    <span className="offline-art-label">
-                      YOUR NEXT GREAT CONVERSATION
-                    </span>
+                    <span className="panel-label">LIVE CONTROL ROOM</span>
                   </div>
-                  <span className="offline-pill">OFF AIR</span>
-                  <h2>No active Hotline</h2>
-                  <p>
-                    Create a draft to configure caller priority, duration, and
-                    pricing before opening your public page.
-                  </p>
-                  <button
-                    className="primary-button"
-                    type="button"
-                    onClick={() => createShow.mutate()}
-                    disabled={createShow.isPending}
-                  >
-                    <UiIcon name="plus" size={17} />
-                    {createShow.isPending ? "Creating…" : "Set up Hotline"}
-                  </button>
-                </div>
-              )}
-              {(createShow.isError || startShow.isError || endShow.isError) && (
-                <div className="form-error" role="alert">
-                  Unable to update your Hotline. Please try again.
-                </div>
-              )}
-            </section>
-
-            <section
-              id="payouts"
-              className="show-card payout-card"
-              aria-label="Creator payouts"
-            >
-              <p className="eyebrow">Creator payouts</p>
-              {payouts.isPending ? (
-                <div className="status">Checking Stripe payout status…</div>
-              ) : payouts.isError ? (
-                <div className="form-error" role="alert">
-                  Unable to load payout status.
-                </div>
-              ) : payouts.data.ready ? (
-                <>
-                  <h2>Stripe payouts are ready.</h2>
-                  <p>
-                    You receive {100 - payouts.data.platformFeePercent}% of each
-                    paid call. Bling’s platform fee is{" "}
-                    {payouts.data.platformFeePercent}%.
-                  </p>
-                </>
-              ) : (
-                <>
-                  <h2>
-                    {payouts.data.connected
-                      ? "Finish Stripe payout setup"
-                      : "Connect Stripe to accept paid calls"}
-                  </h2>
-                  <p>
-                    Set your own price for each tier. You receive{" "}
-                    {100 - payouts.data.platformFeePercent}% of every paid call
-                    and Bling keeps {payouts.data.platformFeePercent}%.
-                  </p>
-                  <button
-                    className="primary-button"
-                    type="button"
-                    onClick={() => payoutOnboarding.mutate()}
-                    disabled={payoutOnboarding.isPending}
-                  >
-                    {payoutOnboarding.isPending
-                      ? "Opening Stripe…"
-                      : payouts.data.connected
-                        ? "Continue Stripe setup"
-                        : "Set up payouts"}
-                  </button>
-                  {payoutOnboarding.isError && (
+                  {currentShow.isPending ? (
+                    <div className="status">Loading show status…</div>
+                  ) : currentShow.isError ? (
                     <div className="form-error" role="alert">
-                      {payoutOnboarding.error.message}
+                      Unable to load your Hotline status.
+                    </div>
+                  ) : activeShow?.status === "LIVE" ? (
+                    <>
+                      <div className="show-card-heading">
+                        <div>
+                          <div className="live-badge">
+                            <span /> Hotline live
+                          </div>
+                          <h2>Your audience can join.</h2>
+                        </div>
+                        <button
+                          className="danger-button"
+                          type="button"
+                          onClick={() => endShow.mutate(activeShow.id)}
+                          disabled={endShow.isPending}
+                        >
+                          {endShow.isPending ? "Ending…" : "End Hotline"}
+                        </button>
+                      </div>
+                      <p>
+                        Public URL: <strong>/u/{username}</strong>
+                      </p>
+                      <CallerList showID={activeShow.id} />
+                    </>
+                  ) : activeShow?.status === "CREATED" ? (
+                    <TierConfiguration
+                      showID={activeShow.id}
+                      starting={startShow.isPending}
+                      onStart={() => startShow.mutate(activeShow.id)}
+                    />
+                  ) : (
+                    <div className="studio-offline">
+                      <div className="studio-offline-art" aria-hidden="true">
+                        <span className="studio-ring ring-one" />
+                        <span className="studio-ring ring-two" />
+                        <span className="studio-mic">
+                          <UiIcon name="call" size={36} />
+                        </span>
+                        <span className="offline-art-label">
+                          YOUR NEXT GREAT CONVERSATION
+                        </span>
+                      </div>
+                      <span className="offline-pill">OFF AIR</span>
+                      <h2>No active Hotline</h2>
+                      <p>
+                        Create a draft to configure caller priority, duration,
+                        and pricing before opening your public page.
+                      </p>
+                      <button
+                        className="primary-button"
+                        type="button"
+                        onClick={() => createShow.mutate()}
+                        disabled={createShow.isPending}
+                      >
+                        <UiIcon name="plus" size={17} />
+                        {createShow.isPending ? "Creating…" : "Set up Hotline"}
+                      </button>
                     </div>
                   )}
-                </>
-              )}
-            </section>
+                  {(createShow.isError ||
+                    startShow.isError ||
+                    endShow.isError) && (
+                    <div className="form-error" role="alert">
+                      Unable to update your Hotline. Please try again.
+                    </div>
+                  )}
+                </section>
 
-            {paymentActivity.data?.payoutFailure && (
-              <section
-                className="show-card payout-problem"
-                aria-label="Payout problem"
-              >
-                <p className="eyebrow">Payout needs attention</p>
-                <h2>Stripe could not send your latest payout.</h2>
-                <p role="alert">
-                  Update your payout details in Stripe before another bank
-                  transfer can be sent. Reference:{" "}
-                  {paymentActivity.data.payoutFailure.failureCode}
-                </p>
-                <button
-                  className="primary-button"
-                  type="button"
-                  onClick={() => payoutOnboarding.mutate()}
-                  disabled={payoutOnboarding.isPending}
+                <section
+                  id="payment-activity"
+                  className="show-card activity-card"
+                  aria-label="Payment activity"
                 >
-                  Update payout details
-                </button>
-              </section>
-            )}
-
-            <section
-              id="payment-activity"
-              className="show-card activity-card"
-              aria-label="Payment activity"
-            >
-              <p className="eyebrow">Payment activity</p>
-              <h2>Recent paid calls</h2>
-              {paymentActivity.isPending ? (
-                <div className="status">Loading payment activity…</div>
-              ) : paymentActivity.isError ? (
-                <div className="form-error" role="alert">
-                  Unable to load payment activity.
-                </div>
-              ) : paymentActivity.data.activity.length === 0 ? (
-                <div className="payment-empty">
-                  <span className="feature-icon">
-                    <UiIcon name="wallet" size={22} />
-                  </span>
-                  <h3>No paid calls yet.</h3>
-                  <p>
-                    Your paid call activity will appear here after your first
-                    conversation.
-                  </p>
-                </div>
-              ) : (
-                <ol className="payment-activity-list">
-                  {paymentActivity.data.activity.map((activity) => (
-                    <li key={activity.paymentAttemptId}>
-                      <div>
-                        <strong>{formatPrice(activity.amountCents)}</strong>
-                        <span>{activityLabel(activity)}</span>
-                      </div>
-                      <span>
-                        Creator share:{" "}
-                        {formatPrice(
-                          activity.amountCents - activity.platformFeeCents,
-                        )}
+                  <p className="eyebrow">Payment activity</p>
+                  <h2>Recent paid calls</h2>
+                  {paymentActivity.isPending ? (
+                    <div className="status">Loading payment activity…</div>
+                  ) : paymentActivity.isError ? (
+                    <div className="form-error" role="alert">
+                      Unable to load payment activity.
+                    </div>
+                  ) : paymentActivity.data.activity.length === 0 ? (
+                    <div className="payment-empty">
+                      <span className="feature-icon">
+                        <UiIcon name="wallet" size={22} />
                       </span>
-                    </li>
-                  ))}
-                </ol>
-              )}
-            </section>
-          </div>
-          <ProfileEditor />
-          <div id="account" className="account-card">
-            <span>Public URL</span>
-            <strong>/u/{username}</strong>
-            <span>Account email</span>
-            <strong>{me.data?.email}</strong>
-          </div>
+                      <h3>No paid calls yet.</h3>
+                      <p>
+                        Your paid call activity will appear here after your
+                        first conversation.
+                      </p>
+                    </div>
+                  ) : (
+                    <ol className="payment-activity-list">
+                      {paymentActivity.data.activity.map((activity) => (
+                        <li key={activity.paymentAttemptId}>
+                          <div>
+                            <strong>{formatPrice(activity.amountCents)}</strong>
+                            <span>{activityLabel(activity)}</span>
+                          </div>
+                          <span>
+                            Creator share:{" "}
+                            {formatPrice(
+                              activity.amountCents - activity.platformFeeCents,
+                            )}
+                          </span>
+                        </li>
+                      ))}
+                    </ol>
+                  )}
+                </section>
+              </div>
+            </>
+          )}
           {logout.isError && (
             <div className="form-error" role="alert">
               Unable to sign out. Please try again.

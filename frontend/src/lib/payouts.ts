@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest } from "./api";
 
 export type PayoutStatus = {
@@ -17,7 +17,29 @@ export type PayoutStatus = {
 };
 
 type StatusResponse = { data: { payouts: PayoutStatus } };
-type LinkResponse = { data: { url: string } };
+export type CreatorBalance = {
+  currency: string;
+  totalCents: number;
+  pendingCents: number;
+  availableCents: number;
+  nextPayoutAt?: string;
+};
+export type LedgerEntry = {
+  id: number;
+  kind: string;
+  amountCents: number;
+  currency: string;
+  effectiveAt: string;
+  createdAt: string;
+};
+type BalanceResponse = {
+  data: { balance: CreatorBalance; activity: LedgerEntry[] };
+};
+export type PayoutAccountSession = {
+  clientSecret: string;
+  publishableKey: string;
+};
+type SessionResponse = { data: { accountSession: PayoutAccountSession } };
 
 const payoutKey = ["payouts", "account"] as const;
 
@@ -31,21 +53,23 @@ export function usePayoutStatus() {
   });
 }
 
-export function usePayoutOnboarding() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: async () =>
-      (
-        await apiRequest<LinkResponse>("/api/v1/payouts/onboarding-link", {
-          method: "POST",
-        })
-      ).data.url,
-    onSuccess: (url) => {
-      if (url) {
-        window.location.assign(url);
-        return;
-      }
-      void queryClient.invalidateQueries({ queryKey: payoutKey });
-    },
+export function useCreatorBalance() {
+  return useQuery({
+    queryKey: ["payouts", "balance"],
+    queryFn: async () =>
+      (await apiRequest<BalanceResponse>("/api/v1/payouts/balance")).data,
+    staleTime: 5_000,
   });
+}
+
+export async function fetchPayoutAccountSession() {
+  return (
+    await apiRequest<SessionResponse>("/api/v1/payouts/account-session", {
+      method: "POST",
+    })
+  ).data.accountSession;
+}
+
+export function usePayoutAccountSession() {
+  return useMutation({ mutationFn: fetchPayoutAccountSession });
 }
