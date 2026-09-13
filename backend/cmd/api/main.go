@@ -10,6 +10,7 @@ import (
 	"syscall"
 	"time"
 
+	balancedomain "github.com/bling-app/bling/backend/internal/balance"
 	calldomain "github.com/bling-app/bling/backend/internal/call"
 	"github.com/bling-app/bling/backend/internal/config"
 	"github.com/bling-app/bling/backend/internal/database"
@@ -57,16 +58,21 @@ func main() {
 	var paymentGateway paymentdomain.Gateway
 	var payoutGateway payoutdomain.Gateway
 	var financeGateway financedomain.Gateway
+	var balanceGateway balancedomain.Gateway
 	if cfg.StripeSecretKey != "" {
 		paymentGateway = paymentdomain.NewStripeGateway(cfg.StripeSecretKey)
 		payoutGateway = payoutdomain.NewStripeGateway(cfg.StripeSecretKey)
 		financeGateway = financedomain.NewStripeGateway(cfg.StripeSecretKey)
+		balanceGateway = balancedomain.NewStripeGateway(cfg.StripeSecretKey)
 	}
 	financeService := financedomain.NewService(financedomain.NewPostgresRepository(postgres), financeGateway, logger)
 	go financeService.Run(ctx)
-	payoutService := payoutdomain.NewService(payoutdomain.NewPostgresRepository(postgres), payoutGateway, cfg.StripeConnectCountry, cfg.FrontendURL)
+	payoutService := payoutdomain.NewService(payoutdomain.NewPostgresRepository(postgres), payoutGateway, cfg.StripeConnectCountry, cfg.FrontendURL, cfg.StripePublishableKey)
+	balanceService := balancedomain.NewService(balancedomain.NewPostgresRepository(postgres), balanceGateway, cfg.CreatorPayoutCurrency, int64(cfg.CreatorPayoutMinimumCents), cfg.CreatorPayoutDay, cfg.CreatorPayoutsEnabled, logger)
+	go balanceService.Run(ctx)
 	paymentService := paymentdomain.NewService(paymentdomain.NewPostgresRepository(postgres), paymentGateway, cfg.StripePublishableKey)
-	callService := calldomain.NewService(calldomain.NewPostgresRepository(postgres, paymentGateway), logger)
+	callRepository := calldomain.NewPostgresRepository(postgres, paymentGateway).WithEarningsHold(cfg.CreatorEarningsHold)
+	callService := calldomain.NewService(callRepository, logger)
 	go callService.RunTimeouts(ctx)
 	presence := realtime.NewPresenceStore(redisClient, cfg.CallPresenceTTL)
 	go runPresenceRecovery(ctx, logger, presence, callService, cfg.CallDisconnectGrace)
@@ -83,7 +89,7 @@ func main() {
 
 	server := &http.Server{
 		Addr:              cfg.HTTPAddr,
-		Handler:           httpapi.NewRouter(logger, postgres, redisClient, cfg, queueService, realtimeHub, callService, signalHub, paymentService, payoutService, financeService, socialService),
+		Handler:           httpapi.NewRouter(logger, postgres, redisClient, cfg, queueService, realtimeHub, callService, signalHub, paymentService, payoutService, financeService, balanceService, socialService),
 		ReadHeaderTimeout: cfg.ReadHeaderTimeout,
 		ReadTimeout:       cfg.ReadTimeout,
 		WriteTimeout:      cfg.WriteTimeout,

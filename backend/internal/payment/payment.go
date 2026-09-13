@@ -26,10 +26,16 @@ var (
 	ErrAuthorization     = errors.New("payment is not authorized")
 	ErrAuthorizationUsed = errors.New("payment authorization is already in use")
 	ErrCaptureFailed     = errors.New("payment capture failed")
-	ErrPayoutsNotReady   = errors.New("creator payouts are not ready")
 )
 
 const PlatformFeeBPS int64 = 3000
+
+type Flow string
+
+const (
+	FlowDestination Flow = "DESTINATION"
+	FlowPlatform    Flow = "PLATFORM"
+)
 
 type Attempt struct {
 	ID                    string     `json:"id"`
@@ -38,6 +44,7 @@ type Attempt struct {
 	QueueEntryID          *string    `json:"queueEntryId,omitempty"`
 	StripePaymentIntentID string     `json:"-"`
 	DestinationAccountID  string     `json:"-"`
+	Flow                  Flow       `json:"-"`
 	AmountCents           int64      `json:"amountCents"`
 	PlatformFeeBPS        int64      `json:"platformFeeBps"`
 	PlatformFeeCents      int64      `json:"platformFeeCents"`

@@ -12,39 +12,44 @@ import (
 )
 
 type Config struct {
-	SocialTrustedProxyCIDRs []netip.Prefix
-	Environment             string
-	HTTPAddr                string
-	DatabaseURL             string
-	RedisURL                string
-	FrontendURL             string
-	AllowedOrigins          []string
-	CookieSecure            bool
-	SessionTTL              time.Duration
-	BcryptCost              int
-	AuthRateLimitWindow     time.Duration
-	RealtimeRateLimitWindow time.Duration
-	RealtimeHeartbeat       time.Duration
-	RealtimeWriteTimeout    time.Duration
-	RealtimeConnectLimit    int
-	RealtimeClientBuffer    int
-	RealtimeMaxPerShow      int
-	ShutdownTimeout         time.Duration
-	ReadinessTimeout        time.Duration
-	ReadHeaderTimeout       time.Duration
-	ReadTimeout             time.Duration
-	WriteTimeout            time.Duration
-	IdleTimeout             time.Duration
-	RTCICEServers           []ICEServer
-	TURNURL                 string
-	TURNSharedSecret        string
-	TURNCredentialTTL       time.Duration
-	CallPresenceTTL         time.Duration
-	CallDisconnectGrace     time.Duration
-	StripeSecretKey         string
-	StripePublishableKey    string
-	StripeWebhookSecret     string
-	StripeConnectCountry    string
+	SocialTrustedProxyCIDRs   []netip.Prefix
+	Environment               string
+	HTTPAddr                  string
+	DatabaseURL               string
+	RedisURL                  string
+	FrontendURL               string
+	AllowedOrigins            []string
+	CookieSecure              bool
+	SessionTTL                time.Duration
+	BcryptCost                int
+	AuthRateLimitWindow       time.Duration
+	RealtimeRateLimitWindow   time.Duration
+	RealtimeHeartbeat         time.Duration
+	RealtimeWriteTimeout      time.Duration
+	RealtimeConnectLimit      int
+	RealtimeClientBuffer      int
+	RealtimeMaxPerShow        int
+	ShutdownTimeout           time.Duration
+	ReadinessTimeout          time.Duration
+	ReadHeaderTimeout         time.Duration
+	ReadTimeout               time.Duration
+	WriteTimeout              time.Duration
+	IdleTimeout               time.Duration
+	RTCICEServers             []ICEServer
+	TURNURL                   string
+	TURNSharedSecret          string
+	TURNCredentialTTL         time.Duration
+	CallPresenceTTL           time.Duration
+	CallDisconnectGrace       time.Duration
+	StripeSecretKey           string
+	StripePublishableKey      string
+	StripeWebhookSecret       string
+	StripeConnectCountry      string
+	CreatorEarningsHold       time.Duration
+	CreatorPayoutMinimumCents int
+	CreatorPayoutDay          int
+	CreatorPayoutCurrency     string
+	CreatorPayoutsEnabled     bool
 }
 
 type ICEServer struct {
@@ -131,6 +136,20 @@ func Load() (Config, error) {
 	if cfg.CallDisconnectGrace, err = duration("CALL_DISCONNECT_GRACE", 20*time.Second); err != nil {
 		return Config{}, err
 	}
+	if cfg.CreatorEarningsHold, err = duration("CREATOR_EARNINGS_HOLD", 7*24*time.Hour); err != nil {
+		return Config{}, err
+	}
+	if cfg.CreatorPayoutMinimumCents, err = positiveInteger("CREATOR_PAYOUT_MINIMUM_CENTS", 2500); err != nil {
+		return Config{}, err
+	}
+	if cfg.CreatorPayoutDay, err = positiveInteger("CREATOR_PAYOUT_DAY", 1); err != nil || cfg.CreatorPayoutDay > 28 {
+		return Config{}, fmt.Errorf("CREATOR_PAYOUT_DAY must be between 1 and 28")
+	}
+	cfg.CreatorPayoutCurrency = strings.ToLower(envOrDefault("CREATOR_PAYOUT_CURRENCY", "usd"))
+	if len(cfg.CreatorPayoutCurrency) != 3 {
+		return Config{}, fmt.Errorf("CREATOR_PAYOUT_CURRENCY must be a three-letter currency code")
+	}
+	cfg.CreatorPayoutsEnabled = strings.EqualFold(envOrDefault("CREATOR_PAYOUTS_ENABLED", "false"), "true")
 	if cfg.CallPresenceTTL <= cfg.RealtimeHeartbeat {
 		return Config{}, fmt.Errorf("CALL_PRESENCE_TTL must be greater than REALTIME_HEARTBEAT")
 	}

@@ -242,8 +242,6 @@ func writePaymentError(w http.ResponseWriter, logger *slog.Logger, err error) {
 		writeError(w, http.StatusConflict, "SHOW_NOT_LIVE", "This Hotline is not accepting callers.")
 	case errors.Is(err, paymentdomain.ErrTierNotFound), errors.Is(err, paymentdomain.ErrFreeTier):
 		writeError(w, http.StatusUnprocessableEntity, "TIER_NOT_PAYABLE", "That paid tier is unavailable.")
-	case errors.Is(err, paymentdomain.ErrPayoutsNotReady):
-		writeError(w, http.StatusConflict, "CREATOR_PAYOUTS_NOT_READY", "This creator cannot accept paid calls right now.")
 	case errors.Is(err, paymentdomain.ErrAttemptNotFound), errors.Is(err, paymentdomain.ErrAuthorization), errors.Is(err, paymentdomain.ErrAuthorizationUsed):
 		writeError(w, http.StatusPaymentRequired, "PAYMENT_NOT_AUTHORIZED", "Payment was not authorized. Try again.")
 	case errors.Is(err, paymentdomain.ErrCaptureFailed):

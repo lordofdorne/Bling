@@ -18,9 +18,9 @@ var (
 // reports one capability that matters here, stripe_balance.stripe_transfers,
 // which TransfersStatus records verbatim.
 //
-// ChargesEnabled, PayoutsEnabled and DetailsSubmitted are kept because the
-// paid-call readiness predicate is inlined in payment, queue and show SQL. They
-// are now derived from the v2 capability rather than read from v1 fields:
+// ChargesEnabled, PayoutsEnabled and DetailsSubmitted are retained as a
+// compatibility projection for existing API clients. They are derived from
+// the v2 capability rather than read from v1 fields:
 // a recipient account never accepts charges itself, so ChargesEnabled mirrors
 // the transfers capability instead of describing a capability of its own.
 type Account struct {
@@ -54,7 +54,7 @@ type Status struct {
 type StripeAccount struct {
 	ID string
 	// TransfersStatus is the raw v2 capability status: active, pending,
-	// restricted or unsupported. Only "active" permits paid calls.
+	// restricted or unsupported. Only "active" permits a monthly transfer.
 	TransfersStatus  string
 	ChargesEnabled   bool
 	PayoutsEnabled   bool
@@ -77,6 +77,15 @@ type Gateway interface {
 	CreateConnectedAccount(context.Context, string, string, string) (StripeAccount, error)
 	RetrieveAccount(context.Context, string) (StripeAccount, error)
 	CreateOnboardingLink(context.Context, string, string, string) (string, error)
+}
+
+type EmbeddedGateway interface {
+	CreateAccountSession(context.Context, string) (string, error)
+}
+
+type AccountSession struct {
+	ClientSecret   string `json:"clientSecret"`
+	PublishableKey string `json:"publishableKey"`
 }
 
 type Repository interface {

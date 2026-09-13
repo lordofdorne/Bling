@@ -60,17 +60,17 @@ func (r *PostgresRepository) ClaimRefunds(ctx context.Context, now time.Time, li
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	rows, err := tx.Query(ctx, `
-		SELECT id,payment_attempt_id,call_id,stripe_payment_intent_id,COALESCE(stripe_refund_id,''),amount_cents,currency,reason,status,attempts
-		FROM payment_refunds
-		WHERE status IN ('REQUESTED','RETRY','PENDING') AND next_attempt_at <= $1 AND attempts < 10
-		ORDER BY next_attempt_at,id LIMIT $2 FOR UPDATE SKIP LOCKED`, now, limit)
+		SELECT r.id,r.payment_attempt_id,r.call_id,r.stripe_payment_intent_id,COALESCE(r.stripe_refund_id,''),r.amount_cents,r.currency,r.reason,r.status,r.attempts,p.payment_flow
+		FROM payment_refunds r JOIN payment_attempts p ON p.id=r.payment_attempt_id
+		WHERE r.status IN ('REQUESTED','RETRY','PENDING') AND r.next_attempt_at <= $1 AND r.attempts < 10
+		ORDER BY r.next_attempt_at,r.id LIMIT $2 FOR UPDATE OF r SKIP LOCKED`, now, limit)
 	if err != nil {
 		return nil, fmt.Errorf("lock refund requests: %w", err)
 	}
 	requests := make([]RefundRequest, 0, limit)
 	for rows.Next() {
 		var value RefundRequest
-		if err := rows.Scan(&value.ID, &value.PaymentAttemptID, &value.CallID, &value.StripePaymentIntentID, &value.StripeRefundID, &value.AmountCents, &value.Currency, &value.Reason, &value.Status, &value.Attempts); err != nil {
+		if err := rows.Scan(&value.ID, &value.PaymentAttemptID, &value.CallID, &value.StripePaymentIntentID, &value.StripeRefundID, &value.AmountCents, &value.Currency, &value.Reason, &value.Status, &value.Attempts, &value.PaymentFlow); err != nil {
 			rows.Close()
 			return nil, err
 		}

@@ -13,16 +13,24 @@ import (
 )
 
 type PostgresRepository struct {
-	pool     *pgxpool.Pool
-	payments paymentdomain.Gateway
+	pool         *pgxpool.Pool
+	payments     paymentdomain.Gateway
+	earningsHold time.Duration
 }
 
 func NewPostgresRepository(pool *pgxpool.Pool, payments ...paymentdomain.Gateway) *PostgresRepository {
-	value := &PostgresRepository{pool: pool}
+	value := &PostgresRepository{pool: pool, earningsHold: 7 * 24 * time.Hour}
 	if len(payments) > 0 {
 		value.payments = payments[0]
 	}
 	return value
+}
+
+func (r *PostgresRepository) WithEarningsHold(hold time.Duration) *PostgresRepository {
+	if hold > 0 {
+		r.earningsHold = hold
+	}
+	return r
 }
 
 const callColumns = `c.id, c.show_id, c.queue_entry_id, c.status, c.selection_mode,
@@ -302,7 +310,7 @@ func (r *PostgresRepository) transition(ctx context.Context, showID, callID stri
 		}
 		return current, nil
 	}
-	value, err := applyTransition(ctx, tx, current, target, now)
+	value, err := applyTransition(ctx, tx, current, target, now, r.earningsHold)
 	if err != nil {
 		return Call{}, err
 	}
@@ -312,7 +320,7 @@ func (r *PostgresRepository) transition(ctx context.Context, showID, callID stri
 	return value, nil
 }
 
-func applyTransition(ctx context.Context, tx pgx.Tx, current Call, target Status, now time.Time) (Call, error) {
+func applyTransition(ctx context.Context, tx pgx.Tx, current Call, target Status, now time.Time, earningsHold time.Duration) (Call, error) {
 	if !canTransition(current.Status, target) {
 		return Call{}, ErrInvalidTransition
 	}
@@ -341,6 +349,21 @@ func applyTransition(ctx context.Context, tx pgx.Tx, current Call, target Status
 		viewer_disconnected_at=CASE WHEN $1 IN ('ENDED','FAILED') THEN NULL ELSE viewer_disconnected_at END,
 		updated_at=$5 WHERE id=$6`, target, startedAt, endedAt, expiresAt, now, current.ID); err != nil {
 		return Call{}, fmt.Errorf("update call state: %w", err)
+	}
+	if target == StatusLive {
+		_, err := tx.Exec(ctx, `
+			INSERT INTO creator_ledger_entries(
+				creator_id,kind,amount_cents,currency,effective_at,payment_attempt_id,call_id,idempotency_key,metadata
+			)
+			SELECT s.creator_id,'EARNING',p.amount_cents-p.platform_fee_cents,p.currency,$2::timestamptz+make_interval(secs => $3),
+			       p.id,c.id,'earning:' || p.id::text,
+			       jsonb_build_object('grossCents',p.amount_cents,'platformFeeCents',p.platform_fee_cents)
+			FROM calls c JOIN shows s ON s.id=c.show_id JOIN payment_attempts p ON p.id=c.payment_attempt_id
+			WHERE c.id=$1 AND p.status='CAPTURED' AND p.payment_flow='PLATFORM'
+			ON CONFLICT(idempotency_key) DO NOTHING`, current.ID, now, int64(earningsHold/time.Second))
+		if err != nil {
+			return Call{}, fmt.Errorf("credit creator earning: %w", err)
+		}
 	}
 	queueStatus := target
 	if target == StatusFailed {
@@ -438,7 +461,7 @@ func (r *PostgresRepository) ExpireDisconnected(ctx context.Context, now time.Ti
 	}
 	expired := make([]Call, 0, len(due))
 	for _, current := range due {
-		value, transitionErr := applyTransition(ctx, tx, current, StatusFailed, now)
+		value, transitionErr := applyTransition(ctx, tx, current, StatusFailed, now, r.earningsHold)
 		if transitionErr != nil {
 			return nil, transitionErr
 		}
@@ -477,7 +500,7 @@ func (r *PostgresRepository) ExpireDue(ctx context.Context, now time.Time, limit
 	}
 	expired := make([]Call, 0, len(due))
 	for _, current := range due {
-		value, transitionErr := applyTransition(ctx, tx, current, StatusEnded, now)
+		value, transitionErr := applyTransition(ctx, tx, current, StatusEnded, now, r.earningsHold)
 		if transitionErr != nil {
 			return nil, transitionErr
 		}

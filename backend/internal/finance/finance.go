@@ -47,6 +47,7 @@ type RefundRequest struct {
 	Reason                string
 	Status                RefundStatus
 	Attempts              int
+	PaymentFlow           string
 }
 
 type RefundResult struct {

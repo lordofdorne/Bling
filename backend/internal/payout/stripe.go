@@ -29,15 +29,15 @@ var accountIncludes = []*string{
 // CreateConnectedAccount creates a recipient account for a creator.
 //
 // Bling is a marketplace: it runs checkout, is merchant of record, and takes an
-// application fee from destination charges. That maps to a recipient
-// configuration requesting only the transfers capability, an Express dashboard,
+// creator share later with separate charges and transfers. That maps to a recipient
+// configuration requesting only the transfers capability, no Stripe dashboard,
 // and platform responsibility for both fees and losses. Requesting a merchant
 // configuration here would be wrong and would lengthen onboarding.
 func (g *StripeGateway) CreateConnectedAccount(ctx context.Context, creatorID, email, country string) (StripeAccount, error) {
 	params := &stripe.V2CoreAccountCreateParams{
 		ContactEmail: stripe.String(email),
 		DisplayName:  stripe.String(email),
-		Dashboard:    stripe.String("express"),
+		Dashboard:    stripe.String("none"),
 		Identity: &stripe.V2CoreAccountCreateIdentityParams{
 			Country: stripe.String(country),
 		},
@@ -68,6 +68,24 @@ func (g *StripeGateway) CreateConnectedAccount(ctx context.Context, creatorID, e
 		return StripeAccount{}, err
 	}
 	return stripeAccount(value), nil
+}
+
+func (g *StripeGateway) CreateAccountSession(ctx context.Context, accountID string) (string, error) {
+	value, err := g.client.V1AccountSessions.Create(ctx, &stripe.AccountSessionCreateParams{
+		Account: stripe.String(accountID),
+		Components: &stripe.AccountSessionCreateComponentsParams{
+			AccountOnboarding: &stripe.AccountSessionCreateComponentsAccountOnboardingParams{
+				Enabled: stripe.Bool(true),
+				Features: &stripe.AccountSessionCreateComponentsAccountOnboardingFeaturesParams{
+					ExternalAccountCollection: stripe.Bool(true),
+				},
+			},
+		},
+	})
+	if err != nil {
+		return "", err
+	}
+	return value.ClientSecret, nil
 }
 
 func (g *StripeGateway) RetrieveAccount(ctx context.Context, id string) (StripeAccount, error) {
@@ -128,8 +146,8 @@ func stripeAccount(value *stripe.V2CoreAccount) StripeAccount {
 		}
 	}
 
-	// A recipient account never accepts charges itself; ChargesEnabled exists
-	// only to satisfy the paid-call readiness predicate still inlined in SQL.
+	// A recipient account never accepts charges itself; ChargesEnabled remains
+	// as a compatibility field for older clients.
 	active := account.TransfersActive()
 	account.ChargesEnabled = active
 	account.PayoutsEnabled = active

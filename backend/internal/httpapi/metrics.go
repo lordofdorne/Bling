@@ -16,6 +16,7 @@ type metricsHandler struct {
 
 func (h metricsHandler) serve(w http.ResponseWriter, r *http.Request) {
 	var waiting, activeCalls, reconnecting, pendingOutbox, pendingCaptures, pendingRefunds, failedRefunds, failedWebhookEvents, openDisputes, failedPayouts int64
+	var creatorLiability, creatorPending, creatorAvailable, unverifiedLiability, negativeCreators, payoutItemsPending int64
 	err := h.pool.QueryRow(r.Context(), `SELECT
 		(SELECT count(*) FROM queue_entries WHERE status='WAITING'),
 		(SELECT count(*) FROM calls WHERE status IN ('CREATED','CONNECTING','LIVE')),
@@ -29,6 +30,22 @@ func (h metricsHandler) serve(w http.ResponseWriter, r *http.Request) {
 		(SELECT count(*) FROM creator_payout_events WHERE status='failed')`).Scan(&waiting, &activeCalls, &reconnecting, &pendingOutbox, &pendingCaptures, &pendingRefunds, &failedRefunds, &failedWebhookEvents, &openDisputes, &failedPayouts)
 	if err != nil {
 		h.logger.Error("operational metrics query failed", "error", err)
+		http.Error(w, "metrics unavailable", http.StatusServiceUnavailable)
+		return
+	}
+	err = h.pool.QueryRow(r.Context(), `WITH balances AS (
+		SELECT creator_id,sum(amount_cents) total,
+		       sum(amount_cents) FILTER (WHERE effective_at <= now()) available,
+		       sum(amount_cents) FILTER (WHERE effective_at > now()) pending
+		FROM creator_ledger_entries GROUP BY creator_id
+	) SELECT
+		COALESCE(sum(total),0),COALESCE(sum(pending),0),COALESCE(sum(available),0),
+		COALESCE(sum(total) FILTER (WHERE NOT EXISTS(SELECT 1 FROM creator_payout_accounts a WHERE a.creator_id=balances.creator_id AND a.transfers_status='active')),0),
+		count(*) FILTER (WHERE total<0),
+		(SELECT count(*) FROM creator_payout_items WHERE status IN ('RESERVED','SENDING','RETRY','FAILED'))
+	FROM balances`).Scan(&creatorLiability, &creatorPending, &creatorAvailable, &unverifiedLiability, &negativeCreators, &payoutItemsPending)
+	if err != nil {
+		h.logger.Error("creator balance metrics failed", "error", err)
 		http.Error(w, "metrics unavailable", http.StatusServiceUnavailable)
 		return
 	}
@@ -57,4 +74,10 @@ func (h metricsHandler) serve(w http.ResponseWriter, r *http.Request) {
 	_, _ = fmt.Fprintf(w, "# TYPE bling_stripe_webhook_events_failed gauge\nbling_stripe_webhook_events_failed %d\n", failedWebhookEvents)
 	_, _ = fmt.Fprintf(w, "# TYPE bling_payment_disputes_open gauge\nbling_payment_disputes_open %d\n", openDisputes)
 	_, _ = fmt.Fprintf(w, "# TYPE bling_creator_payouts_failed gauge\nbling_creator_payouts_failed %d\n", failedPayouts)
+	_, _ = fmt.Fprintf(w, "# TYPE bling_creator_balance_liability_cents gauge\nbling_creator_balance_liability_cents %d\n", creatorLiability)
+	_, _ = fmt.Fprintf(w, "# TYPE bling_creator_balance_pending_cents gauge\nbling_creator_balance_pending_cents %d\n", creatorPending)
+	_, _ = fmt.Fprintf(w, "# TYPE bling_creator_balance_available_cents gauge\nbling_creator_balance_available_cents %d\n", creatorAvailable)
+	_, _ = fmt.Fprintf(w, "# TYPE bling_creator_balance_unverified_cents gauge\nbling_creator_balance_unverified_cents %d\n", unverifiedLiability)
+	_, _ = fmt.Fprintf(w, "# TYPE bling_creator_balance_negative_accounts gauge\nbling_creator_balance_negative_accounts %d\n", negativeCreators)
+	_, _ = fmt.Fprintf(w, "# TYPE bling_creator_payout_items_pending gauge\nbling_creator_payout_items_pending %d\n", payoutItemsPending)
 }

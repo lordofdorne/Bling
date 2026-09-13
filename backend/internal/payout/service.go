@@ -13,15 +13,20 @@ import (
 const PlatformFeePercent = int(paymentdomain.PlatformFeeBPS / 100)
 
 type Service struct {
-	repository  Repository
-	gateway     Gateway
-	country     string
-	frontendURL string
-	now         func() time.Time
+	repository     Repository
+	gateway        Gateway
+	country        string
+	frontendURL    string
+	publishableKey string
+	now            func() time.Time
 }
 
-func NewService(repository Repository, gateway Gateway, country, frontendURL string) *Service {
-	return &Service{repository: repository, gateway: gateway, country: country, frontendURL: strings.TrimRight(frontendURL, "/"), now: time.Now}
+func NewService(repository Repository, gateway Gateway, country, frontendURL string, publishableKey ...string) *Service {
+	value := &Service{repository: repository, gateway: gateway, country: country, frontendURL: strings.TrimRight(frontendURL, "/"), now: time.Now}
+	if len(publishableKey) > 0 {
+		value.publishableKey = publishableKey[0]
+	}
+	return value
 }
 
 func (s *Service) Enabled() bool { return s != nil && s.gateway != nil }
@@ -84,6 +89,37 @@ func (s *Service) OnboardingLink(ctx context.Context, creatorID, email string) (
 		return "", fmt.Errorf("create Stripe onboarding link: %w", err)
 	}
 	return url, nil
+}
+
+func (s *Service) AccountSession(ctx context.Context, creatorID, email string) (AccountSession, error) {
+	if !s.Enabled() {
+		return AccountSession{}, ErrDisabled
+	}
+	embedded, ok := s.gateway.(EmbeddedGateway)
+	if !ok || s.publishableKey == "" {
+		return AccountSession{}, ErrDisabled
+	}
+	account, err := s.ensureAccount(ctx, creatorID, email)
+	if err != nil {
+		return AccountSession{}, err
+	}
+	secret, err := embedded.CreateAccountSession(ctx, account.StripeAccountID)
+	if err != nil {
+		return AccountSession{}, fmt.Errorf("create Stripe account session: %w", err)
+	}
+	return AccountSession{ClientSecret: secret, PublishableKey: s.publishableKey}, nil
+}
+
+func (s *Service) ensureAccount(ctx context.Context, creatorID, email string) (Account, error) {
+	account, err := s.repository.ByCreator(ctx, creatorID)
+	if errors.Is(err, ErrAccountNotFound) {
+		created, createErr := s.gateway.CreateConnectedAccount(ctx, creatorID, email, s.country)
+		if createErr != nil {
+			return Account{}, fmt.Errorf("create Stripe connected account: %w", createErr)
+		}
+		return s.repository.Upsert(ctx, creatorID, created, s.now().UTC())
+	}
+	return account, err
 }
 
 // Reconcile refreshes a connected account from Stripe after a webhook.

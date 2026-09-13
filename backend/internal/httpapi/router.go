@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/bling-app/bling/backend/internal/auth"
+	balancedomain "github.com/bling-app/bling/backend/internal/balance"
 	calldomain "github.com/bling-app/bling/backend/internal/call"
 	"github.com/bling-app/bling/backend/internal/config"
 	financedomain "github.com/bling-app/bling/backend/internal/finance"
@@ -30,7 +31,7 @@ type redisDependency struct{ client *redis.Client }
 
 func (d redisDependency) Ping(ctx context.Context) error { return d.client.Ping(ctx).Err() }
 
-func NewRouter(logger *slog.Logger, postgres *pgxpool.Pool, redisClient *redis.Client, cfg config.Config, queueService *queuedomain.Service, realtimeHub *realtime.Hub, callService *calldomain.Service, signalHub *realtime.SignalHub, paymentService *paymentdomain.Service, payoutService *payoutdomain.Service, financeService *financedomain.Service, socialService *social.Service) http.Handler {
+func NewRouter(logger *slog.Logger, postgres *pgxpool.Pool, redisClient *redis.Client, cfg config.Config, queueService *queuedomain.Service, realtimeHub *realtime.Hub, callService *calldomain.Service, signalHub *realtime.SignalHub, paymentService *paymentdomain.Service, payoutService *payoutdomain.Service, financeService *financedomain.Service, balanceService *balancedomain.Service, socialService *social.Service) http.Handler {
 	authHandler := authHandler{
 		service:      auth.NewService(auth.NewPostgresStore(postgres), cfg.BcryptCost, cfg.SessionTTL),
 		limiter:      auth.NewRedisRateLimiter(redisClient),
@@ -42,7 +43,7 @@ func NewRouter(logger *slog.Logger, postgres *pgxpool.Pool, redisClient *redis.C
 	showHandler := showHandler{service: showdomain.NewService(showdomain.NewPostgresStore(postgres)), logger: logger}
 	queueHandler := queueHandler{service: queueService, payments: paymentService, logger: logger, cookieSecure: cfg.CookieSecure, cookieTTL: cfg.SessionTTL}
 	paymentHandler := paymentHandler{service: paymentService, logger: logger, setCookie: queueHandler.setViewerCookie, webhookSecret: cfg.StripeWebhookSecret, payouts: payoutService, finances: financeService}
-	payoutHandler := payoutHandler{service: payoutService, logger: logger}
+	payoutHandler := payoutHandler{service: payoutService, balances: balanceService, logger: logger}
 	queueRealtimeHandler := realtimeHandler{
 		service: queueService, hub: realtimeHub, limiter: auth.NewRedisRateLimiter(redisClient), logger: logger,
 		allowedOrigins: cfg.AllowedOrigins, rateLimit: cfg.RealtimeConnectLimit, rateWindow: cfg.RealtimeRateLimitWindow,
@@ -114,7 +115,10 @@ func newRouterWithCalls(logger *slog.Logger, health healthHandler, authenticatio
 					protected.Mount("/shows", shows.routes())
 					if payouts != nil {
 						protected.Get("/payouts/account", payouts.status)
-						protected.Post("/payouts/onboarding-link", payouts.onboardingLink)
+						protected.Post("/payouts/account-session", payouts.accountSession)
+						if payouts.balances != nil {
+							protected.Get("/payouts/balance", payouts.balance)
+						}
 					}
 					if payments != nil && payments.finances != nil {
 						protected.Get("/payments/activity", payments.activity)

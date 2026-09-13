@@ -32,6 +32,12 @@ type fakeGateway struct {
 	country    string
 	refreshURL string
 	returnURL  string
+	sessions   int
+}
+
+func (g *fakeGateway) CreateAccountSession(context.Context, string) (string, error) {
+	g.sessions++
+	return "acct_session_secret", nil
 }
 
 func (g *fakeGateway) CreateConnectedAccount(_ context.Context, _, _, country string) (StripeAccount, error) {
@@ -73,6 +79,19 @@ func TestOnboardingCreatesConnectedAccountAndSingleUseLink(t *testing.T) {
 	}
 	if gateway.refreshURL != "https://bling.test/dashboard?stripe=refresh" || gateway.returnURL != "https://bling.test/dashboard?stripe=return" {
 		t.Fatalf("refresh=%q return=%q", gateway.refreshURL, gateway.returnURL)
+	}
+}
+
+func TestEmbeddedSessionCreatesAccountWithoutRedirect(t *testing.T) {
+	repository := &fakeRepository{err: ErrAccountNotFound}
+	gateway := &fakeGateway{account: StripeAccount{ID: "acct_creator"}}
+	service := NewService(repository, gateway, "US", "https://bling.test", "pk_test_example")
+	value, err := service.AccountSession(context.Background(), "creator-1", "creator@example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if value.ClientSecret != "acct_session_secret" || value.PublishableKey != "pk_test_example" || gateway.created != 1 || gateway.sessions != 1 || gateway.linked != 0 {
+		t.Fatalf("session=%+v gateway=%+v", value, gateway)
 	}
 }
 

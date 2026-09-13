@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
-	"errors"
 	"os"
 	"testing"
 	"time"
@@ -12,7 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-func TestPrepareSnapshotsCreatorDestinationAndThirtyPercentFee(t *testing.T) {
+func TestPrepareUsesPlatformBalanceWithoutCreatorPayoutSetup(t *testing.T) {
 	databaseURL := os.Getenv("TEST_DATABASE_URL")
 	if databaseURL == "" {
 		t.Skip("TEST_DATABASE_URL is not set")
@@ -53,17 +52,11 @@ func TestPrepareSnapshotsCreatorDestinationAndThirtyPercentFee(t *testing.T) {
 
 	repository := NewPostgresRepository(pool)
 	input := PrepareInput{ShowID: showID, TierID: tierID, ViewerTokenHash: []byte("viewer"), IdempotencyKeyHash: []byte("attempt")}
-	if _, err := repository.Prepare(ctx, input, time.Now().UTC()); !errors.Is(err, ErrPayoutsNotReady) {
-		t.Fatalf("without connected account error=%v", err)
-	}
-	if _, err := pool.Exec(ctx, `INSERT INTO creator_payout_accounts(creator_id,stripe_account_id,charges_enabled,payouts_enabled,details_submitted) VALUES($1,$2,true,true,true)`, creatorID, "acct_payment_"+suffix); err != nil {
-		t.Fatal(err)
-	}
 	attempt, err := repository.Prepare(ctx, input, time.Now().UTC())
 	if err != nil {
 		t.Fatal(err)
 	}
-	if attempt.DestinationAccountID != "acct_payment_"+suffix || attempt.AmountCents != 999 || attempt.PlatformFeeBPS != 3000 || attempt.PlatformFeeCents != 299 {
+	if attempt.Flow != FlowPlatform || attempt.DestinationAccountID != "" || attempt.AmountCents != 999 || attempt.PlatformFeeBPS != 3000 || attempt.PlatformFeeCents != 299 {
 		t.Fatalf("attempt=%+v", attempt)
 	}
 

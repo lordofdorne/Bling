@@ -62,6 +62,7 @@ func TestConcurrentSelectionCreatesExactlyOneActiveCall(t *testing.T) {
 	defer func() {
 		cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cleanupCancel()
+		_, _ = pool.Exec(cleanupCtx, `DELETE FROM creator_ledger_entries WHERE creator_id=$1`, creatorID)
 		_, _ = pool.Exec(cleanupCtx, `UPDATE payment_attempts SET queue_entry_id=NULL WHERE show_id IN (SELECT id FROM shows WHERE creator_id=$1)`, creatorID)
 		_, _ = pool.Exec(cleanupCtx, `UPDATE queue_entries SET payment_attempt_id=NULL WHERE show_id IN (SELECT id FROM shows WHERE creator_id=$1)`, creatorID)
 		_, _ = pool.Exec(cleanupCtx, `DELETE FROM calls WHERE show_id IN (SELECT id FROM shows WHERE creator_id=$1)`, creatorID)
@@ -233,5 +234,41 @@ func TestConcurrentSelectionCreatesExactlyOneActiveCall(t *testing.T) {
 	}
 	if refundCount != 1 || refundStatus != "REQUESTED" || refundReason != "call_failed_before_live" {
 		t.Fatalf("refund count=%d status=%q reason=%q", refundCount, refundStatus, refundReason)
+	}
+
+	platformToken := queuedomain.Hash("platform-viewer-" + suffix)
+	platformIntentID := "pi_platform_" + suffix
+	var platformAttemptID string
+	if err := pool.QueryRow(ctx, `INSERT INTO payment_attempts(show_id,tier_id,viewer_token_hash,idempotency_key_hash,stripe_payment_intent_id,payment_flow,amount_cents,platform_fee_bps,platform_fee_cents,status,authorized_at)
+		VALUES($1,$2,$3,$4,$5,'PLATFORM',2500,3000,750,'AUTHORIZED',now()) RETURNING id`, activeShow.ID, paidTierID, platformToken, queuedomain.Hash("platform-attempt-"+suffix), platformIntentID).Scan(&platformAttemptID); err != nil {
+		t.Fatal(err)
+	}
+	platformEntry, err := queueRepository.Join(ctx, queuedomain.JoinInput{ShowID: activeShow.ID, TierID: paidTierID, DisplayName: "Platform caller", Topic: "Ledger credit", SessionTokenHash: platformToken, JoinKeyHash: queuedomain.Hash("platform-join-" + suffix), PaymentAttemptID: platformAttemptID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	gateway.intentID = platformIntentID
+	platformCall, err := paidRepository.Select(ctx, activeShow.ID, creatorID, platformEntry.ID, SelectionManual, time.Now().UTC())
+	if err != nil {
+		t.Fatal(err)
+	}
+	liveAt := time.Now().UTC()
+	if _, err := paidRepository.Transition(ctx, activeShow.ID, platformCall.ID, creatorID, StatusConnecting, liveAt.Add(-time.Second)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := paidRepository.Transition(ctx, activeShow.ID, platformCall.ID, creatorID, StatusLive, liveAt); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := paidRepository.Transition(ctx, activeShow.ID, platformCall.ID, creatorID, StatusEnded, liveAt.Add(time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+	var earningCount int
+	var earningAmount int64
+	var effectiveAt time.Time
+	if err := pool.QueryRow(ctx, `SELECT count(*),min(amount_cents),min(effective_at) FROM creator_ledger_entries WHERE payment_attempt_id=$1 AND kind='EARNING'`, platformAttemptID).Scan(&earningCount, &earningAmount, &effectiveAt); err != nil {
+		t.Fatal(err)
+	}
+	if earningCount != 1 || earningAmount != 1750 || effectiveAt.Before(liveAt.Add(7*24*time.Hour-time.Second)) {
+		t.Fatalf("earning count=%d amount=%d effective_at=%v", earningCount, earningAmount, effectiveAt)
 	}
 }

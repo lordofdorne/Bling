@@ -17,11 +17,13 @@ func NewStripeGateway(secretKey string) *StripeGateway {
 func (g *StripeGateway) CreateAuthorization(ctx context.Context, attempt Attempt) (Intent, error) {
 	params := &stripe.PaymentIntentParams{
 		Amount: stripe.Int64(attempt.AmountCents), Currency: stripe.String(attempt.Currency),
-		CaptureMethod:        stripe.String(string(stripe.PaymentIntentCaptureMethodManual)),
-		PaymentMethodTypes:   stripe.StringSlice([]string{"card"}),
-		Description:          stripe.String("Bling Hotline call"),
-		ApplicationFeeAmount: stripe.Int64(attempt.PlatformFeeCents),
-		TransferData:         &stripe.PaymentIntentTransferDataParams{Destination: stripe.String(attempt.DestinationAccountID)},
+		CaptureMethod:      stripe.String(string(stripe.PaymentIntentCaptureMethodManual)),
+		PaymentMethodTypes: stripe.StringSlice([]string{"card"}),
+		Description:        stripe.String("Bling Hotline call"),
+	}
+	if attempt.Flow != FlowPlatform {
+		params.ApplicationFeeAmount = stripe.Int64(attempt.PlatformFeeCents)
+		params.TransferData = &stripe.PaymentIntentTransferDataParams{Destination: stripe.String(attempt.DestinationAccountID)}
 	}
 	params.Context = ctx
 	params.AddMetadata("bling_payment_attempt_id", attempt.ID)

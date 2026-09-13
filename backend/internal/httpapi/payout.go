@@ -5,13 +5,32 @@ import (
 	"log/slog"
 	"net/http"
 
+	balancedomain "github.com/bling-app/bling/backend/internal/balance"
 	payoutdomain "github.com/bling-app/bling/backend/internal/payout"
 	stripe "github.com/stripe/stripe-go/v85"
 )
 
 type payoutHandler struct {
-	service *payoutdomain.Service
-	logger  *slog.Logger
+	service  *payoutdomain.Service
+	balances *balancedomain.Service
+	logger   *slog.Logger
+}
+
+func (h payoutHandler) balance(w http.ResponseWriter, r *http.Request) {
+	preventCaching(w)
+	value, err := h.balances.Summary(r.Context(), creatorFromContext(r.Context()).ID)
+	if err != nil {
+		h.logger.Error("load creator balance failed", "error", err)
+		writeError(w, http.StatusInternalServerError, "BALANCE_UNAVAILABLE", "Unable to load your balance.")
+		return
+	}
+	entries, err := h.balances.Entries(r.Context(), creatorFromContext(r.Context()).ID, 25)
+	if err != nil {
+		h.logger.Error("load creator ledger failed", "error", err)
+		writeError(w, http.StatusInternalServerError, "BALANCE_UNAVAILABLE", "Unable to load your balance.")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"data": map[string]any{"balance": value, "activity": entries}})
 }
 
 func (h payoutHandler) status(w http.ResponseWriter, r *http.Request) {
@@ -33,6 +52,17 @@ func (h payoutHandler) onboardingLink(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"data": map[string]any{"url": url}})
+}
+
+func (h payoutHandler) accountSession(w http.ResponseWriter, r *http.Request) {
+	preventCaching(w)
+	creator := creatorFromContext(r.Context())
+	value, err := h.service.AccountSession(r.Context(), creator.ID, creator.Email)
+	if err != nil {
+		h.writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"data": map[string]any{"accountSession": value}})
 }
 
 // writeError translates a payout failure into a response the creator can act

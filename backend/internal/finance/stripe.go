@@ -15,9 +15,11 @@ func NewStripeGateway(secretKey string) *StripeGateway {
 
 func (g *StripeGateway) Refund(ctx context.Context, request RefundRequest) (RefundResult, error) {
 	params := &stripe.RefundParams{
-		PaymentIntent:        stripe.String(request.StripePaymentIntentID),
-		ReverseTransfer:      stripe.Bool(true),
-		RefundApplicationFee: stripe.Bool(true),
+		PaymentIntent: stripe.String(request.StripePaymentIntentID),
+	}
+	if request.PaymentFlow == "DESTINATION" {
+		params.ReverseTransfer = stripe.Bool(true)
+		params.RefundApplicationFee = stripe.Bool(true)
 	}
 	params.Context = ctx
 	params.SetIdempotencyKey("bling-refund-" + request.ID)
