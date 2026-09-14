@@ -226,6 +226,12 @@ function centsFromPriceInput(value: string) {
   return Math.round(dollars * 100);
 }
 
+function estimatedCreatorEarningsCents(amountCents: number) {
+  const basicCardFeeCents = Math.round(amountCents * 0.029) + 30;
+  const creatorCardFeeCents = Math.floor(basicCardFeeCents / 2);
+  return Math.max(0, Math.floor(amountCents * 0.8) - creatorCardFeeCents);
+}
+
 function TierConfiguration({
   showID,
   onStart,
@@ -411,7 +417,11 @@ function TierConfigurationForm({
                   }
                 }}
               />
-              <small>Use $0 for free or at least $0.50 for a paid tier.</small>
+              <small>
+                {tier.priceCents > 0
+                  ? `Estimated payout: ${formatPrice(estimatedCreatorEarningsCents(tier.priceCents))} · 80% less your half of 2.9% + $0.30.`
+                  : "Use $0 for free or at least $0.50 for a paid tier."}
+              </small>
             </label>
             <label className="tier-enabled">
               <input
@@ -588,8 +598,8 @@ function CreatorPayoutSettings() {
             <h3>Your payouts are ready.</h3>
             <p>
               You receive {100 - payouts.data.platformFeePercent}% of each paid
-              call. Available balances are sent monthly. Bling’s platform fee is{" "}
-              {payouts.data.platformFeePercent}%.
+              call, less half of the basic card fee (2.9% + $0.30). Bling pays
+              the other half. Available balances are sent monthly.
             </p>
             {payouts.data.externalAccountPresent && (
               <div className="payout-bank-summary">
@@ -629,7 +639,9 @@ function CreatorPayoutSettings() {
             <p>
               You can earn before doing this. Securely add your identity and
               bank details when you are ready to get paid. You receive{" "}
-              {100 - payouts.data.platformFeePercent}% of every paid call.
+              {100 - payouts.data.platformFeePercent}% of every paid call, less
+              half of the basic card fee (2.9% + $0.30). Bling pays the other
+              half.
             </p>
           </div>
           <button
@@ -1128,7 +1140,7 @@ export function Dashboard() {
                   </strong>
                   <small>
                     {payouts.data
-                      ? `${100 - payouts.data.platformFeePercent}% creator share per paid call`
+                      ? `${100 - payouts.data.platformFeePercent}% creator share, less half the basic card fee`
                       : "Earn now and set up monthly payouts when ready"}
                   </small>
                 </article>
@@ -1265,6 +1277,9 @@ export function Dashboard() {
                             {formatPrice(
                               activity.amountCents - activity.platformFeeCents,
                             )}
+                            {activity.creatorProcessingFeeCents > 0
+                              ? ` · includes your ${formatPrice(activity.creatorProcessingFeeCents)} half of the card fee`
+                              : ""}
                           </span>
                         </li>
                       ))}

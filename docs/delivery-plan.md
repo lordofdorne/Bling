@@ -103,10 +103,10 @@ Acceptance: a paid caller cannot enter with a missing, reused, wrong-tier, wrong
 - Stripe Connect onboarding (Accounts v2) and account capability reconciliation
 - Creator-controlled per-tier pricing with paid-tier readiness gates
 - Destination charges to the creator's connected account
-- Immutable 30% Bling application-fee snapshot and verification
+- Immutable 20% Bling share plus the creator's half of the basic card fee, with both fee components snapshotted for auditability
 - Dashboard payout status and onboarding recovery
 
-Acceptance: paid Hotlines cannot start without a payout-ready creator; each PaymentIntent is bound to the snapshotted connected account and whole-cent 30% fee; free tiers remain usable without Stripe; repeated onboarding requests reuse one connected account.
+Acceptance: paid Hotlines cannot start without a payout-ready creator; each PaymentIntent is bound to the snapshotted connected account and whole-cent revenue and processing-fee split; free tiers remain usable without Stripe; repeated onboarding requests reuse one connected account.
 
 ## PR 13 — Financial recovery
 

@@ -5,6 +5,8 @@ export type PaymentActivity = {
   paymentAttemptId: string;
   amountCents: number;
   platformFeeCents: number;
+  basicCardFeeCents: number;
+  creatorProcessingFeeCents: number;
   currency: string;
   paymentStatus: string;
   refundStatus?: string;

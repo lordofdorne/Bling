@@ -56,7 +56,7 @@ func TestPrepareUsesPlatformBalanceWithoutCreatorPayoutSetup(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if attempt.Flow != FlowPlatform || attempt.DestinationAccountID != "" || attempt.AmountCents != 999 || attempt.PlatformFeeBPS != 3000 || attempt.PlatformFeeCents != 299 {
+	if attempt.Flow != FlowPlatform || attempt.DestinationAccountID != "" || attempt.AmountCents != 999 || attempt.PlatformFeeBPS != 2000 || attempt.BasicCardFeeCents != 59 || attempt.CreatorProcessingFeeCents != 29 || attempt.PlatformFeeCents != 229 {
 		t.Fatalf("attempt=%+v", attempt)
 	}
 

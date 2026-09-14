@@ -11,6 +11,7 @@ import (
 )
 
 const PlatformFeePercent = int(paymentdomain.PlatformFeeBPS / 100)
+const CreatorProcessingFeePercent = int(paymentdomain.CreatorProcessingFeeShareBPS / 100)
 
 type Service struct {
 	repository     Repository
@@ -34,7 +35,7 @@ func (s *Service) Enabled() bool { return s != nil && s.gateway != nil }
 func (s *Service) Status(ctx context.Context, creatorID string) (Status, error) {
 	account, err := s.repository.ByCreator(ctx, creatorID)
 	if errors.Is(err, ErrAccountNotFound) {
-		return Status{RequirementsDue: []string{}, PlatformFeePercent: PlatformFeePercent}, nil
+		return Status{RequirementsDue: []string{}, PlatformFeePercent: PlatformFeePercent, CreatorProcessingFeePercent: CreatorProcessingFeePercent}, nil
 	}
 	if err != nil {
 		return Status{}, err
@@ -160,5 +161,5 @@ func statusFor(account Account) Status {
 	if requirements == nil {
 		requirements = []string{}
 	}
-	return Status{Connected: true, TransfersStatus: account.TransfersStatus, BankPayoutsStatus: account.BankPayoutsStatus, ExternalAccountPresent: account.ExternalAccountPresent, ExternalAccountBankName: account.ExternalAccountBankName, ExternalAccountLast4: account.ExternalAccountLast4, ExternalAccountCurrency: account.ExternalAccountCurrency, ChargesEnabled: account.ChargesEnabled, PayoutsEnabled: account.PayoutsEnabled, DetailsSubmitted: account.DetailsSubmitted, Ready: account.Ready(), RequirementsDue: requirements, PlatformFeePercent: PlatformFeePercent}
+	return Status{Connected: true, TransfersStatus: account.TransfersStatus, BankPayoutsStatus: account.BankPayoutsStatus, ExternalAccountPresent: account.ExternalAccountPresent, ExternalAccountBankName: account.ExternalAccountBankName, ExternalAccountLast4: account.ExternalAccountLast4, ExternalAccountCurrency: account.ExternalAccountCurrency, ChargesEnabled: account.ChargesEnabled, PayoutsEnabled: account.PayoutsEnabled, DetailsSubmitted: account.DetailsSubmitted, Ready: account.Ready(), RequirementsDue: requirements, PlatformFeePercent: PlatformFeePercent, CreatorProcessingFeePercent: CreatorProcessingFeePercent}
 }

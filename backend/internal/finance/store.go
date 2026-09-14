@@ -142,7 +142,8 @@ func (r *PostgresRepository) UpsertPayout(ctx context.Context, value Payout, now
 
 func (r *PostgresRepository) ActivityForCreator(ctx context.Context, creatorID string, limit int) ([]Activity, error) {
 	rows, err := r.pool.Query(ctx, `
-		SELECT p.id,p.amount_cents,p.platform_fee_cents,p.currency,p.status,
+		SELECT p.id,p.amount_cents,p.platform_fee_cents,
+			COALESCE(p.basic_card_fee_cents,0),COALESCE(p.creator_processing_fee_cents,0),p.currency,p.status,
 			COALESCE(r.status,''),COALESCE(r.reason,''),COALESCE(d.status,''),COALESCE(d.reason,''),p.created_at
 		FROM payment_attempts p JOIN shows s ON s.id=p.show_id
 		LEFT JOIN payment_refunds r ON r.payment_attempt_id=p.id
@@ -156,7 +157,7 @@ func (r *PostgresRepository) ActivityForCreator(ctx context.Context, creatorID s
 	result := make([]Activity, 0, limit)
 	for rows.Next() {
 		var value Activity
-		if err := rows.Scan(&value.PaymentAttemptID, &value.AmountCents, &value.PlatformFeeCents, &value.Currency, &value.PaymentStatus, &value.RefundStatus, &value.RefundReason, &value.DisputeStatus, &value.DisputeReason, &value.CreatedAt); err != nil {
+		if err := rows.Scan(&value.PaymentAttemptID, &value.AmountCents, &value.PlatformFeeCents, &value.BasicCardFeeCents, &value.CreatorProcessingFeeCents, &value.Currency, &value.PaymentStatus, &value.RefundStatus, &value.RefundReason, &value.DisputeStatus, &value.DisputeReason, &value.CreatedAt); err != nil {
 			return nil, err
 		}
 		result = append(result, value)

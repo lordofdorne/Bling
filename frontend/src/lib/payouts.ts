@@ -19,6 +19,7 @@ export type PayoutStatus = {
   ready: boolean;
   requirementsDue: string[];
   platformFeePercent: number;
+  creatorProcessingFeePercent: number;
 };
 
 type StatusResponse = { data: { payouts: PayoutStatus } };

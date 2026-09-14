@@ -45,19 +45,20 @@ func (a Account) Ready() bool {
 }
 
 type Status struct {
-	Connected               bool     `json:"connected"`
-	TransfersStatus         string   `json:"transfersStatus"`
-	BankPayoutsStatus       string   `json:"bankPayoutsStatus"`
-	ExternalAccountPresent  bool     `json:"externalAccountPresent"`
-	ExternalAccountBankName string   `json:"externalAccountBankName,omitempty"`
-	ExternalAccountLast4    string   `json:"externalAccountLast4,omitempty"`
-	ExternalAccountCurrency string   `json:"externalAccountCurrency,omitempty"`
-	ChargesEnabled          bool     `json:"chargesEnabled"`
-	PayoutsEnabled          bool     `json:"payoutsEnabled"`
-	DetailsSubmitted        bool     `json:"detailsSubmitted"`
-	Ready                   bool     `json:"ready"`
-	RequirementsDue         []string `json:"requirementsDue"`
-	PlatformFeePercent      int      `json:"platformFeePercent"`
+	Connected                   bool     `json:"connected"`
+	TransfersStatus             string   `json:"transfersStatus"`
+	BankPayoutsStatus           string   `json:"bankPayoutsStatus"`
+	ExternalAccountPresent      bool     `json:"externalAccountPresent"`
+	ExternalAccountBankName     string   `json:"externalAccountBankName,omitempty"`
+	ExternalAccountLast4        string   `json:"externalAccountLast4,omitempty"`
+	ExternalAccountCurrency     string   `json:"externalAccountCurrency,omitempty"`
+	ChargesEnabled              bool     `json:"chargesEnabled"`
+	PayoutsEnabled              bool     `json:"payoutsEnabled"`
+	DetailsSubmitted            bool     `json:"detailsSubmitted"`
+	Ready                       bool     `json:"ready"`
+	RequirementsDue             []string `json:"requirementsDue"`
+	PlatformFeePercent          int      `json:"platformFeePercent"`
+	CreatorProcessingFeePercent int      `json:"creatorProcessingFeePercent"`
 }
 
 // StripeAccount is the gateway-facing view of a connected account.

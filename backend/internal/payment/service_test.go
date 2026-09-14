@@ -151,13 +151,23 @@ func TestVerifyPlatformAuthorizationRejectsDestinationOrApplicationFee(t *testin
 	}
 }
 
-func TestPlatformFeeIsThirtyPercentInWholeCents(t *testing.T) {
+func TestCreatorGetsEightyPercentLessHalfBasicCardFee(t *testing.T) {
 	for _, test := range []struct {
-		amount int64
-		fee    int64
-	}{{50, 15}, {99, 29}, {2500, 750}} {
-		if got := platformFeeCents(test.amount); got != test.fee {
-			t.Fatalf("platformFeeCents(%d)=%d want %d", test.amount, got, test.fee)
+		amount               int64
+		basicFee             int64
+		creatorProcessingFee int64
+		totalDeduction       int64
+	}{{50, 31, 15, 25}, {99, 33, 16, 36}, {2500, 103, 51, 551}} {
+		basicFee := basicCardFeeCents(test.amount)
+		if basicFee != test.basicFee {
+			t.Fatalf("basicCardFeeCents(%d)=%d want %d", test.amount, basicFee, test.basicFee)
+		}
+		creatorFee := creatorProcessingFeeCents(basicFee)
+		if creatorFee != test.creatorProcessingFee {
+			t.Fatalf("creatorProcessingFeeCents(%d)=%d want %d", basicFee, creatorFee, test.creatorProcessingFee)
+		}
+		if got := platformFeeCents(test.amount, creatorFee); got != test.totalDeduction {
+			t.Fatalf("platformFeeCents(%d,%d)=%d want %d", test.amount, creatorFee, got, test.totalDeduction)
 		}
 	}
 }

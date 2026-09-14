@@ -78,16 +78,18 @@ type Payout struct {
 }
 
 type Activity struct {
-	PaymentAttemptID string       `json:"paymentAttemptId"`
-	AmountCents      int64        `json:"amountCents"`
-	PlatformFeeCents int64        `json:"platformFeeCents"`
-	Currency         string       `json:"currency"`
-	PaymentStatus    string       `json:"paymentStatus"`
-	RefundStatus     RefundStatus `json:"refundStatus,omitempty"`
-	RefundReason     string       `json:"refundReason,omitempty"`
-	DisputeStatus    string       `json:"disputeStatus,omitempty"`
-	DisputeReason    string       `json:"disputeReason,omitempty"`
-	CreatedAt        time.Time    `json:"createdAt"`
+	PaymentAttemptID          string       `json:"paymentAttemptId"`
+	AmountCents               int64        `json:"amountCents"`
+	PlatformFeeCents          int64        `json:"platformFeeCents"`
+	BasicCardFeeCents         int64        `json:"basicCardFeeCents"`
+	CreatorProcessingFeeCents int64        `json:"creatorProcessingFeeCents"`
+	Currency                  string       `json:"currency"`
+	PaymentStatus             string       `json:"paymentStatus"`
+	RefundStatus              RefundStatus `json:"refundStatus,omitempty"`
+	RefundReason              string       `json:"refundReason,omitempty"`
+	DisputeStatus             string       `json:"disputeStatus,omitempty"`
+	DisputeReason             string       `json:"disputeReason,omitempty"`
+	CreatedAt                 time.Time    `json:"createdAt"`
 }
 
 type PayoutFailure struct {

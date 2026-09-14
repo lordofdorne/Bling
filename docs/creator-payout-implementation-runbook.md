@@ -19,7 +19,7 @@ Initial scope:
 
 ## Architecture decisions
 
-1. **Use separate charges and transfers.** New PaymentIntents have no `transfer_data.destination` and no `application_fee_amount`. The full charge lands in the platform balance. The creator share remains the existing fee calculation: gross minus the snapshotted platform fee.
+1. **Use separate charges and transfers.** New PaymentIntents have no `transfer_data.destination` and no `application_fee_amount`. The full charge lands in the platform balance. The creator share is 80% of gross less half of the snapshotted published basic card fee.
 2. **Keep historical destination charges intact.** Add a `payment_flow` discriminator. Existing attempts with a destination are `DESTINATION`; new attempts are explicitly `PLATFORM`. Refund logic reads this value so historical charges still reverse transfers and fees correctly.
 3. **Credit earnings when a call first reaches `LIVE`.** Calls refunded before `LIVE` never become creator earnings. A unique ledger key makes replay safe.
 4. **Use an immutable signed ledger.** Credits are positive and debits are negative. Never edit or delete an entry. Correct mistakes with a compensating entry.
@@ -107,7 +107,7 @@ Acceptance checks:
 ### 2. Switch new payments to the platform flow
 
 - Remove the payout-account join and readiness rejection from payment preparation.
-- Continue snapshotting the platform fee basis points and cents.
+- Snapshot the 20% platform share, the published basic card fee, and the creator's 50% processing-fee share in whole cents.
 - Create PaymentIntents without destination or application fee fields.
 - Persist new attempts as `PLATFORM`.
 - Verify Stripe responses according to the persisted flow. Historical `DESTINATION` attempts retain the existing verification and refund behavior.

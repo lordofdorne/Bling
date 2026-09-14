@@ -40,6 +40,8 @@ If a captured call never reaches `LIVE`, Bling schedules a full refund and creat
 
 If a refund succeeds after an earning exists, a database trigger adds one creator-share reversal. Open disputes add one dispute debit; a won or prevented dispute adds one release. Unique business-event keys make webhook redelivery safe. Negative balances carry against future earnings.
 
+For new paid calls, the creator receives 80% of the listed call price less half of the published basic domestic-card fee (2.9% + $0.30). Bling retains 20% and absorbs the other half, including the extra cent when the fee is odd. The published basic fee and both creator deductions are snapshotted on the payment attempt so later pricing changes cannot alter an existing call. Bling absorbs any difference between that published basic fee and Stripe's actual fee for international cards, currency conversion, or other payment methods.
+
 ## Local sandbox flow
 
 1. Configure Stripe test secret, publishable, and webhook keys in `.env` and keep `CREATOR_PAYOUTS_ENABLED=false`.

@@ -429,7 +429,7 @@ describe("App routes", () => {
     ).toBeInTheDocument();
   });
 
-  it("shows the creator's 70 percent payout when Stripe is ready", async () => {
+  it("shows the 80/20 split and shared card fee when Stripe is ready", async () => {
     const creator = {
       id: "user-1",
       username: "alice",
@@ -457,7 +457,8 @@ describe("App routes", () => {
                 detailsSubmitted: true,
                 ready: true,
                 requirementsDue: [],
-                platformFeePercent: 30,
+                platformFeePercent: 20,
+                creatorProcessingFeePercent: 50,
               },
             },
           });
@@ -468,7 +469,9 @@ describe("App routes", () => {
                 {
                   paymentAttemptId: "attempt-1",
                   amountCents: 2500,
-                  platformFeeCents: 750,
+                  platformFeeCents: 551,
+                  basicCardFeeCents: 103,
+                  creatorProcessingFeeCents: 51,
                   currency: "usd",
                   paymentStatus: "CAPTURED",
                   refundStatus: "SUCCEEDED",
@@ -484,13 +487,15 @@ describe("App routes", () => {
 
     renderAt("/dashboard");
     expect(await screen.findByText("Refunded")).toBeInTheDocument();
-    expect(screen.getByText("Creator share: $17.50")).toBeInTheDocument();
+    expect(
+      screen.getByText("Creator share: $19.49 · includes your $0.51 half of the card fee"),
+    ).toBeInTheDocument();
     fireEvent.click(screen.getByRole("link", { name: "Payout settings" }));
     expect(
       await screen.findByRole("heading", { name: "Your payouts are ready." }),
     ).toBeInTheDocument();
     expect(
-      screen.getByText(/receive 70% of each paid call/i),
+      screen.getByText(/receive 80% of each paid call/i),
     ).toBeInTheDocument();
   });
 

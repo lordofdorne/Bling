@@ -30,7 +30,12 @@ var (
 	ErrPaymentMethodNotFound  = errors.New("payment method not found")
 )
 
-const PlatformFeeBPS int64 = 3000
+const (
+	PlatformFeeBPS               int64 = 2000
+	BasicCardFeeBPS              int64 = 290
+	BasicCardFixedFeeCents       int64 = 30
+	CreatorProcessingFeeShareBPS int64 = 5000
+)
 
 type Flow string
 
@@ -40,25 +45,27 @@ const (
 )
 
 type Attempt struct {
-	ID                    string     `json:"id"`
-	ShowID                string     `json:"showId"`
-	TierID                string     `json:"tierId"`
-	QueueEntryID          *string    `json:"queueEntryId,omitempty"`
-	StripePaymentIntentID string     `json:"-"`
-	PayerUserID           string     `json:"-"`
-	StripeCustomerID      string     `json:"-"`
-	DestinationAccountID  string     `json:"-"`
-	Flow                  Flow       `json:"-"`
-	AmountCents           int64      `json:"amountCents"`
-	PlatformFeeBPS        int64      `json:"platformFeeBps"`
-	PlatformFeeCents      int64      `json:"platformFeeCents"`
-	Currency              string     `json:"currency"`
-	Status                Status     `json:"status"`
-	AuthorizedAt          *time.Time `json:"authorizedAt,omitempty"`
-	CapturedAt            *time.Time `json:"capturedAt,omitempty"`
-	CanceledAt            *time.Time `json:"canceledAt,omitempty"`
-	CreatedAt             time.Time  `json:"createdAt"`
-	UpdatedAt             time.Time  `json:"updatedAt"`
+	ID                        string     `json:"id"`
+	ShowID                    string     `json:"showId"`
+	TierID                    string     `json:"tierId"`
+	QueueEntryID              *string    `json:"queueEntryId,omitempty"`
+	StripePaymentIntentID     string     `json:"-"`
+	PayerUserID               string     `json:"-"`
+	StripeCustomerID          string     `json:"-"`
+	DestinationAccountID      string     `json:"-"`
+	Flow                      Flow       `json:"-"`
+	AmountCents               int64      `json:"amountCents"`
+	PlatformFeeBPS            int64      `json:"platformFeeBps"`
+	PlatformFeeCents          int64      `json:"platformFeeCents"`
+	BasicCardFeeCents         int64      `json:"basicCardFeeCents"`
+	CreatorProcessingFeeCents int64      `json:"creatorProcessingFeeCents"`
+	Currency                  string     `json:"currency"`
+	Status                    Status     `json:"status"`
+	AuthorizedAt              *time.Time `json:"authorizedAt,omitempty"`
+	CapturedAt                *time.Time `json:"capturedAt,omitempty"`
+	CanceledAt                *time.Time `json:"canceledAt,omitempty"`
+	CreatedAt                 time.Time  `json:"createdAt"`
+	UpdatedAt                 time.Time  `json:"updatedAt"`
 }
 
 type Authorization struct {

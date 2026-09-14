@@ -61,7 +61,7 @@ func TestStatusBeforeConnectingExplainsFee(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if status.Connected || status.Ready || status.PlatformFeePercent != 30 || status.RequirementsDue == nil {
+	if status.Connected || status.Ready || status.PlatformFeePercent != 20 || status.CreatorProcessingFeePercent != 50 || status.RequirementsDue == nil {
 		t.Fatalf("status=%+v", status)
 	}
 }

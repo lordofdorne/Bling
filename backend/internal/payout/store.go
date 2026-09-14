@@ -2,6 +2,7 @@ package payout
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"time"
@@ -20,7 +21,11 @@ const accountColumns = `creator_id,stripe_account_id,transfers_status,bank_payou
 
 func scanAccount(row pgx.Row) (Account, error) {
 	var value Account
-	err := row.Scan(&value.CreatorID, &value.StripeAccountID, &value.TransfersStatus, &value.BankPayoutsStatus, &value.ExternalAccountPresent, &value.ExternalAccountBankName, &value.ExternalAccountLast4, &value.ExternalAccountCurrency, &value.ChargesEnabled, &value.PayoutsEnabled, &value.DetailsSubmitted, &value.RequirementsDue, &value.CreatedAt, &value.UpdatedAt)
+	var bankName, bankLast4, bankCurrency sql.NullString
+	err := row.Scan(&value.CreatorID, &value.StripeAccountID, &value.TransfersStatus, &value.BankPayoutsStatus, &value.ExternalAccountPresent, &bankName, &bankLast4, &bankCurrency, &value.ChargesEnabled, &value.PayoutsEnabled, &value.DetailsSubmitted, &value.RequirementsDue, &value.CreatedAt, &value.UpdatedAt)
+	value.ExternalAccountBankName = bankName.String
+	value.ExternalAccountLast4 = bankLast4.String
+	value.ExternalAccountCurrency = bankCurrency.String
 	return value, err
 }
 

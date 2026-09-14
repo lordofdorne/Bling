@@ -18,13 +18,13 @@ func NewPostgresRepository(pool *pgxpool.Pool) *PostgresRepository {
 	return &PostgresRepository{pool: pool}
 }
 
-const attemptColumns = `id,show_id,tier_id,queue_entry_id,stripe_payment_intent_id,payer_user_id,stripe_customer_id,destination_account_id,payment_flow,amount_cents,platform_fee_bps,platform_fee_cents,currency,status,authorized_at,captured_at,canceled_at,created_at,updated_at`
+const attemptColumns = `id,show_id,tier_id,queue_entry_id,stripe_payment_intent_id,payer_user_id,stripe_customer_id,destination_account_id,payment_flow,amount_cents,platform_fee_bps,platform_fee_cents,basic_card_fee_cents,creator_processing_fee_cents,currency,status,authorized_at,captured_at,canceled_at,created_at,updated_at`
 
 func scanAttempt(row pgx.Row) (Attempt, error) {
 	var value Attempt
 	var intentID, payerID, customerID, destinationID sql.NullString
-	var feeBPS, feeCents sql.NullInt64
-	err := row.Scan(&value.ID, &value.ShowID, &value.TierID, &value.QueueEntryID, &intentID, &payerID, &customerID, &destinationID, &value.Flow, &value.AmountCents, &feeBPS, &feeCents, &value.Currency, &value.Status, &value.AuthorizedAt, &value.CapturedAt, &value.CanceledAt, &value.CreatedAt, &value.UpdatedAt)
+	var feeBPS, feeCents, basicCardFeeCents, creatorProcessingFeeCents sql.NullInt64
+	err := row.Scan(&value.ID, &value.ShowID, &value.TierID, &value.QueueEntryID, &intentID, &payerID, &customerID, &destinationID, &value.Flow, &value.AmountCents, &feeBPS, &feeCents, &basicCardFeeCents, &creatorProcessingFeeCents, &value.Currency, &value.Status, &value.AuthorizedAt, &value.CapturedAt, &value.CanceledAt, &value.CreatedAt, &value.UpdatedAt)
 	if intentID.Valid {
 		value.StripePaymentIntentID = intentID.String
 	}
@@ -42,6 +42,12 @@ func scanAttempt(row pgx.Row) (Attempt, error) {
 	}
 	if feeCents.Valid {
 		value.PlatformFeeCents = feeCents.Int64
+	}
+	if basicCardFeeCents.Valid {
+		value.BasicCardFeeCents = basicCardFeeCents.Int64
+	}
+	if creatorProcessingFeeCents.Valid {
+		value.CreatorProcessingFeeCents = creatorProcessingFeeCents.Int64
 	}
 	return value, err
 }
@@ -68,12 +74,14 @@ func (r *PostgresRepository) Prepare(ctx context.Context, input PrepareInput, no
 	if amount <= 0 {
 		return Attempt{}, ErrFreeTier
 	}
-	feeCents := platformFeeCents(amount)
+	basicFeeCents := basicCardFeeCents(amount)
+	creatorFeeCents := creatorProcessingFeeCents(basicFeeCents)
+	feeCents := platformFeeCents(amount, creatorFeeCents)
 	value, err := scanAttempt(tx.QueryRow(ctx, `INSERT INTO payment_attempts
-		(show_id,tier_id,viewer_token_hash,idempotency_key_hash,payer_user_id,stripe_customer_id,payment_flow,amount_cents,platform_fee_bps,platform_fee_cents,currency,created_at,updated_at)
-		VALUES ($1,$2,$3,$4,NULLIF($5,''),NULLIF($6,''),'PLATFORM',$7,$8,$9,'usd',$10,$10)
+		(show_id,tier_id,viewer_token_hash,idempotency_key_hash,payer_user_id,stripe_customer_id,payment_flow,amount_cents,platform_fee_bps,platform_fee_cents,basic_card_fee_cents,creator_processing_fee_cents,currency,created_at,updated_at)
+		VALUES ($1,$2,$3,$4,NULLIF($5,'')::uuid,NULLIF($6,''),'PLATFORM',$7,$8,$9,$10,$11,'usd',$12,$12)
 		ON CONFLICT (show_id,idempotency_key_hash) DO UPDATE SET updated_at=payment_attempts.updated_at
-		RETURNING `+attemptColumns, input.ShowID, input.TierID, input.ViewerTokenHash, input.IdempotencyKeyHash, input.PayerUserID, input.StripeCustomerID, amount, PlatformFeeBPS, feeCents, now))
+		RETURNING `+attemptColumns, input.ShowID, input.TierID, input.ViewerTokenHash, input.IdempotencyKeyHash, input.PayerUserID, input.StripeCustomerID, amount, PlatformFeeBPS, feeCents, basicFeeCents, creatorFeeCents, now))
 	if err != nil {
 		return Attempt{}, fmt.Errorf("persist payment attempt: %w", err)
 	}
@@ -125,8 +133,20 @@ func (r *PostgresRepository) RecordSavedPaymentMethod(ctx context.Context, inten
 	return nil
 }
 
-func platformFeeCents(amountCents int64) int64 {
-	return amountCents * PlatformFeeBPS / 10000
+func basicCardFeeCents(amountCents int64) int64 {
+	percentageFee := (amountCents*BasicCardFeeBPS + 5000) / 10000
+	return percentageFee + BasicCardFixedFeeCents
+}
+
+func creatorProcessingFeeCents(basicFeeCents int64) int64 {
+	// Bling absorbs the odd cent when the processing fee cannot split evenly.
+	return basicFeeCents * CreatorProcessingFeeShareBPS / 10000
+}
+
+func platformFeeCents(amountCents, creatorFeeCents int64) int64 {
+	creatorShareBPS := int64(10000) - PlatformFeeBPS
+	platformShareCents := amountCents - amountCents*creatorShareBPS/10000
+	return platformShareCents + creatorFeeCents
 }
 
 func (r *PostgresRepository) AttachIntent(ctx context.Context, attemptID, intentID string, now time.Time) error {

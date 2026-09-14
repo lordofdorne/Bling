@@ -357,7 +357,12 @@ func applyTransition(ctx context.Context, tx pgx.Tx, current Call, target Status
 			)
 			SELECT s.creator_id,'EARNING',p.amount_cents-p.platform_fee_cents,p.currency,$2::timestamptz+make_interval(secs => $3),
 			       p.id,c.id,'earning:' || p.id::text,
-			       jsonb_build_object('grossCents',p.amount_cents,'platformFeeCents',p.platform_fee_cents)
+			       jsonb_build_object(
+			           'grossCents',p.amount_cents,
+			           'platformFeeCents',p.platform_fee_cents,
+			           'basicCardFeeCents',COALESCE(p.basic_card_fee_cents,0),
+			           'creatorProcessingFeeCents',COALESCE(p.creator_processing_fee_cents,0)
+			       )
 			FROM calls c JOIN shows s ON s.id=c.show_id JOIN payment_attempts p ON p.id=c.payment_attempt_id
 			WHERE c.id=$1 AND p.status='CAPTURED' AND p.payment_flow='PLATFORM'
 			ON CONFLICT(idempotency_key) DO NOTHING`, current.ID, now, int64(earningsHold/time.Second))

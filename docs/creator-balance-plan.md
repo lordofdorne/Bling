@@ -54,11 +54,11 @@ One rule comes with it: the platform's cut is taken by **transferring less**, ne
 | --- | --- | --- |
 | Caller admitted | Card authorized, fee snapshotted | Unchanged |
 | Creator selects caller | Captured, split to creator immediately | Captured wholly into Bling's balance |
-| Call ends | — | Ledger credits the creator 70% once the refund window closes |
+| Call ends | — | Ledger credits 80% of the call price less the creator's half of the basic card fee once the refund window closes |
 | Refund before `LIVE` | Refund with `reverse_transfer` and `refund_application_fee` | Refund the charge; no transfer to reverse |
 | Month end | — | One transfer per creator for their available balance |
 
-Refunds get simpler and safer: money that never moved does not have to be clawed back. Fee arithmetic is unchanged — 30%, integer cents, rounding down — just applied when the ledger entry is written instead of at capture.
+Refunds get simpler and safer: money that never moved does not have to be clawed back. New payment attempts snapshot the 20% Bling share, the published basic card fee, and the creator's half of that fee before the ledger entry is written.
 
 ## Ledger
 
