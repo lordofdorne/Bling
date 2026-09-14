@@ -1,5 +1,11 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { App } from "./App";
 
@@ -429,6 +435,173 @@ describe("App routes", () => {
     ).toBeInTheDocument();
   });
 
+  it("keeps paid pricing locked until payouts are set up", async () => {
+    const creator = {
+      id: "user-1",
+      username: "alice",
+      email: "alice@example.com",
+      createdAt: "2026-08-24T12:00:00Z",
+    };
+    const draftShow = {
+      id: "show-1",
+      creatorId: "user-1",
+      status: "CREATED",
+      startedAt: null,
+      endedAt: null,
+      createdAt: "2026-08-24T12:00:00Z",
+      updatedAt: "2026-08-24T12:00:00Z",
+    };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        const path = String(input);
+        if (path === "/api/v1/me")
+          return Response.json({ data: { user: creator } });
+        if (path === "/api/v1/shows/current")
+          return Response.json({ data: { show: draftShow } });
+        if (path === "/api/v1/shows/show-1/tier-config")
+          return Response.json({
+            data: {
+              tiers: [
+                {
+                  id: "tier-1",
+                  name: "Standard",
+                  priorityRank: 100,
+                  callDurationSeconds: 300,
+                  priceCents: 2500,
+                  enabled: true,
+                  createdAt: "2026-08-24T12:00:00Z",
+                  updatedAt: "2026-08-24T12:00:00Z",
+                },
+              ],
+            },
+          });
+        if (path === "/api/v1/payouts/account")
+          return Response.json({
+            data: {
+              payouts: {
+                connected: false,
+                transfersStatus: "",
+                bankPayoutsStatus: "",
+                externalAccountPresent: false,
+                chargesEnabled: false,
+                payoutsEnabled: false,
+                detailsSubmitted: false,
+                ready: false,
+                requirementsDue: [],
+                platformFeePercent: 20,
+                creatorProcessingFeePercent: 50,
+              },
+            },
+          });
+        return new Response(null, { status: 404 });
+      }),
+    );
+
+    renderAt("/dashboard");
+    const pricing = await screen.findByRole("combobox", {
+      name: "Standard pricing",
+    });
+    expect(
+      within(pricing).getByRole("option", { name: "Free" }),
+    ).not.toBeDisabled();
+    expect(
+      within(pricing).getByRole("option", {
+        name: "Paid (set up payouts first)",
+      }),
+    ).toBeDisabled();
+    expect(
+      await screen.findByText("Set up payouts to charge for calls."),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Start Hotline" }),
+    ).toBeDisabled();
+  });
+
+  it("prices a tier once payouts are ready", async () => {
+    const creator = {
+      id: "user-1",
+      username: "alice",
+      email: "alice@example.com",
+      createdAt: "2026-08-24T12:00:00Z",
+    };
+    const draftShow = {
+      id: "show-1",
+      creatorId: "user-1",
+      status: "CREATED",
+      startedAt: null,
+      endedAt: null,
+      createdAt: "2026-08-24T12:00:00Z",
+      updatedAt: "2026-08-24T12:00:00Z",
+    };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        const path = String(input);
+        if (path === "/api/v1/me")
+          return Response.json({ data: { user: creator } });
+        if (path === "/api/v1/shows/current")
+          return Response.json({ data: { show: draftShow } });
+        if (path === "/api/v1/shows/show-1/tier-config")
+          return Response.json({
+            data: {
+              tiers: [
+                {
+                  id: "tier-1",
+                  name: "Standard",
+                  priorityRank: 100,
+                  callDurationSeconds: 300,
+                  priceCents: 0,
+                  enabled: true,
+                  createdAt: "2026-08-24T12:00:00Z",
+                  updatedAt: "2026-08-24T12:00:00Z",
+                },
+              ],
+            },
+          });
+        if (path === "/api/v1/payouts/account")
+          return Response.json({
+            data: {
+              payouts: {
+                connected: true,
+                transfersStatus: "active",
+                bankPayoutsStatus: "active",
+                externalAccountPresent: true,
+                chargesEnabled: true,
+                payoutsEnabled: true,
+                detailsSubmitted: true,
+                ready: true,
+                requirementsDue: [],
+                platformFeePercent: 20,
+                creatorProcessingFeePercent: 50,
+              },
+            },
+          });
+        return new Response(null, { status: 404 });
+      }),
+    );
+
+    renderAt("/dashboard");
+    const pricing = await screen.findByRole("combobox", {
+      name: "Standard pricing",
+    });
+    expect(
+      within(pricing).getByRole("option", { name: "Paid" }),
+    ).not.toBeDisabled();
+    expect(
+      screen.queryByRole("textbox", { name: "Standard price in USD" }),
+    ).not.toBeInTheDocument();
+
+    fireEvent.change(pricing, { target: { value: "paid" } });
+
+    const price = await screen.findByRole("textbox", {
+      name: "Standard price in USD",
+    });
+    expect(price).toHaveValue("5.00");
+    expect(screen.getByText(/Estimated payout/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Save tiers" })).toBeEnabled();
+  });
+
   it("shows the 80/20 split and shared card fee when Stripe is ready", async () => {
     const creator = {
       id: "user-1",
@@ -488,7 +661,9 @@ describe("App routes", () => {
     renderAt("/dashboard");
     expect(await screen.findByText("Refunded")).toBeInTheDocument();
     expect(
-      screen.getByText("Creator share: $19.49 · includes your $0.51 half of the card fee"),
+      screen.getByText(
+        "Creator share: $19.49 · includes your $0.51 half of the card fee",
+      ),
     ).toBeInTheDocument();
     fireEvent.click(screen.getByRole("link", { name: "Payout settings" }));
     expect(

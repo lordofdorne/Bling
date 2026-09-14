@@ -21,6 +21,7 @@ var (
 	ErrInvalidTransition   = errors.New("show state transition is not allowed")
 	ErrTierConfiguration   = errors.New("invalid tier configuration")
 	ErrShowNotConfigurable = errors.New("show tiers can only be changed before the show starts")
+	ErrPayoutSetupRequired = errors.New("payout setup is required before a paid show can start")
 )
 
 type Show struct {
@@ -77,7 +78,7 @@ func Transition(current Status, action Action) (Status, error) {
 type Store interface {
 	Create(context.Context, string) (Show, error)
 	ByIDForCreator(context.Context, string, string) (Show, error)
-	Start(context.Context, string, string, time.Time) (Show, error)
+	Start(context.Context, string, string, time.Time, bool) (Show, error)
 	End(context.Context, string, string, time.Time) (Show, error)
 	LiveByUsername(context.Context, string) (Show, error)
 	CurrentForCreator(context.Context, string) (Show, error)
@@ -85,12 +86,28 @@ type Store interface {
 	ReplaceTiers(context.Context, string, string, []TierInput, time.Time) ([]Tier, error)
 }
 
+// PayoutReadiness reports whether Bling can pay a creator. A show cannot charge
+// callers before its creator can be paid, so the show service consults it
+// before starting a show that has an enabled paid tier.
+type PayoutReadiness interface {
+	Ready(context.Context, string) (bool, error)
+}
+
 type Service struct {
-	store Store
-	now   func() time.Time
+	store   Store
+	payouts PayoutReadiness
+	now     func() time.Time
 }
 
 func NewService(store Store) *Service { return &Service{store: store, now: time.Now} }
+
+// WithPayouts attaches the payout readiness source. Without it no paid show can
+// start, because an unattached service can never establish that the creator is
+// able to receive the money it would collect.
+func (s *Service) WithPayouts(payouts PayoutReadiness) *Service {
+	s.payouts = payouts
+	return s
+}
 
 func (s *Service) Create(ctx context.Context, creatorID string) (Show, error) {
 	return s.store.Create(ctx, creatorID)
@@ -100,8 +117,39 @@ func (s *Service) Get(ctx context.Context, showID, creatorID string) (Show, erro
 	return s.store.ByIDForCreator(ctx, showID, creatorID)
 }
 
+// Start opens the show to callers.
+//
+// A show with an enabled paid tier charges callers for the call, so the creator
+// must have completed payout setup first; otherwise Bling would take money for
+// a creator it cannot pay. Readiness is resolved here and handed to the store,
+// which re-reads the tiers under the same lock that flips the show LIVE, so a
+// tier configuration racing this call cannot slip a paid tier past the check.
 func (s *Service) Start(ctx context.Context, showID, creatorID string) (Show, error) {
-	return s.store.Start(ctx, showID, creatorID, s.now())
+	ready, err := s.payoutReadyForShow(ctx, showID, creatorID)
+	if err != nil {
+		return Show{}, err
+	}
+	return s.store.Start(ctx, showID, creatorID, s.now(), ready)
+}
+
+func (s *Service) payoutReadyForShow(ctx context.Context, showID, creatorID string) (bool, error) {
+	tiers, err := s.store.TiersForCreator(ctx, showID, creatorID)
+	if err != nil {
+		return false, err
+	}
+	paid := false
+	for _, tier := range tiers {
+		if tier.Enabled && tier.PriceCents > 0 {
+			paid = true
+			break
+		}
+	}
+	// A free show never needs payout setup, and resolving readiness can call
+	// Stripe, so it is not worth asking for one.
+	if !paid || s.payouts == nil {
+		return false, nil
+	}
+	return s.payouts.Ready(ctx, creatorID)
 }
 
 func (s *Service) End(ctx context.Context, showID, creatorID string) (Show, error) {

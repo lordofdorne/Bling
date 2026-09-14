@@ -409,6 +409,7 @@ button.button {
   font-size: 0.82rem;
   font-weight: 700;
 }
+.tier-editor select,
 .tier-editor input[type="text"],
 .tier-editor input[type="number"],
 .tier-editor input:not([type]) {
@@ -441,6 +442,24 @@ button.button {
 }
 .tier-save-hint {
   text-align: right;
+}
+.tier-payout-notice {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 14px 16px;
+  border: 1px solid var(--border-strong);
+  border-radius: 14px;
+  background: var(--surface);
+}
+.tier-payout-notice > div {
+  flex: 1 1 220px;
+}
+.tier-payout-notice p {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 0.85rem;
 }
 .queue-confirmation {
   text-align: center;

@@ -64,6 +64,31 @@ func TestConcurrentStartAllowsOneLiveShowPerCreator(t *testing.T) {
 	if err != nil || len(configured) != 2 || configured[0].Name != "VIP" || configured[0].PriceCents != 5000 {
 		t.Fatalf("configured=%+v err=%v", configured, err)
 	}
+	if _, err := store.Start(ctx, first.ID, creatorID, time.Now(), false); !errors.Is(err, ErrPayoutSetupRequired) {
+		t.Fatalf("paid start without payout setup err=%v", err)
+	}
+	var startedStatus Status
+	if err := pool.QueryRow(ctx, `SELECT status FROM shows WHERE id=$1`, first.ID).Scan(&startedStatus); err != nil {
+		t.Fatal(err)
+	}
+	if startedStatus != StatusCreated {
+		t.Fatalf("show status after a rejected paid start = %s, want %s", startedStatus, StatusCreated)
+	}
+	freeOnly, err := store.Create(ctx, creatorID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.ReplaceTiers(ctx, freeOnly.ID, creatorID, []TierInput{
+		{Name: "Free", PriorityRank: 100, CallDurationSeconds: 300, PriceCents: 0, Enabled: true},
+	}, time.Now().UTC()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.Start(ctx, freeOnly.ID, creatorID, time.Now(), false); err != nil {
+		t.Fatalf("free start without payout setup err=%v", err)
+	}
+	if _, err := store.End(ctx, freeOnly.ID, creatorID, time.Now().UTC()); err != nil {
+		t.Fatal(err)
+	}
 
 	start := make(chan struct{})
 	results := make(chan error, 2)
@@ -73,7 +98,7 @@ func TestConcurrentStartAllowsOneLiveShowPerCreator(t *testing.T) {
 		go func() {
 			defer wait.Done()
 			<-start
-			_, err := store.Start(ctx, showID, creatorID, time.Now())
+			_, err := store.Start(ctx, showID, creatorID, time.Now(), true)
 			results <- err
 		}()
 	}
@@ -122,7 +147,7 @@ func TestConcurrentStartAllowsOneLiveShowPerCreator(t *testing.T) {
 	configureResult := make(chan error, 1)
 	go func() {
 		<-raceStart
-		_, err := store.Start(ctx, raceShow.ID, creatorID, time.Now().UTC())
+		_, err := store.Start(ctx, raceShow.ID, creatorID, time.Now().UTC(), true)
 		startResult <- err
 	}()
 	go func() {

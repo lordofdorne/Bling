@@ -4,7 +4,7 @@ Status: **approved for implementation**. Updated 2026-09-10. This document is th
 
 ## Product contract
 
-A creator can sign up, create paid tiers, go live, and earn without completing payout setup. Bling collects the caller's payment into the platform Stripe balance and records the creator's share in an internal append-only ledger. Before a creator can receive their first payout, they complete an embedded “Set up payouts” flow inside Bling. Bling pays eligible balances monthly.
+A creator can sign up, run free Hotlines, and earn without completing payout setup, but paid tiers require it: Bling never takes a caller's money for a creator it cannot pay, so both the pricing control and the start of a paid show are gated on a ready account. Bling collects the caller's payment into the platform Stripe balance and records the creator's share in an internal append-only ledger. Before a creator can receive their first payout, they complete an embedded “Set up payouts” flow inside Bling. Bling pays eligible balances monthly.
 
 The creator should experience this as a Bling flow. Stripe still creates the regulated connected account, collects the required identity and bank information, presents its service agreement, and may request updated information later. The UI must say “payout setup,” not “create a Stripe account.”
 
@@ -127,7 +127,7 @@ Acceptance checks:
 
 Acceptance checks:
 
-- A creator without payout setup can publish a paid tier, start a show, and accept a paid caller.
+- A creator without payout setup can publish a free tier and start a show; pricing a tier and starting a paid show are refused until the account is ready.
 - A captured call that never reaches `LIVE` is refunded and creates no earning.
 
 ### 4. Add embedded payout setup

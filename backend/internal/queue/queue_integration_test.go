@@ -66,7 +66,7 @@ func TestDurableQueueConcurrentJoinRecoveryAndShutdown(t *testing.T) {
 	}}, time.Now().UTC()); err != nil {
 		t.Fatal(err)
 	}
-	activeShow, err = showStore.Start(ctx, activeShow.ID, creatorID, time.Now())
+	activeShow, err = showStore.Start(ctx, activeShow.ID, creatorID, time.Now(), true)
 	if err != nil {
 		t.Fatal(err)
 	}

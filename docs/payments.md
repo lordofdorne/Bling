@@ -6,7 +6,7 @@ Bling uses Stripe PaymentIntents with manual capture. A paid caller authorizes t
 
 New payment attempts use the `PLATFORM` flow. Their PaymentIntents contain neither `transfer_data.destination` nor `application_fee_amount`, so the captured payment remains in Bling's platform balance. The attempt snapshots the 3,000-basis-point fee and whole-cent fee amount. When the call first reaches `LIVE`, one immutable ledger entry credits the creator with gross less that fee. The credit becomes available after `CREATOR_EARNINGS_HOLD`.
 
-Creators may create paid tiers, go live, and earn without payout setup. Readiness only controls monthly transfers. Historical `DESTINATION` attempts remain supported: their original connected-account destination and application fee are still verified, reconciled, and refunded correctly.
+A creator must finish payout setup before pricing a tier or starting a Hotline with an enabled paid tier. The dashboard keeps the paid pricing option disabled until `/api/v1/payouts/account` reports `ready`, and `POST /api/v1/shows/{id}/start` re-checks readiness inside the transaction that opens the show, answering `409 PAYOUT_SETUP_REQUIRED` otherwise. Free tiers never require setup. Readiness also controls monthly transfers. Historical `DESTINATION` attempts remain supported: their original connected-account destination and application fee are still verified, reconciled, and refunded correctly.
 
 The complete data model, state machines, rollout, and operating contract are in [creator-payout-implementation-runbook.md](creator-payout-implementation-runbook.md).
 
@@ -47,9 +47,9 @@ For new paid calls, the creator receives 80% of the listed call price less half 
 1. Configure Stripe test secret, publishable, and webhook keys in `.env` and keep `CREATOR_PAYOUTS_ENABLED=false`.
 2. Run `make db-up`, `make migrate`, the API, and the frontend.
 3. Forward platform and connected events to `/api/v1/payments/webhook` with the Stripe CLI.
-4. Create a paid tier without payout setup, authorize test card `4242 4242 4242 4242`, select the caller, and transition the call to `LIVE`.
-5. Confirm the charge has no destination and `/api/v1/payouts/balance` reports the pending creator share.
-6. Open **Set up payouts** and finish the embedded test onboarding. Confirm a page refresh still reports the account ready.
+4. Confirm a tier cannot be priced and a paid Hotline cannot start yet, then open **Set up payouts** and finish the embedded test onboarding. Confirm a page refresh still reports the account ready.
+5. Create a paid tier, authorize test card `4242 4242 4242 4242`, select the caller, and transition the call to `LIVE`.
+6. Confirm the charge has no destination and `/api/v1/payouts/balance` reports the pending creator share.
 7. Test a payout run with a controlled clock or manual worker invocation before enabling the production scheduler.
 
 ## Operational rules
