@@ -1,3 +1,5 @@
+@import "./tokens.css";
+
 :root {
   font-family:
     Inter,
@@ -118,7 +120,7 @@ button.button {
 }
 .status-ready span {
   background: var(--green-light);
-  box-shadow: 0 0 16px rgba(97, 214, 157, 0.65);
+  box-shadow: 0 0 16px color-mix(in srgb, var(--green-light) 65%, transparent);
 }
 .status-offline span {
   background: var(--accent);
@@ -135,7 +137,7 @@ button.button {
   border: 1px solid var(--border);
   border-radius: 24px;
   background: var(--surface);
-  box-shadow: 0 28px 80px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 28px 80px color-mix(in srgb, var(--shadow) 30%, transparent);
 }
 .auth-card h1 {
   font-size: clamp(2.4rem, 7vw, 4rem);
@@ -197,10 +199,10 @@ button.button {
 }
 .form-error {
   padding: 12px 14px;
-  border: 1px solid rgba(227, 101, 91, 0.45);
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
   border-radius: 10px;
   color: var(--accent-light);
-  background: rgba(227, 101, 91, 0.09);
+  background: color-mix(in srgb, var(--accent) 9%, transparent);
   font-size: 0.9rem;
 }
 .auth-switch a {
@@ -272,14 +274,14 @@ button.button {
   height: 9px;
   border-radius: 50%;
   background: var(--accent);
-  box-shadow: 0 0 16px rgba(227, 101, 91, 0.75);
+  box-shadow: 0 0 16px color-mix(in srgb, var(--accent) 75%, transparent);
 }
 .danger-button {
   padding: 11px 15px;
-  border: 1px solid rgba(227, 101, 91, 0.55);
+  border: 1px solid color-mix(in srgb, var(--accent) 55%, transparent);
   border-radius: 10px;
   color: var(--accent-light);
-  background: rgba(227, 101, 91, 0.08);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
   font: inherit;
   font-weight: 750;
   cursor: pointer;
@@ -303,7 +305,7 @@ button.button {
   border: 1px solid var(--border);
   border-radius: 22px;
   background: var(--surface);
-  box-shadow: 0 28px 80px rgba(0, 0, 0, 0.28);
+  box-shadow: 0 28px 80px color-mix(in srgb, var(--shadow) 28%, transparent);
 }
 
 .payment-card {
@@ -632,24 +634,7 @@ button.button {
   }
 }
 
-/* Bling: exact brand swatches plus accessible neutral and tint roles. */
 :root {
-  --mauve: #52414c;
-  --ebony: #596157;
-  --green: #5b8c5a;
-  --sand: #cfd186;
-  --accent: #e3655b;
-  --accent-light: #f3a59e;
-  --green-light: #a5cda2;
-  --bg: #161716;
-  --surface: #1e201e;
-  --surface-raised: #272926;
-  --border: #343732;
-  --border-strong: #555b51;
-  --text: #f3f1eb;
-  --muted: #b0b2a8;
-  --accent-tint: #e3655b12;
-  color-scheme: dark;
   font-size: 14px;
   color: var(--text);
   background: var(--bg);
@@ -784,12 +769,12 @@ small {
 }
 .primary-button {
   background: var(--accent);
-  color: #171715;
+  color: var(--on-accent);
   border: 1px solid var(--accent);
 }
 .primary-button:hover:not(:disabled) {
-  background: #ef8178;
-  border-color: #ef8178;
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
 }
 .button,
 button.button {
@@ -798,7 +783,7 @@ button.button {
   color: var(--text);
 }
 .button:hover:not(:disabled) {
-  background: #363a33;
+  background: var(--surface-hover);
   border-color: var(--border-strong);
 }
 .follow-button {
@@ -811,8 +796,8 @@ button.button {
 }
 .follow-button.is-following {
   color: var(--sand);
-  border-color: #cfd18666;
-  background: #cfd1860b;
+  border-color: color-mix(in srgb, var(--sand) 40%, transparent);
+  background: color-mix(in srgb, var(--sand) 4%, transparent);
 }
 .icon-button {
   display: inline-grid;
@@ -874,8 +859,8 @@ button.button {
   width: fit-content;
   padding: 3px 7px;
   border-radius: 4px;
-  color: #fff;
-  background: #bd3f35;
+  color: var(--on-media);
+  background: var(--accent-strong);
   font-size: 10px;
   font-weight: 800;
   letter-spacing: 0.06em;
@@ -922,8 +907,8 @@ button.button {
   width: 43px;
   height: 43px;
   color: var(--sand);
-  background: #cfd1860c;
-  border: 1px solid #cfd18622;
+  background: color-mix(in srgb, var(--sand) 5%, transparent);
+  border: 1px solid color-mix(in srgb, var(--sand) 13%, transparent);
   border-radius: 12px;
 }
 .viewer-nav,
@@ -1049,7 +1034,7 @@ button.button {
 }
 .sidebar-top > a.active,
 .studio-sidebar a.active {
-  background: #e3655b14;
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
   color: var(--accent-light);
 }
 .sidebar-top > a.active {
@@ -1107,8 +1092,8 @@ button.button {
 }
 .sidebar-promo {
   padding: 16px;
-  background: #52414c3b;
-  border: 1px solid #72606a55;
+  background: color-mix(in srgb, var(--mauve) 23%, transparent);
+  border: 1px solid color-mix(in srgb, var(--mauve-border) 33%, transparent);
   border-radius: 9px;
 }
 .sidebar-promo .feature-icon {
@@ -1116,7 +1101,7 @@ button.button {
   height: 30px;
   border: 0;
   color: var(--accent-light);
-  background: #e3655b17;
+  background: color-mix(in srgb, var(--accent) 9%, transparent);
   border-radius: 7px;
 }
 .sidebar-promo h3 {
@@ -1181,10 +1166,10 @@ button.button {
   display: grid;
   grid-template-columns: 1.1fr 1fr;
   min-height: 360px;
-  border: 1px solid #52414c;
+  border: 1px solid var(--mauve);
   border-radius: 12px;
   overflow: hidden;
-  background: #30272d;
+  background: var(--mauve-surface);
 }
 .featured-copy {
   padding: clamp(24px, 3vw, 42px);
@@ -1195,7 +1180,7 @@ button.button {
   align-items: center;
   gap: 10px;
   font-size: 11px;
-  color: #d2c4cb;
+  color: var(--mauve-muted);
 }
 .featured-copy h2 {
   font-size: clamp(31px, 3.1vw, 48px);
@@ -1210,7 +1195,7 @@ button.button {
 }
 .featured-copy > p {
   max-width: 330px;
-  color: #c8bbc2;
+  color: var(--mauve-muted);
   font-size: 12px;
   line-height: 1.7;
   margin-bottom: 20px;
@@ -1267,14 +1252,18 @@ button.button {
   position: absolute;
   inset: 0;
   background:
-    linear-gradient(90deg, #30272d, transparent 35%),
-    linear-gradient(0deg, #171715d9, transparent 45%);
+    linear-gradient(90deg, var(--mauve-surface), transparent 35%),
+    linear-gradient(
+      0deg,
+      color-mix(in srgb, var(--overlay) 85%, transparent),
+      transparent 45%
+    );
 }
 .image-caption {
   position: absolute;
   bottom: 32px;
   left: 35px;
-  color: #eee9e1;
+  color: var(--text);
   font-size: 12px;
   line-height: 1.8;
 }
@@ -1288,10 +1277,10 @@ button.button {
   display: flex;
   gap: 8px;
   align-items: center;
-  background: #171b16db;
+  background: color-mix(in srgb, var(--overlay) 86%, transparent);
   color: var(--sand);
   padding: 9px 11px;
-  border: 1px solid #cfd18655;
+  border: 1px solid color-mix(in srgb, var(--sand) 33%, transparent);
   border-radius: 5px;
   font-size: 9px;
   letter-spacing: 0.07em;
@@ -1390,7 +1379,7 @@ button.button {
   aspect-ratio: 1.65;
   border-radius: 9px;
   overflow: hidden;
-  border: 1px solid #ffffff0a;
+  border: 1px solid color-mix(in srgb, var(--on-media) 4%, transparent);
   isolation: isolate;
 }
 .cover-coral {
@@ -1417,7 +1406,11 @@ button.button {
 .cover-shade {
   position: absolute;
   inset: 0;
-  background: linear-gradient(0deg, #141614e8, transparent 65%);
+  background: linear-gradient(
+    0deg,
+    color-mix(in srgb, var(--overlay) 91%, transparent),
+    transparent 65%
+  );
 }
 .creator-cover > .live-pill,
 .creator-cover > .offline-pill {
@@ -1431,7 +1424,7 @@ button.button {
   bottom: 15px;
   font-size: 19px;
   font-weight: 650;
-  color: #fff;
+  color: var(--on-media);
   letter-spacing: -0.025em;
 }
 .viewer-count {
@@ -1442,7 +1435,7 @@ button.button {
   align-items: center;
   gap: 5px;
   border-radius: 4px;
-  background: #141614c9;
+  background: color-mix(in srgb, var(--overlay) 79%, transparent);
   padding: 3px 6px;
   font-size: 10px;
 }
@@ -1454,9 +1447,9 @@ button.button {
   place-items: center;
   width: 26px;
   height: 26px;
-  border: 1px solid #ffffff60;
+  border: 1px solid color-mix(in srgb, var(--on-media) 38%, transparent);
   border-radius: 50%;
-  color: #fff;
+  color: var(--on-media);
 }
 .creator-details {
   display: flex;
@@ -1497,7 +1490,7 @@ button.button {
   margin-top: 4px;
 }
 .creator-meta small span {
-  color: #979c90;
+  color: var(--muted);
 }
 .follow-button.compact {
   padding: 4px;
@@ -1513,8 +1506,8 @@ button.button {
   display: flex;
   align-items: center;
   gap: 22px;
-  border: 1px solid #59615788;
-  background: #59615722;
+  border: 1px solid color-mix(in srgb, var(--ebony) 53%, transparent);
+  background: color-mix(in srgb, var(--ebony) 13%, transparent);
   border-radius: 10px;
   padding: 25px;
   margin: 36px 0 0;
@@ -1526,7 +1519,7 @@ button.button {
   width: 60px;
   height: 60px;
   border-radius: 50%;
-  border: 1px solid #cfd18633;
+  border: 1px solid color-mix(in srgb, var(--sand) 20%, transparent);
   color: var(--sand);
   transform: rotate(-12deg);
 }
@@ -1588,7 +1581,7 @@ button.button {
   border: 1px solid var(--border-strong);
   border-radius: 10px;
   background: var(--surface);
-  box-shadow: 0 12px 40px #0006;
+  box-shadow: 0 12px 40px color-mix(in srgb, var(--shadow) 40%, transparent);
 }
 .notification-popover .section-heading {
   margin-bottom: 0;
@@ -1672,7 +1665,11 @@ button.button {
   content: "";
   position: absolute;
   inset: 0;
-  background: linear-gradient(0deg, #171715ee, transparent 90%);
+  background: linear-gradient(
+    0deg,
+    color-mix(in srgb, var(--overlay) 93%, transparent),
+    transparent 90%
+  );
 }
 .profile-cover > .live-pill,
 .profile-cover > .offline-pill {
@@ -1736,7 +1733,7 @@ button.button {
   font-size: 11px;
   border-radius: 20px;
   padding: 5px 10px;
-  background: #cfd1860f;
+  background: color-mix(in srgb, var(--sand) 6%, transparent);
 }
 .preview-queue {
   display: grid;
@@ -1786,7 +1783,7 @@ button.button {
   height: 33px;
   font-size: 11px;
   background: var(--mauve);
-  border: 1px solid #85707d;
+  border: 1px solid var(--mauve-border);
   border-radius: 50%;
 }
 .studio-layout {
@@ -1884,8 +1881,8 @@ button.button {
   font-size: 11px;
 }
 .studio-overview article:last-child {
-  background: #52414c3d;
-  border-color: #52414c;
+  background: color-mix(in srgb, var(--mauve) 24%, transparent);
+  border-color: var(--mauve);
 }
 .studio-overview article:last-child strong {
   font-size: 21px;
@@ -2014,11 +2011,11 @@ button.button {
   place-items: center;
   width: 92px;
   height: 92px;
-  border: 1px solid #786473;
+  border: 1px solid var(--mauve-border);
   border-radius: 26px;
   background: var(--mauve);
   color: var(--accent-light);
-  box-shadow: 0 0 0 15px #52414c20;
+  box-shadow: 0 0 0 15px color-mix(in srgb, var(--mauve) 13%, transparent);
   transform: rotate(-8deg);
 }
 .offline-art-label {
@@ -2293,7 +2290,7 @@ button.button {
 }
 .active-call-card {
   border-color: var(--green);
-  background: #5b8c5a0c;
+  background: color-mix(in srgb, var(--green) 5%, transparent);
 }
 .queue-card h2 {
   font-size: 22px;
@@ -2353,7 +2350,7 @@ button.button {
 }
 .form-error {
   font-size: 12px;
-  border-color: #e3655b66;
+  border-color: color-mix(in srgb, var(--accent) 40%, transparent);
   color: var(--accent-light);
   background: var(--accent-tint);
 }
@@ -2387,8 +2384,8 @@ button.button {
 }
 .auth-story {
   padding: 48px 42px 25px;
-  background: #30272d;
-  border: 1px solid #52414c;
+  background: var(--mauve-surface);
+  border: 1px solid var(--mauve);
   border-radius: 15px;
   position: relative;
   overflow: hidden;
@@ -2405,7 +2402,7 @@ button.button {
   color: var(--sand);
 }
 .auth-story > p:not(.eyebrow) {
-  color: #c8bbc2;
+  color: var(--mauve-muted);
   max-width: 260px;
   font-size: 13px;
   line-height: 1.8;
@@ -2419,10 +2416,10 @@ button.button {
 .auth-orbit {
   width: 250px;
   height: 160px;
-  border: 1px solid #85707d55;
+  border: 1px solid color-mix(in srgb, var(--mauve-border) 33%, transparent);
   border-radius: 50%;
   transform: rotate(-30deg);
-  box-shadow: 0 0 0 24px #85707d0b;
+  box-shadow: 0 0 0 24px color-mix(in srgb, var(--mauve-border) 4%, transparent);
 }
 .auth-art-call {
   position: absolute;
@@ -2431,7 +2428,7 @@ button.button {
   width: 105px;
   height: 105px;
   background: var(--accent);
-  color: #241c20;
+  color: var(--on-accent);
   border-radius: 30px;
   transform: rotate(-13deg);
 }
@@ -2458,7 +2455,7 @@ button.button {
   display: block;
   margin-top: 30px;
   font-size: 11px;
-  color: #c8bbc2;
+  color: var(--mauve-muted);
 }
 .auth-card {
   max-width: 400px;
@@ -2510,7 +2507,7 @@ button.button {
 .channel-live-art {
   position: relative;
   height: 270px;
-  background: #30272d;
+  background: var(--mauve-surface);
   border: 1px solid var(--mauve);
   border-radius: 12px;
   overflow: hidden;
@@ -2522,11 +2519,11 @@ button.button {
   position: absolute;
   width: 240px;
   height: 240px;
-  border: 1px solid #88717f44;
+  border: 1px solid color-mix(in srgb, var(--mauve-border) 27%, transparent);
   border-radius: 50%;
   box-shadow:
-    0 0 0 40px #88717f11,
-    0 0 0 80px #88717f08;
+    0 0 0 40px color-mix(in srgb, var(--mauve-border) 7%, transparent),
+    0 0 0 80px color-mix(in srgb, var(--mauve-border) 3%, transparent);
 }
 .channel-live-art > .sound-bars {
   position: absolute;
@@ -2536,7 +2533,7 @@ button.button {
 .channel-art-caption {
   position: absolute;
   bottom: 20px;
-  color: #d3c5ce;
+  color: var(--mauve-muted);
   letter-spacing: 0.14em;
   font-size: 9px;
 }
@@ -2562,7 +2559,7 @@ button.button {
 }
 .channel-offline {
   min-height: 520px;
-  background: #52414c1a;
+  background: color-mix(in srgb, var(--mauve) 10%, transparent);
 }
 .channel-offline h1 {
   font-size: clamp(30px, 4vw, 46px);
@@ -2791,7 +2788,7 @@ button.button {
     width: 245px;
     top: 112px;
     height: calc(100dvh - 112px);
-    box-shadow: 14px 0 35px #0005;
+    box-shadow: 14px 0 35px color-mix(in srgb, var(--shadow) 33%, transparent);
   }
   .viewer-sidebar.is-open {
     display: flex;
@@ -2961,7 +2958,7 @@ button.button {
     object-position: center 30%;
   }
   .featured-image-shade {
-    background: linear-gradient(0deg, #30272d, transparent 45%);
+    background: linear-gradient(0deg, var(--mauve-surface), transparent 45%);
   }
   .image-caption {
     display: none;
@@ -3125,7 +3122,7 @@ button.button {
 .live-filter.selected {
   color: var(--green-light);
   border-color: var(--green);
-  background: #5b8c5a19;
+  background: color-mix(in srgb, var(--green) 10%, transparent);
 }
 @media (max-width: 480px) {
   .discovery-controls {
@@ -3194,7 +3191,11 @@ button.button {
   height: 100%;
   min-height: inherit;
   background:
-    radial-gradient(ellipse at 70% 20%, #cfd18618, transparent 55%),
+    radial-gradient(
+      ellipse at 70% 20%,
+      color-mix(in srgb, var(--sand) 9%, transparent),
+      transparent 55%
+    ),
     var(--mauve);
 }
 .creator-cover-fallback > span {
@@ -3202,7 +3203,7 @@ button.button {
   place-items: center;
   width: 100px;
   height: 100px;
-  border: 1px solid #ffffff25;
+  border: 1px solid color-mix(in srgb, var(--on-media) 15%, transparent);
   border-radius: 50%;
   color: var(--sand);
   font-size: 55px;
