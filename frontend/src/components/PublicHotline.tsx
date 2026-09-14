@@ -20,6 +20,7 @@ import { useLiveShow } from "../lib/shows";
 import { useViewerCall } from "../lib/calls";
 import { CallAudioPanel } from "./CallAudioPanel";
 import { PaymentAuthorization, useAuthorizePayment } from "../lib/payments";
+import { useMe } from "../lib/auth";
 
 import { ViewerShell } from "./ViewerShell";
 import { FollowButton } from "./FollowButton";
@@ -39,6 +40,7 @@ function formatCallLength(seconds: number) {
 }
 
 function CallerQueue({ showID }: { showID: string }) {
+  const me = useMe();
   const tiers = useQueueTiers(showID);
   const viewer = useViewerQueue(showID);
   const join = useJoinQueue(showID);
@@ -174,6 +176,7 @@ function CallerQueue({ showID }: { showID: string }) {
         tierID={effectiveSelectedTierID}
         join={join}
         onBack={() => setAuthorization(null)}
+        email={me.data?.email}
       />
     );
   }
@@ -258,6 +261,7 @@ function StripeAuthorizationForm({
   tierID,
   join,
   onBack,
+  email,
 }: {
   authorization: PaymentAuthorization & { storageKey: string };
   displayName: string;
@@ -265,6 +269,7 @@ function StripeAuthorizationForm({
   tierID: string;
   join: ReturnType<typeof useJoinQueue>;
   onBack: () => void;
+  email?: string;
 }) {
   const stripePromise = useMemo(
     () => loadStripe(authorization.publishableKey),
@@ -282,6 +287,8 @@ function StripeAuthorizationForm({
         stripe={stripePromise}
         options={{
           clientSecret: authorization.clientSecret,
+          customerSessionClientSecret:
+            authorization.customerSessionClientSecret,
           appearance: { theme: "stripe" },
         }}
       >
@@ -292,6 +299,7 @@ function StripeAuthorizationForm({
           tierID={tierID}
           join={join}
           onBack={onBack}
+          email={email}
         />
       </Elements>
     </section>
@@ -305,6 +313,7 @@ function ConfirmAuthorization({
   tierID,
   join,
   onBack,
+  email,
 }: {
   authorization: PaymentAuthorization & { storageKey: string };
   displayName: string;
@@ -312,6 +321,7 @@ function ConfirmAuthorization({
   tierID: string;
   join: ReturnType<typeof useJoinQueue>;
   onBack: () => void;
+  email?: string;
 }) {
   const stripe = useStripe();
   const elements = useElements();
@@ -355,7 +365,12 @@ function ConfirmAuthorization({
   }
   return (
     <div className="stripe-payment-form">
-      <PaymentElement options={{ layout: "tabs" }} />
+      <PaymentElement
+        options={{
+          layout: "tabs",
+          defaultValues: email ? { billingDetails: { email } } : undefined,
+        }}
+      />
       <button
         className="primary-button"
         type="button"

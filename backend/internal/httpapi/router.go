@@ -42,7 +42,7 @@ func NewRouter(logger *slog.Logger, postgres *pgxpool.Pool, redisClient *redis.C
 	}
 	showHandler := showHandler{service: showdomain.NewService(showdomain.NewPostgresStore(postgres)), logger: logger}
 	queueHandler := queueHandler{service: queueService, payments: paymentService, logger: logger, cookieSecure: cfg.CookieSecure, cookieTTL: cfg.SessionTTL}
-	paymentHandler := paymentHandler{service: paymentService, logger: logger, setCookie: queueHandler.setViewerCookie, webhookSecret: cfg.StripeWebhookSecret, payouts: payoutService, finances: financeService}
+	paymentHandler := paymentHandler{service: paymentService, authentication: authHandler.service, logger: logger, setCookie: queueHandler.setViewerCookie, webhookSecret: cfg.StripeWebhookSecret, payouts: payoutService, finances: financeService}
 	payoutHandler := payoutHandler{service: payoutService, balances: balanceService, logger: logger}
 	queueRealtimeHandler := realtimeHandler{
 		service: queueService, hub: realtimeHub, limiter: auth.NewRedisRateLimiter(redisClient), logger: logger,
@@ -122,6 +122,11 @@ func newRouterWithCalls(logger *slog.Logger, health healthHandler, authenticatio
 					}
 					if payments != nil && payments.finances != nil {
 						protected.Get("/payments/activity", payments.activity)
+					}
+					if payments != nil {
+						protected.Get("/me/payment-methods", payments.paymentMethods)
+						protected.Post("/me/payment-methods/setup-session", payments.paymentMethodSetup)
+						protected.Delete("/me/payment-methods/{paymentMethodID}", payments.removePaymentMethod)
 					}
 					if queues != nil {
 						protected.Get("/shows/{showID}/queue", queues.list)

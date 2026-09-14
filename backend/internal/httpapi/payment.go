@@ -6,24 +6,30 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"regexp"
 	"time"
 
+	"github.com/bling-app/bling/backend/internal/auth"
 	financedomain "github.com/bling-app/bling/backend/internal/finance"
 	paymentdomain "github.com/bling-app/bling/backend/internal/payment"
 	payoutdomain "github.com/bling-app/bling/backend/internal/payout"
 	queuedomain "github.com/bling-app/bling/backend/internal/queue"
+	"github.com/go-chi/chi/v5"
 	stripe "github.com/stripe/stripe-go/v85"
 	"github.com/stripe/stripe-go/v85/webhook"
 )
 
 type paymentHandler struct {
-	service       *paymentdomain.Service
-	logger        *slog.Logger
-	setCookie     func(http.ResponseWriter, string)
-	webhookSecret string
-	payouts       *payoutdomain.Service
-	finances      *financedomain.Service
+	service        *paymentdomain.Service
+	authentication authService
+	logger         *slog.Logger
+	setCookie      func(http.ResponseWriter, string)
+	webhookSecret  string
+	payouts        *payoutdomain.Service
+	finances       *financedomain.Service
 }
+
+var paymentMethodIDPattern = regexp.MustCompile(`^pm_[A-Za-z0-9]+$`)
 
 func (h paymentHandler) webhook(w http.ResponseWriter, r *http.Request) {
 	if h.webhookSecret == "" {
@@ -82,6 +88,7 @@ func supportedStripeEvent(eventType stripe.EventType) bool {
 	switch eventType {
 	case "account.updated",
 		"payment_intent.succeeded", "payment_intent.canceled", "payment_intent.payment_failed",
+		"setup_intent.succeeded", "payment_method.attached", "payment_method.detached",
 		"refund.created", "refund.updated", "refund.failed",
 		"charge.dispute.created", "charge.dispute.updated", "charge.dispute.closed",
 		"payout.created", "payout.updated", "payout.paid", "payout.failed":
@@ -112,6 +119,10 @@ func (h paymentHandler) processEvent(r *http.Request, event stripe.Event) error 
 		return h.reconcilePaymentIntent(r, event, paymentdomain.StatusCanceled)
 	case "payment_intent.payment_failed":
 		return h.reconcilePaymentIntent(r, event, paymentdomain.StatusFailed)
+	case "setup_intent.succeeded", "payment_method.attached", "payment_method.detached":
+		// Settings reads the authoritative method list from Stripe. Claiming these
+		// events still makes delivery observable and leaves room for projections.
+		return nil
 	case "refund.created", "refund.updated", "refund.failed":
 		if h.finances == nil {
 			return nil
@@ -175,7 +186,13 @@ func (h paymentHandler) reconcilePaymentIntent(r *http.Request, event stripe.Eve
 	if errors.Is(err, paymentdomain.ErrAttemptNotFound) {
 		return nil
 	}
-	return err
+	if err != nil {
+		return err
+	}
+	if status == paymentdomain.StatusCaptured && intent.SetupFutureUsage != "" && intent.Customer != nil && intent.PaymentMethod != nil {
+		return h.service.ReconcileSavedPaymentMethod(r.Context(), intent.ID, intent.Customer.ID, intent.PaymentMethod.ID)
+	}
+	return nil
 }
 
 func (h paymentHandler) activity(w http.ResponseWriter, r *http.Request) {
@@ -225,13 +242,73 @@ func (h paymentHandler) authorize(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	value, err := h.service.Authorize(r.Context(), paymentdomain.PrepareInput{ShowID: showID, TierID: request.TierID, ViewerTokenHash: queuedomain.Hash(token), IdempotencyKeyHash: queuedomain.Hash(idempotencyKey)})
+	input := paymentdomain.PrepareInput{ShowID: showID, TierID: request.TierID, ViewerTokenHash: queuedomain.Hash(token), IdempotencyKeyHash: queuedomain.Hash(idempotencyKey)}
+	if h.authentication != nil {
+		user, authErr := h.authentication.CurrentUser(r.Context(), sessionToken(r))
+		if authErr == nil {
+			input.PayerUserID = user.ID
+			input.PayerEmail = user.Email
+		} else if !errors.Is(authErr, auth.ErrInvalidSession) {
+			h.logger.Error("optional payment session lookup failed", "error", authErr)
+			writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Unable to verify your payment account.")
+			return
+		}
+	}
+	value, err := h.service.Authorize(r.Context(), input)
 	if err != nil {
 		writePaymentError(w, h.logger, err)
 		return
 	}
 	h.setCookie(w, token)
 	writeJSON(w, http.StatusCreated, map[string]any{"data": value})
+}
+
+func (h paymentHandler) paymentMethods(w http.ResponseWriter, r *http.Request) {
+	preventCaching(w)
+	methods, err := h.service.PaymentMethods(r.Context(), creatorFromContext(r.Context()).ID)
+	if err != nil {
+		h.writeCustomerError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"data": map[string]any{"paymentMethods": methods}})
+}
+
+func (h paymentHandler) paymentMethodSetup(w http.ResponseWriter, r *http.Request) {
+	preventCaching(w)
+	user := creatorFromContext(r.Context())
+	setup, err := h.service.SetupPaymentMethod(r.Context(), user.ID, user.Email)
+	if err != nil {
+		h.writeCustomerError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, map[string]any{"data": map[string]any{"setup": setup}})
+}
+
+func (h paymentHandler) removePaymentMethod(w http.ResponseWriter, r *http.Request) {
+	preventCaching(w)
+	id := chi.URLParam(r, "paymentMethodID")
+	if !paymentMethodIDPattern.MatchString(id) {
+		writeError(w, http.StatusBadRequest, "INVALID_PAYMENT_METHOD", "Choose a valid payment method.")
+		return
+	}
+	if err := h.service.RemovePaymentMethod(r.Context(), creatorFromContext(r.Context()).ID, id); err != nil {
+		h.writeCustomerError(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h paymentHandler) writeCustomerError(w http.ResponseWriter, err error) {
+	if errors.Is(err, paymentdomain.ErrDisabled) {
+		writeError(w, http.StatusServiceUnavailable, "PAYMENTS_UNAVAILABLE", "Saved payments are not configured right now.")
+		return
+	}
+	if errors.Is(err, paymentdomain.ErrPaymentMethodNotFound) {
+		writeError(w, http.StatusNotFound, "PAYMENT_METHOD_NOT_FOUND", "That payment method is no longer available.")
+		return
+	}
+	h.logger.Error("saved payment request failed", "error", err)
+	writeError(w, http.StatusBadGateway, "PAYMENT_PROVIDER_ERROR", "Stripe could not update your saved payments. Try again.")
 }
 
 func writePaymentError(w http.ResponseWriter, logger *slog.Logger, err error) {

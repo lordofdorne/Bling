@@ -23,6 +23,9 @@ func v2Account(id, status string, entries ...*stripe.V2CoreAccountRequirementsEn
 			Recipient: &stripe.V2CoreAccountConfigurationRecipient{
 				Capabilities: &stripe.V2CoreAccountConfigurationRecipientCapabilities{
 					StripeBalance: &stripe.V2CoreAccountConfigurationRecipientCapabilitiesStripeBalance{
+						Payouts: &stripe.V2CoreAccountConfigurationRecipientCapabilitiesStripeBalancePayouts{
+							Status: stripe.V2CoreAccountConfigurationRecipientCapabilitiesStripeBalancePayoutsStatus(status),
+						},
 						StripeTransfers: &stripe.V2CoreAccountConfigurationRecipientCapabilitiesStripeBalanceStripeTransfers{
 							Status: stripe.V2CoreAccountConfigurationRecipientCapabilitiesStripeBalanceStripeTransfersStatus(status),
 						},
@@ -105,7 +108,7 @@ func TestEventuallyDueRequirementsDoNotBlockAFreshlyOnboardedCreator(t *testing.
 	if !account.DetailsSubmitted {
 		t.Fatal("eventually_due requirements must not mark onboarding incomplete")
 	}
-	stored := Account{StripeAccountID: account.ID, ChargesEnabled: account.ChargesEnabled, PayoutsEnabled: account.PayoutsEnabled, DetailsSubmitted: account.DetailsSubmitted}
+	stored := Account{StripeAccountID: account.ID, TransfersStatus: account.TransfersStatus, BankPayoutsStatus: account.BankPayoutsStatus, ExternalAccountPresent: true, ChargesEnabled: account.ChargesEnabled, PayoutsEnabled: account.PayoutsEnabled, DetailsSubmitted: account.DetailsSubmitted}
 	if !stored.Ready() {
 		t.Fatal("an account with active transfers and only eventually_due items must be ready")
 	}

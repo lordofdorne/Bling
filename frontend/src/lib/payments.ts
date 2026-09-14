@@ -1,4 +1,4 @@
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "./api";
 
 export type PaymentAuthorization = {
@@ -7,6 +7,22 @@ export type PaymentAuthorization = {
   publishableKey: string;
   amountCents: number;
   currency: string;
+  customerSessionClientSecret?: string;
+};
+
+export type SavedPaymentMethod = {
+  id: string;
+  type: string;
+  brand: string;
+  last4: string;
+  expMonth: number;
+  expYear: number;
+};
+
+export type PaymentMethodSetup = {
+  clientSecret: string;
+  customerSessionClientSecret: string;
+  publishableKey: string;
 };
 
 type AuthorizationResponse = { data: PaymentAuthorization };
@@ -36,4 +52,49 @@ export function useAuthorizePayment(showID: string) {
       return { ...response.data, storageKey: key.storageKey };
     },
   });
+}
+
+const paymentMethodsKey = ["me", "payment-methods"] as const;
+
+export function usePaymentMethods() {
+  return useQuery({
+    queryKey: paymentMethodsKey,
+    queryFn: async () =>
+      (
+        await apiRequest<{
+          data: { paymentMethods: SavedPaymentMethod[] };
+        }>("/api/v1/me/payment-methods")
+      ).data.paymentMethods,
+    staleTime: 15_000,
+  });
+}
+
+export function usePaymentMethodSetup() {
+  return useMutation({
+    mutationFn: async () =>
+      (
+        await apiRequest<{ data: { setup: PaymentMethodSetup } }>(
+          "/api/v1/me/payment-methods/setup-session",
+          { method: "POST" },
+        )
+      ).data.setup,
+  });
+}
+
+export function useRemovePaymentMethod() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (paymentMethodID: string) =>
+      apiRequest<void>(
+        `/api/v1/me/payment-methods/${encodeURIComponent(paymentMethodID)}`,
+        { method: "DELETE" },
+      ),
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: paymentMethodsKey }),
+  });
+}
+
+export function useRefreshPaymentMethods() {
+  const queryClient = useQueryClient();
+  return () => queryClient.invalidateQueries({ queryKey: paymentMethodsKey });
 }

@@ -8,6 +8,11 @@ export type PayoutStatus = {
    * "pending", "restricted" or "unsupported". Only "active" permits paid calls.
    */
   transfersStatus: string;
+  bankPayoutsStatus: string;
+  externalAccountPresent: boolean;
+  externalAccountBankName?: string;
+  externalAccountLast4?: string;
+  externalAccountCurrency?: string;
   chargesEnabled: boolean;
   payoutsEnabled: boolean;
   detailsSubmitted: boolean;

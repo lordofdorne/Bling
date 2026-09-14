@@ -4,7 +4,11 @@ import (
 	"context"
 
 	stripe "github.com/stripe/stripe-go/v85"
+	"github.com/stripe/stripe-go/v85/customer"
+	"github.com/stripe/stripe-go/v85/customersession"
 	"github.com/stripe/stripe-go/v85/paymentintent"
+	"github.com/stripe/stripe-go/v85/paymentmethod"
+	"github.com/stripe/stripe-go/v85/setupintent"
 )
 
 type StripeGateway struct{}
@@ -18,8 +22,11 @@ func (g *StripeGateway) CreateAuthorization(ctx context.Context, attempt Attempt
 	params := &stripe.PaymentIntentParams{
 		Amount: stripe.Int64(attempt.AmountCents), Currency: stripe.String(attempt.Currency),
 		CaptureMethod:      stripe.String(string(stripe.PaymentIntentCaptureMethodManual)),
-		PaymentMethodTypes: stripe.StringSlice([]string{"card"}),
+		PaymentMethodTypes: stripe.StringSlice([]string{"card", "link"}),
 		Description:        stripe.String("Bling Hotline call"),
+	}
+	if attempt.StripeCustomerID != "" {
+		params.Customer = stripe.String(attempt.StripeCustomerID)
 	}
 	if attempt.Flow != FlowPlatform {
 		params.ApplicationFeeAmount = stripe.Int64(attempt.PlatformFeeCents)
@@ -35,6 +42,90 @@ func (g *StripeGateway) CreateAuthorization(ctx context.Context, attempt Attempt
 		return Intent{}, err
 	}
 	return stripeIntent(value), nil
+}
+
+func (g *StripeGateway) CreateCustomer(ctx context.Context, userID, email string) (string, error) {
+	params := &stripe.CustomerParams{Email: stripe.String(email), Description: stripe.String("Bling caller")}
+	params.Context = ctx
+	params.AddMetadata("bling_user_id", userID)
+	params.SetIdempotencyKey("bling-customer-" + userID)
+	value, err := customer.New(params)
+	if err != nil {
+		return "", err
+	}
+	return value.ID, nil
+}
+
+func (g *StripeGateway) CreateCustomerSession(ctx context.Context, customerID string, allowSave bool) (string, error) {
+	features := &stripe.CustomerSessionComponentsPaymentElementFeaturesParams{
+		PaymentMethodRedisplay:      stripe.String("enabled"),
+		PaymentMethodRedisplayLimit: stripe.Int64(5),
+		PaymentMethodRemove:         stripe.String("enabled"),
+	}
+	if allowSave {
+		features.PaymentMethodSave = stripe.String("enabled")
+		features.PaymentMethodSaveUsage = stripe.String("on_session")
+	}
+	params := &stripe.CustomerSessionParams{
+		Customer: stripe.String(customerID),
+		Components: &stripe.CustomerSessionComponentsParams{
+			PaymentElement: &stripe.CustomerSessionComponentsPaymentElementParams{
+				Enabled:  stripe.Bool(true),
+				Features: features,
+			},
+		},
+	}
+	params.Context = ctx
+	value, err := customersession.New(params)
+	if err != nil {
+		return "", err
+	}
+	return value.ClientSecret, nil
+}
+
+func (g *StripeGateway) CreateSetupIntent(ctx context.Context, customerID, idempotencyKey string) (string, error) {
+	params := &stripe.SetupIntentParams{
+		Customer:           stripe.String(customerID),
+		PaymentMethodTypes: stripe.StringSlice([]string{"card"}),
+		Usage:              stripe.String("on_session"),
+		Description:        stripe.String("Save a payment method for future Bling calls"),
+	}
+	params.Context = ctx
+	params.SetIdempotencyKey(idempotencyKey)
+	value, err := setupintent.New(params)
+	if err != nil {
+		return "", err
+	}
+	return value.ClientSecret, nil
+}
+
+func (g *StripeGateway) ListPaymentMethods(ctx context.Context, customerID string, limit int64) ([]SavedPaymentMethod, error) {
+	params := &stripe.PaymentMethodListParams{Customer: stripe.String(customerID), Type: stripe.String("card")}
+	params.Context = ctx
+	params.Limit = stripe.Int64(limit)
+	iterator := paymentmethod.List(params)
+	methods := make([]SavedPaymentMethod, 0)
+	for iterator.Next() {
+		value := iterator.PaymentMethod()
+		if value.Card == nil || value.AllowRedisplay != stripe.PaymentMethodAllowRedisplayAlways {
+			continue
+		}
+		methods = append(methods, SavedPaymentMethod{
+			ID: value.ID, Type: "card", Brand: string(value.Card.Brand), Last4: value.Card.Last4,
+			ExpMonth: value.Card.ExpMonth, ExpYear: value.Card.ExpYear,
+		})
+	}
+	if err := iterator.Err(); err != nil {
+		return nil, err
+	}
+	return methods, nil
+}
+
+func (g *StripeGateway) DetachPaymentMethod(ctx context.Context, paymentMethodID string) error {
+	params := &stripe.PaymentMethodDetachParams{}
+	params.Context = ctx
+	_, err := paymentmethod.Detach(paymentMethodID, params)
+	return err
 }
 
 func (g *StripeGateway) Retrieve(ctx context.Context, id string) (Intent, error) {
@@ -78,3 +169,4 @@ func stripeIntent(value *stripe.PaymentIntent) Intent {
 }
 
 var _ Gateway = (*StripeGateway)(nil)
+var _ CustomerGateway = (*StripeGateway)(nil)

@@ -1,4 +1,11 @@
 import { useMemo, useState } from "react";
+import {
+  Elements,
+  PaymentElement,
+  useElements,
+  useStripe,
+} from "@stripe/react-stripe-js";
+import { loadStripe } from "@stripe/stripe-js";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useLogout, useMe } from "../lib/auth";
 import {
@@ -27,6 +34,13 @@ import { CallAudioPanel } from "./CallAudioPanel";
 import { UiIcon } from "./UiIcon";
 import { Brand } from "./ViewerShell";
 import { PayoutSetup } from "./PayoutSetup";
+import {
+  PaymentMethodSetup,
+  usePaymentMethods,
+  usePaymentMethodSetup,
+  useRefreshPaymentMethods,
+  useRemovePaymentMethod,
+} from "../lib/payments";
 
 function CallerList({ showID }: { showID: string }) {
   const queue = useCreatorQueue(showID);
@@ -497,7 +511,7 @@ function TierConfigurationForm({
   );
 }
 
-type SettingsSection = "profile" | "payouts" | "account";
+type SettingsSection = "profile" | "payments" | "payouts" | "account";
 
 function CreatorPayoutSettings() {
   const payouts = usePayoutStatus();
@@ -557,6 +571,14 @@ function CreatorPayoutSettings() {
         <div className="form-error" role="alert">
           Unable to load payout status.
         </div>
+      ) : payoutSession.data ? (
+        <PayoutSetup
+          session={payoutSession.data}
+          onExit={() => {
+            payoutSession.reset();
+            void payouts.refetch();
+          }}
+        />
       ) : payouts.data.ready ? (
         <div className="payout-ready-row">
           <span className="feature-icon success">
@@ -569,22 +591,39 @@ function CreatorPayoutSettings() {
               call. Available balances are sent monthly. Bling’s platform fee is{" "}
               {payouts.data.platformFeePercent}%.
             </p>
+            {payouts.data.externalAccountPresent && (
+              <div className="payout-bank-summary">
+                <strong>
+                  {payouts.data.externalAccountBankName || "Bank account"}
+                </strong>
+                <span>
+                  •••• {payouts.data.externalAccountLast4}
+                  {payouts.data.externalAccountCurrency
+                    ? ` · ${payouts.data.externalAccountCurrency.toUpperCase()}`
+                    : ""}
+                </span>
+              </div>
+            )}
+            <button
+              className="button secondary compact"
+              type="button"
+              onClick={() => payoutSession.mutate()}
+              disabled={payoutSession.isPending}
+            >
+              {payoutSession.isPending
+                ? "Opening secure setup…"
+                : "Update bank account"}
+            </button>
           </div>
         </div>
-      ) : payoutSession.data ? (
-        <PayoutSetup
-          session={payoutSession.data}
-          onExit={() => {
-            payoutSession.reset();
-            void payouts.refetch();
-          }}
-        />
       ) : (
         <div className="payout-setup-copy">
           <div>
             <h3>
               {payouts.data.connected
-                ? "Finish your payout setup"
+                ? payouts.data.transfersStatus === "active"
+                  ? "Add your bank account"
+                  : "Finish your payout setup"
                 : "Set up monthly payouts"}
             </h3>
             <p>
@@ -602,7 +641,9 @@ function CreatorPayoutSettings() {
             {payoutSession.isPending
               ? "Opening secure setup…"
               : payouts.data.connected
-                ? "Continue payout setup"
+                ? payouts.data.transfersStatus === "active"
+                  ? "Add bank account"
+                  : "Continue payout setup"
                 : "Set up payouts"}
           </button>
           {payoutSession.isError && (
@@ -611,6 +652,202 @@ function CreatorPayoutSettings() {
             </div>
           )}
         </div>
+      )}
+    </section>
+  );
+}
+
+function SavePaymentMethodForm({
+  onSaved,
+  onCancel,
+}: {
+  onSaved: () => void;
+  onCancel: () => void;
+}) {
+  const stripe = useStripe();
+  const elements = useElements();
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState("");
+
+  async function save() {
+    if (!stripe || !elements) return;
+    setSubmitting(true);
+    setError("");
+    const result = await stripe.confirmSetup({
+      elements,
+      redirect: "if_required",
+      confirmParams: {
+        return_url: window.location.href,
+        payment_method_data: { allow_redisplay: "always" },
+      },
+    });
+    if (result.error) {
+      setError(result.error.message ?? "Unable to save this payment method.");
+      setSubmitting(false);
+      return;
+    }
+    if (result.setupIntent?.status !== "succeeded") {
+      setError("Payment setup is still incomplete. Try again.");
+      setSubmitting(false);
+      return;
+    }
+    onSaved();
+  }
+
+  return (
+    <div className="saved-payment-form">
+      <PaymentElement options={{ layout: "tabs" }} />
+      <p className="field-hint">
+        Stripe securely stores your payment details. Bling never receives your
+        full card number or CVC.
+      </p>
+      <div className="saved-payment-actions">
+        <button
+          className="primary-button"
+          type="button"
+          onClick={save}
+          disabled={!stripe || submitting}
+        >
+          {submitting ? "Saving…" : "Save payment method"}
+        </button>
+        <button
+          className="button secondary"
+          type="button"
+          onClick={onCancel}
+          disabled={submitting}
+        >
+          Cancel
+        </button>
+      </div>
+      {error && (
+        <div className="form-error" role="alert">
+          {error}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PaymentMethodSetupPanel({
+  setup,
+  onSaved,
+  onCancel,
+}: {
+  setup: PaymentMethodSetup;
+  onSaved: () => void;
+  onCancel: () => void;
+}) {
+  const stripePromise = useMemo(
+    () => loadStripe(setup.publishableKey),
+    [setup.publishableKey],
+  );
+  return (
+    <Elements
+      stripe={stripePromise}
+      options={{
+        clientSecret: setup.clientSecret,
+        customerSessionClientSecret: setup.customerSessionClientSecret,
+        appearance: { theme: "stripe" },
+      }}
+    >
+      <SavePaymentMethodForm onSaved={onSaved} onCancel={onCancel} />
+    </Elements>
+  );
+}
+
+function UserPaymentSettings() {
+  const methods = usePaymentMethods();
+  const setup = usePaymentMethodSetup();
+  const remove = useRemovePaymentMethod();
+  const refresh = useRefreshPaymentMethods();
+
+  async function saved() {
+    setup.reset();
+    await refresh();
+  }
+
+  return (
+    <section
+      className="show-card settings-section-card"
+      aria-label="Saved payments"
+    >
+      <div className="settings-section-heading">
+        <span className="feature-icon">
+          <UiIcon name="wallet" size={21} />
+        </span>
+        <div>
+          <h2>Payment methods</h2>
+          <p>Save a card for faster call requests and manage it here.</p>
+        </div>
+      </div>
+
+      {setup.data ? (
+        <PaymentMethodSetupPanel
+          setup={setup.data}
+          onSaved={() => void saved()}
+          onCancel={() => setup.reset()}
+        />
+      ) : (
+        <>
+          {methods.isPending ? (
+            <div className="status">Loading saved payment methods…</div>
+          ) : methods.isError ? (
+            <div className="form-error" role="alert">
+              Unable to load saved payment methods.
+            </div>
+          ) : methods.data.length === 0 ? (
+            <div className="saved-payment-empty">
+              <span className="feature-icon">
+                <UiIcon name="wallet" size={20} />
+              </span>
+              <div>
+                <h3>No saved payment methods</h3>
+                <p>Add a card now or save one during your next paid call.</p>
+              </div>
+            </div>
+          ) : (
+            <div className="saved-payment-list">
+              {methods.data.map((method) => (
+                <div className="saved-payment-row" key={method.id}>
+                  <span className="payment-brand">
+                    {method.brand.slice(0, 1).toUpperCase()}
+                  </span>
+                  <div>
+                    <strong>
+                      {method.brand.replaceAll("_", " ")} •••• {method.last4}
+                    </strong>
+                    <span>
+                      Expires {String(method.expMonth).padStart(2, "0")}/
+                      {String(method.expYear).slice(-2)}
+                    </span>
+                  </div>
+                  <button
+                    className="button secondary compact"
+                    type="button"
+                    onClick={() => remove.mutate(method.id)}
+                    disabled={remove.isPending}
+                    aria-label={`Remove ${method.brand} ending in ${method.last4}`}
+                  >
+                    Remove
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+          <button
+            className="primary-button saved-payment-add"
+            type="button"
+            onClick={() => setup.mutate()}
+            disabled={setup.isPending}
+          >
+            {setup.isPending ? "Opening secure form…" : "Add payment method"}
+          </button>
+          {(setup.isError || remove.isError) && (
+            <div className="form-error" role="alert">
+              {setup.error?.message ?? remove.error?.message}
+            </div>
+          )}
+        </>
       )}
     </section>
   );
@@ -658,6 +895,7 @@ function CreatorSettings({
 }) {
   const tabs: { id: SettingsSection; label: string }[] = [
     { id: "profile", label: "Profile" },
+    { id: "payments", label: "Payments" },
     { id: "payouts", label: "Payouts" },
     { id: "account", label: "Account" },
   ];
@@ -682,6 +920,7 @@ function CreatorSettings({
       </nav>
       <div className="settings-panel">
         {section === "profile" && <ProfileEditor />}
+        {section === "payments" && <UserPaymentSettings />}
         {section === "payouts" && <CreatorPayoutSettings />}
         {section === "account" && (
           <CreatorAccountSettings username={username} />
@@ -705,7 +944,7 @@ export function Dashboard() {
   const paymentActivity = usePaymentActivity();
   const activeShow = currentShow.data;
   const settingsMatch = location.pathname.match(
-    /^\/dashboard\/settings(?:\/(profile|payouts|account))?\/?$/,
+    /^\/dashboard\/settings(?:\/(profile|payments|payouts|account))?\/?$/,
   );
   const isSettings = Boolean(settingsMatch);
   const settingsSection = (settingsMatch?.[1] ?? "profile") as SettingsSection;
@@ -767,6 +1006,17 @@ export function Dashboard() {
             >
               <UiIcon name="settings" />
               Payout settings
+            </Link>
+            <Link
+              className={
+                isSettings && settingsSection === "payments"
+                  ? "active"
+                  : undefined
+              }
+              to="/dashboard/settings/payments"
+            >
+              <UiIcon name="wallet" />
+              Saved payments
             </Link>
             <div className="sidebar-rule" />
             <p className="nav-label">Your channel</p>

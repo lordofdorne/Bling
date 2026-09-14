@@ -160,5 +160,5 @@ func statusFor(account Account) Status {
 	if requirements == nil {
 		requirements = []string{}
 	}
-	return Status{Connected: true, TransfersStatus: account.TransfersStatus, ChargesEnabled: account.ChargesEnabled, PayoutsEnabled: account.PayoutsEnabled, DetailsSubmitted: account.DetailsSubmitted, Ready: account.Ready(), RequirementsDue: requirements, PlatformFeePercent: PlatformFeePercent}
+	return Status{Connected: true, TransfersStatus: account.TransfersStatus, BankPayoutsStatus: account.BankPayoutsStatus, ExternalAccountPresent: account.ExternalAccountPresent, ExternalAccountBankName: account.ExternalAccountBankName, ExternalAccountLast4: account.ExternalAccountLast4, ExternalAccountCurrency: account.ExternalAccountCurrency, ChargesEnabled: account.ChargesEnabled, PayoutsEnabled: account.PayoutsEnabled, DetailsSubmitted: account.DetailsSubmitted, Ready: account.Ready(), RequirementsDue: requirements, PlatformFeePercent: PlatformFeePercent}
 }

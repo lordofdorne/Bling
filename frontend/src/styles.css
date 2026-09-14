@@ -3397,6 +3397,24 @@ button.button {
   color: var(--muted);
   line-height: 1.7;
 }
+.payout-ready-row > div:last-child {
+  display: grid;
+  gap: 12px;
+}
+.payout-bank-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  width: fit-content;
+  padding: 11px 13px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+  font-size: 12px;
+}
+.payout-bank-summary span {
+  color: var(--muted);
+}
 .payout-setup-copy {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
@@ -3442,6 +3460,78 @@ button.button {
 }
 .account-settings-list a {
   color: var(--sand);
+}
+.saved-payment-list {
+  display: grid;
+  gap: 10px;
+}
+.saved-payment-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 14px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--bg);
+}
+.saved-payment-row > div {
+  display: grid;
+  gap: 4px;
+}
+.saved-payment-row strong {
+  text-transform: capitalize;
+}
+.saved-payment-row span {
+  color: var(--muted);
+  font-size: 12px;
+}
+.payment-brand {
+  display: grid;
+  width: 40px;
+  height: 30px;
+  place-items: center;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  color: var(--sand) !important;
+  background: var(--surface-raised);
+  font-weight: 800;
+}
+.saved-payment-empty {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 18px;
+  border: 1px dashed var(--border-strong);
+  border-radius: 9px;
+}
+.saved-payment-empty h3,
+.saved-payment-empty p {
+  margin: 0;
+}
+.saved-payment-empty p {
+  margin-top: 5px;
+  color: var(--muted);
+}
+.saved-payment-add {
+  width: fit-content;
+  min-width: 170px;
+  margin: 0;
+}
+.saved-payment-form {
+  display: grid;
+  gap: 16px;
+  max-width: 620px;
+}
+.saved-payment-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.saved-payment-actions .primary-button,
+.saved-payment-actions .button {
+  width: auto;
+  margin: 0;
 }
 .profile-form {
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -3498,6 +3588,16 @@ button.button {
   .account-settings-list > div {
     grid-template-columns: 1fr;
     gap: 7px;
+  }
+  .saved-payment-row {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+  .saved-payment-row .button {
+    grid-column: 1 / -1;
+    width: 100%;
+  }
+  .saved-payment-add {
+    width: 100%;
   }
 }
 

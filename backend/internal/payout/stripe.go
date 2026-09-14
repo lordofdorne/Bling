@@ -93,7 +93,26 @@ func (g *StripeGateway) RetrieveAccount(ctx context.Context, id string) (StripeA
 	if err != nil {
 		return StripeAccount{}, err
 	}
-	return stripeAccount(value), nil
+	account := stripeAccount(value)
+	accounts := g.client.V1BankAccounts.List(ctx, &stripe.BankAccountListParams{Account: stripe.String(id), ListParams: stripe.ListParams{Limit: stripe.Int64(10)}})
+	if err := accounts.Err(); err != nil {
+		return StripeAccount{}, err
+	}
+	for _, bank := range accounts.Data() {
+		if bank == nil || bank.Deleted || bank.Status == stripe.BankAccountStatusErrored || bank.Status == stripe.BankAccountStatusVerificationFailed || string(bank.Status) == "tokenized_account_number_deactivated" {
+			continue
+		}
+		if !account.ExternalAccountPresent || bank.DefaultForCurrency {
+			account.ExternalAccountPresent = true
+			account.ExternalAccountBankName = bank.BankName
+			account.ExternalAccountLast4 = bank.Last4
+			account.ExternalAccountCurrency = string(bank.Currency)
+		}
+		if bank.DefaultForCurrency {
+			break
+		}
+	}
+	return account, nil
 }
 
 // CreateOnboardingLink returns a single-use Stripe-hosted onboarding URL.
@@ -121,7 +140,7 @@ func stripeAccount(value *stripe.V2CoreAccount) StripeAccount {
 		return StripeAccount{}
 	}
 
-	account := StripeAccount{ID: value.ID, TransfersStatus: transfersStatus(value), RequirementsDue: []string{}}
+	account := StripeAccount{ID: value.ID, TransfersStatus: transfersStatus(value), BankPayoutsStatus: payoutsStatus(value), RequirementsDue: []string{}}
 
 	// Requirements Stripe is still working through are not the creator's to act
 	// on, so only user-facing entries are surfaced.
@@ -148,12 +167,24 @@ func stripeAccount(value *stripe.V2CoreAccount) StripeAccount {
 
 	// A recipient account never accepts charges itself; ChargesEnabled remains
 	// as a compatibility field for older clients.
-	active := account.TransfersActive()
-	account.ChargesEnabled = active
-	account.PayoutsEnabled = active
+	transfersActive := account.TransfersActive()
+	payoutsActive := account.BankPayoutsStatus == TransfersStatusActive
+	account.ChargesEnabled = transfersActive
+	account.PayoutsEnabled = payoutsActive
 	account.DetailsSubmitted = !blocked
 
 	return account
+}
+
+func payoutsStatus(value *stripe.V2CoreAccount) string {
+	if value.Configuration == nil || value.Configuration.Recipient == nil {
+		return ""
+	}
+	capabilities := value.Configuration.Recipient.Capabilities
+	if capabilities == nil || capabilities.StripeBalance == nil || capabilities.StripeBalance.Payouts == nil {
+		return ""
+	}
+	return string(capabilities.StripeBalance.Payouts.Status)
 }
 
 // requirementBlocks reports whether an outstanding requirement restricts the

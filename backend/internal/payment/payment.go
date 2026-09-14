@@ -18,14 +18,14 @@ const (
 )
 
 var (
-	ErrDisabled          = errors.New("payments are not configured")
-	ErrShowNotLive       = errors.New("show is not live")
-	ErrTierNotFound      = errors.New("payment tier not found")
-	ErrFreeTier          = errors.New("free tier does not require payment")
-	ErrAttemptNotFound   = errors.New("payment attempt not found")
-	ErrAuthorization     = errors.New("payment is not authorized")
-	ErrAuthorizationUsed = errors.New("payment authorization is already in use")
-	ErrCaptureFailed     = errors.New("payment capture failed")
+	ErrDisabled               = errors.New("payments are not configured")
+	ErrShowNotLive            = errors.New("show is not live")
+	ErrTierNotFound           = errors.New("payment tier not found")
+	ErrFreeTier               = errors.New("free tier does not require payment")
+	ErrAttemptNotFound        = errors.New("payment attempt not found")
+	ErrAuthorization          = errors.New("payment is not authorized")
+	ErrAuthorizationUsed      = errors.New("payment authorization is already in use")
+	ErrCaptureFailed          = errors.New("payment capture failed")
 	ErrPaymentProfileNotFound = errors.New("payment profile not found")
 	ErrPaymentMethodNotFound  = errors.New("payment method not found")
 )
@@ -62,11 +62,11 @@ type Attempt struct {
 }
 
 type Authorization struct {
-	AttemptID      string `json:"attemptId"`
-	ClientSecret   string `json:"clientSecret"`
-	PublishableKey string `json:"publishableKey"`
-	AmountCents    int64  `json:"amountCents"`
-	Currency       string `json:"currency"`
+	AttemptID                   string `json:"attemptId"`
+	ClientSecret                string `json:"clientSecret"`
+	PublishableKey              string `json:"publishableKey"`
+	AmountCents                 int64  `json:"amountCents"`
+	Currency                    string `json:"currency"`
 	CustomerSessionClientSecret string `json:"customerSessionClientSecret,omitempty"`
 }
 
@@ -128,6 +128,10 @@ type CustomerGateway interface {
 type CustomerRepository interface {
 	PaymentProfileByUser(context.Context, string) (PaymentProfile, error)
 	SavePaymentProfile(context.Context, string, string, time.Time) (PaymentProfile, error)
+}
+
+type SavedMethodAuditRepository interface {
+	RecordSavedPaymentMethod(context.Context, string, string, string, time.Time) error
 }
 
 type Repository interface {

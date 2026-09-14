@@ -20,7 +20,7 @@ func (r *fakeRepository) ByStripeAccountID(context.Context, string) (Account, er
 }
 func (r *fakeRepository) Upsert(_ context.Context, creatorID string, stripeAccount StripeAccount, now time.Time) (Account, error) {
 	r.err = nil
-	r.account = Account{CreatorID: creatorID, StripeAccountID: stripeAccount.ID, TransfersStatus: stripeAccount.TransfersStatus, ChargesEnabled: stripeAccount.ChargesEnabled, PayoutsEnabled: stripeAccount.PayoutsEnabled, DetailsSubmitted: stripeAccount.DetailsSubmitted, RequirementsDue: stripeAccount.RequirementsDue, CreatedAt: now, UpdatedAt: now}
+	r.account = Account{CreatorID: creatorID, StripeAccountID: stripeAccount.ID, TransfersStatus: stripeAccount.TransfersStatus, BankPayoutsStatus: stripeAccount.BankPayoutsStatus, ExternalAccountPresent: stripeAccount.ExternalAccountPresent, ExternalAccountBankName: stripeAccount.ExternalAccountBankName, ExternalAccountLast4: stripeAccount.ExternalAccountLast4, ExternalAccountCurrency: stripeAccount.ExternalAccountCurrency, ChargesEnabled: stripeAccount.ChargesEnabled, PayoutsEnabled: stripeAccount.PayoutsEnabled, DetailsSubmitted: stripeAccount.DetailsSubmitted, RequirementsDue: stripeAccount.RequirementsDue, CreatedAt: now, UpdatedAt: now}
 	return r.account, nil
 }
 
@@ -96,7 +96,7 @@ func TestEmbeddedSessionCreatesAccountWithoutRedirect(t *testing.T) {
 }
 
 func TestReadyAccountDoesNotCreateAnotherOnboardingLink(t *testing.T) {
-	ready := StripeAccount{ID: "acct_creator", TransfersStatus: TransfersStatusActive, ChargesEnabled: true, PayoutsEnabled: true, DetailsSubmitted: true}
+	ready := StripeAccount{ID: "acct_creator", TransfersStatus: TransfersStatusActive, BankPayoutsStatus: TransfersStatusActive, ExternalAccountPresent: true, ChargesEnabled: true, PayoutsEnabled: true, DetailsSubmitted: true}
 	repository := &fakeRepository{account: Account{CreatorID: "creator-1", StripeAccountID: ready.ID}}
 	gateway := &fakeGateway{account: ready}
 	service := NewService(repository, gateway, "US", "https://bling.test")
@@ -128,11 +128,13 @@ func TestReadinessFollowsTransfersCapability(t *testing.T) {
 		t.Run(testCase.status, func(t *testing.T) {
 			active := testCase.status == TransfersStatusActive
 			account := Account{
-				StripeAccountID:  "acct_creator",
-				TransfersStatus:  testCase.status,
-				ChargesEnabled:   active,
-				PayoutsEnabled:   active,
-				DetailsSubmitted: true,
+				StripeAccountID:        "acct_creator",
+				TransfersStatus:        testCase.status,
+				BankPayoutsStatus:      testCase.status,
+				ExternalAccountPresent: active,
+				ChargesEnabled:         active,
+				PayoutsEnabled:         active,
+				DetailsSubmitted:       true,
 			}
 			if account.Ready() != testCase.ready {
 				t.Fatalf("status=%q ready=%v, want %v", testCase.status, account.Ready(), testCase.ready)
@@ -158,7 +160,7 @@ func TestOnboardingPassesConfiguredCountry(t *testing.T) {
 // the v1 shape, so the service re-reads the account through the v2 API.
 func TestReconcileRefreshesFromStripeRatherThanTrustingTheEvent(t *testing.T) {
 	repository := &fakeRepository{account: Account{CreatorID: "creator-1", StripeAccountID: "acct_creator"}}
-	gateway := &fakeGateway{account: StripeAccount{ID: "acct_creator", TransfersStatus: TransfersStatusActive, ChargesEnabled: true, PayoutsEnabled: true, DetailsSubmitted: true}}
+	gateway := &fakeGateway{account: StripeAccount{ID: "acct_creator", TransfersStatus: TransfersStatusActive, BankPayoutsStatus: TransfersStatusActive, ExternalAccountPresent: true, ChargesEnabled: true, PayoutsEnabled: true, DetailsSubmitted: true}}
 	service := NewService(repository, gateway, "US", "https://bling.test")
 
 	if err := service.Reconcile(context.Background(), "acct_creator"); err != nil {

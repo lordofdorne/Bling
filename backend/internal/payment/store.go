@@ -18,18 +18,24 @@ func NewPostgresRepository(pool *pgxpool.Pool) *PostgresRepository {
 	return &PostgresRepository{pool: pool}
 }
 
-const attemptColumns = `id,show_id,tier_id,queue_entry_id,stripe_payment_intent_id,destination_account_id,payment_flow,amount_cents,platform_fee_bps,platform_fee_cents,currency,status,authorized_at,captured_at,canceled_at,created_at,updated_at`
+const attemptColumns = `id,show_id,tier_id,queue_entry_id,stripe_payment_intent_id,payer_user_id,stripe_customer_id,destination_account_id,payment_flow,amount_cents,platform_fee_bps,platform_fee_cents,currency,status,authorized_at,captured_at,canceled_at,created_at,updated_at`
 
 func scanAttempt(row pgx.Row) (Attempt, error) {
 	var value Attempt
-	var intentID, destinationID sql.NullString
+	var intentID, payerID, customerID, destinationID sql.NullString
 	var feeBPS, feeCents sql.NullInt64
-	err := row.Scan(&value.ID, &value.ShowID, &value.TierID, &value.QueueEntryID, &intentID, &destinationID, &value.Flow, &value.AmountCents, &feeBPS, &feeCents, &value.Currency, &value.Status, &value.AuthorizedAt, &value.CapturedAt, &value.CanceledAt, &value.CreatedAt, &value.UpdatedAt)
+	err := row.Scan(&value.ID, &value.ShowID, &value.TierID, &value.QueueEntryID, &intentID, &payerID, &customerID, &destinationID, &value.Flow, &value.AmountCents, &feeBPS, &feeCents, &value.Currency, &value.Status, &value.AuthorizedAt, &value.CapturedAt, &value.CanceledAt, &value.CreatedAt, &value.UpdatedAt)
 	if intentID.Valid {
 		value.StripePaymentIntentID = intentID.String
 	}
 	if destinationID.Valid {
 		value.DestinationAccountID = destinationID.String
+	}
+	if payerID.Valid {
+		value.PayerUserID = payerID.String
+	}
+	if customerID.Valid {
+		value.StripeCustomerID = customerID.String
 	}
 	if feeBPS.Valid {
 		value.PlatformFeeBPS = feeBPS.Int64
@@ -64,10 +70,10 @@ func (r *PostgresRepository) Prepare(ctx context.Context, input PrepareInput, no
 	}
 	feeCents := platformFeeCents(amount)
 	value, err := scanAttempt(tx.QueryRow(ctx, `INSERT INTO payment_attempts
-		(show_id,tier_id,viewer_token_hash,idempotency_key_hash,payment_flow,amount_cents,platform_fee_bps,platform_fee_cents,currency,created_at,updated_at)
-		VALUES ($1,$2,$3,$4,'PLATFORM',$5,$6,$7,'usd',$8,$8)
+		(show_id,tier_id,viewer_token_hash,idempotency_key_hash,payer_user_id,stripe_customer_id,payment_flow,amount_cents,platform_fee_bps,platform_fee_cents,currency,created_at,updated_at)
+		VALUES ($1,$2,$3,$4,NULLIF($5,''),NULLIF($6,''),'PLATFORM',$7,$8,$9,'usd',$10,$10)
 		ON CONFLICT (show_id,idempotency_key_hash) DO UPDATE SET updated_at=payment_attempts.updated_at
-		RETURNING `+attemptColumns, input.ShowID, input.TierID, input.ViewerTokenHash, input.IdempotencyKeyHash, amount, PlatformFeeBPS, feeCents, now))
+		RETURNING `+attemptColumns, input.ShowID, input.TierID, input.ViewerTokenHash, input.IdempotencyKeyHash, input.PayerUserID, input.StripeCustomerID, amount, PlatformFeeBPS, feeCents, now))
 	if err != nil {
 		return Attempt{}, fmt.Errorf("persist payment attempt: %w", err)
 	}
@@ -75,13 +81,48 @@ func (r *PostgresRepository) Prepare(ctx context.Context, input PrepareInput, no
 	if err := tx.QueryRow(ctx, `SELECT viewer_token_hash FROM payment_attempts WHERE id=$1`, value.ID).Scan(&storedViewer); err != nil {
 		return Attempt{}, err
 	}
-	if !bytes.Equal(storedViewer, input.ViewerTokenHash) || value.TierID != input.TierID {
+	if !bytes.Equal(storedViewer, input.ViewerTokenHash) || value.TierID != input.TierID || value.PayerUserID != input.PayerUserID || value.StripeCustomerID != input.StripeCustomerID {
 		return Attempt{}, ErrAuthorizationUsed
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return Attempt{}, fmt.Errorf("commit payment attempt: %w", err)
 	}
 	return value, nil
+}
+
+func (r *PostgresRepository) PaymentProfileByUser(ctx context.Context, userID string) (PaymentProfile, error) {
+	var value PaymentProfile
+	err := r.pool.QueryRow(ctx, `SELECT user_id,stripe_customer_id FROM user_payment_profiles WHERE user_id=$1`, userID).Scan(&value.UserID, &value.StripeCustomerID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return PaymentProfile{}, ErrPaymentProfileNotFound
+	}
+	if err != nil {
+		return PaymentProfile{}, fmt.Errorf("find payment profile: %w", err)
+	}
+	return value, nil
+}
+
+func (r *PostgresRepository) SavePaymentProfile(ctx context.Context, userID, customerID string, now time.Time) (PaymentProfile, error) {
+	var value PaymentProfile
+	err := r.pool.QueryRow(ctx, `
+		INSERT INTO user_payment_profiles(user_id,stripe_customer_id,created_at,updated_at)
+		VALUES($1,$2,$3,$3)
+		ON CONFLICT(user_id) DO UPDATE SET updated_at=EXCLUDED.updated_at
+		RETURNING user_id,stripe_customer_id`, userID, customerID, now).Scan(&value.UserID, &value.StripeCustomerID)
+	if err != nil {
+		return PaymentProfile{}, fmt.Errorf("save payment profile: %w", err)
+	}
+	return value, nil
+}
+
+func (r *PostgresRepository) RecordSavedPaymentMethod(ctx context.Context, intentID, customerID, paymentMethodID string, now time.Time) error {
+	_, err := r.pool.Exec(ctx, `UPDATE payment_attempts
+		SET saved_payment_method_id=$3,save_consent_observed_at=COALESCE(save_consent_observed_at,$4),updated_at=$4
+		WHERE stripe_payment_intent_id=$1 AND stripe_customer_id=$2`, intentID, customerID, paymentMethodID, now)
+	if err != nil {
+		return fmt.Errorf("record saved payment method: %w", err)
+	}
+	return nil
 }
 
 func platformFeeCents(amountCents int64) int64 {

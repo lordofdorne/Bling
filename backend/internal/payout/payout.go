@@ -24,30 +24,40 @@ var (
 // a recipient account never accepts charges itself, so ChargesEnabled mirrors
 // the transfers capability instead of describing a capability of its own.
 type Account struct {
-	CreatorID        string    `json:"-"`
-	StripeAccountID  string    `json:"-"`
-	TransfersStatus  string    `json:"transfersStatus"`
-	ChargesEnabled   bool      `json:"chargesEnabled"`
-	PayoutsEnabled   bool      `json:"payoutsEnabled"`
-	DetailsSubmitted bool      `json:"detailsSubmitted"`
-	RequirementsDue  []string  `json:"requirementsDue"`
-	CreatedAt        time.Time `json:"createdAt"`
-	UpdatedAt        time.Time `json:"updatedAt"`
+	CreatorID               string    `json:"-"`
+	StripeAccountID         string    `json:"-"`
+	TransfersStatus         string    `json:"transfersStatus"`
+	BankPayoutsStatus       string    `json:"bankPayoutsStatus"`
+	ExternalAccountPresent  bool      `json:"externalAccountPresent"`
+	ExternalAccountBankName string    `json:"externalAccountBankName,omitempty"`
+	ExternalAccountLast4    string    `json:"externalAccountLast4,omitempty"`
+	ExternalAccountCurrency string    `json:"externalAccountCurrency,omitempty"`
+	ChargesEnabled          bool      `json:"chargesEnabled"`
+	PayoutsEnabled          bool      `json:"payoutsEnabled"`
+	DetailsSubmitted        bool      `json:"detailsSubmitted"`
+	RequirementsDue         []string  `json:"requirementsDue"`
+	CreatedAt               time.Time `json:"createdAt"`
+	UpdatedAt               time.Time `json:"updatedAt"`
 }
 
 func (a Account) Ready() bool {
-	return a.StripeAccountID != "" && a.ChargesEnabled && a.PayoutsEnabled && a.DetailsSubmitted
+	return a.StripeAccountID != "" && a.TransfersStatus == TransfersStatusActive && a.BankPayoutsStatus == TransfersStatusActive && a.ExternalAccountPresent && a.DetailsSubmitted
 }
 
 type Status struct {
-	Connected          bool     `json:"connected"`
-	TransfersStatus    string   `json:"transfersStatus"`
-	ChargesEnabled     bool     `json:"chargesEnabled"`
-	PayoutsEnabled     bool     `json:"payoutsEnabled"`
-	DetailsSubmitted   bool     `json:"detailsSubmitted"`
-	Ready              bool     `json:"ready"`
-	RequirementsDue    []string `json:"requirementsDue"`
-	PlatformFeePercent int      `json:"platformFeePercent"`
+	Connected               bool     `json:"connected"`
+	TransfersStatus         string   `json:"transfersStatus"`
+	BankPayoutsStatus       string   `json:"bankPayoutsStatus"`
+	ExternalAccountPresent  bool     `json:"externalAccountPresent"`
+	ExternalAccountBankName string   `json:"externalAccountBankName,omitempty"`
+	ExternalAccountLast4    string   `json:"externalAccountLast4,omitempty"`
+	ExternalAccountCurrency string   `json:"externalAccountCurrency,omitempty"`
+	ChargesEnabled          bool     `json:"chargesEnabled"`
+	PayoutsEnabled          bool     `json:"payoutsEnabled"`
+	DetailsSubmitted        bool     `json:"detailsSubmitted"`
+	Ready                   bool     `json:"ready"`
+	RequirementsDue         []string `json:"requirementsDue"`
+	PlatformFeePercent      int      `json:"platformFeePercent"`
 }
 
 // StripeAccount is the gateway-facing view of a connected account.
@@ -55,11 +65,16 @@ type StripeAccount struct {
 	ID string
 	// TransfersStatus is the raw v2 capability status: active, pending,
 	// restricted or unsupported. Only "active" permits a monthly transfer.
-	TransfersStatus  string
-	ChargesEnabled   bool
-	PayoutsEnabled   bool
-	DetailsSubmitted bool
-	RequirementsDue  []string
+	TransfersStatus         string
+	BankPayoutsStatus       string
+	ExternalAccountPresent  bool
+	ExternalAccountBankName string
+	ExternalAccountLast4    string
+	ExternalAccountCurrency string
+	ChargesEnabled          bool
+	PayoutsEnabled          bool
+	DetailsSubmitted        bool
+	RequirementsDue         []string
 }
 
 // TransfersActive reports whether Stripe will accept transfers to this account.
