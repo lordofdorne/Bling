@@ -35,6 +35,7 @@ import { CallAudioPanel } from "./CallAudioPanel";
 import { UiIcon } from "./UiIcon";
 import { Brand } from "./ViewerShell";
 import { PayoutSetup } from "./PayoutSetup";
+import { ThemeSwitch } from "./ThemeSwitch";
 import {
   PaymentMethodSetup,
   usePaymentMethods,
@@ -494,7 +495,7 @@ function TierConfigurationForm({
                 />
                 <small>
                   {tier.priceCents >= MINIMUM_PAID_TIER_CENTS
-                    ? `Estimated payout: ${formatPrice(estimatedCreatorEarningsCents(tier.priceCents))} · 80% less your half of 2.9% + $0.30.`
+                    ? `Estimated payout: ${formatPrice(estimatedCreatorEarningsCents(tier.priceCents))}`
                     : "Charge at least $0.50 for a paid tier."}
                 </small>
               </label>
@@ -957,33 +958,50 @@ function UserPaymentSettings() {
 function CreatorAccountSettings({ username }: { username: string }) {
   const me = useMe();
   return (
-    <section className="show-card settings-section-card" aria-label="Account">
-      <div className="settings-section-heading">
-        <span className="feature-icon">
-          <UiIcon name="settings" size={21} />
-        </span>
-        <div>
-          <h2>Account</h2>
-          <p>Your sign-in details and permanent channel address.</p>
+    <>
+      <section
+        className="show-card settings-section-card"
+        aria-label="Appearance"
+      >
+        <div className="settings-section-heading">
+          <span className="feature-icon">
+            <UiIcon name="spark" size={21} />
+          </span>
+          <div>
+            <h2>Appearance</h2>
+            <p>Switch between dark, light, or your device setting.</p>
+          </div>
         </div>
-      </div>
-      <dl className="account-settings-list">
-        <div>
-          <dt>Username</dt>
-          <dd>@{username}</dd>
+        <ThemeSwitch />
+      </section>
+      <section className="show-card settings-section-card" aria-label="Account">
+        <div className="settings-section-heading">
+          <span className="feature-icon">
+            <UiIcon name="settings" size={21} />
+          </span>
+          <div>
+            <h2>Account</h2>
+            <p>Your sign-in details and permanent channel address.</p>
+          </div>
         </div>
-        <div>
-          <dt>Email address</dt>
-          <dd>{me.data?.email}</dd>
-        </div>
-        <div>
-          <dt>Public channel</dt>
-          <dd>
-            <Link to={`/u/${username}`}>/u/{username}</Link>
-          </dd>
-        </div>
-      </dl>
-    </section>
+        <dl className="account-settings-list">
+          <div>
+            <dt>Username</dt>
+            <dd>@{username}</dd>
+          </div>
+          <div>
+            <dt>Email address</dt>
+            <dd>{me.data?.email}</dd>
+          </div>
+          <div>
+            <dt>Public channel</dt>
+            <dd>
+              <Link to={`/u/${username}`}>/u/{username}</Link>
+            </dd>
+          </div>
+        </dl>
+      </section>
+    </>
   );
 }
 
@@ -1005,7 +1023,7 @@ function CreatorSettings({
       <header className="settings-title">
         <p className="eyebrow">Creator studio</p>
         <h1>Settings</h1>
-        <p>Manage your public presence, payouts, and account.</p>
+        <p>Manage your public presence, appearance, payouts, and account.</p>
       </header>
       <nav className="settings-tabs" aria-label="Settings sections">
         {tabs.map((tab) => (

@@ -8,6 +8,7 @@ import {
   fetchPayoutAccountSession,
   PayoutAccountSession,
 } from "../lib/payouts";
+import { cssToken } from "../lib/theme";
 
 export function PayoutSetup({
   session,
@@ -24,10 +25,10 @@ export function PayoutSetup({
           (await fetchPayoutAccountSession()).clientSecret,
         appearance: {
           variables: {
-            colorPrimary: "#5B8C5A",
-            colorBackground: "#ffffff",
-            colorText: "#52414C",
-            colorDanger: "#E3655B",
+            colorPrimary: cssToken("--green"),
+            colorBackground: cssToken("--stripe-embed-bg"),
+            colorText: cssToken("--mauve"),
+            colorDanger: cssToken("--accent"),
             borderRadius: "14px",
             spacingUnit: "12px",
             fontFamily: "Inter, ui-sans-serif, system-ui",

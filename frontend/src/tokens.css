@@ -1,0 +1,87 @@
+/* Bling color tokens — the only place hex values should live.
+   Brand primitives stay shared. Semantic roles are overridden per theme.
+   index.html theme-color matches --bg for first paint; applyTheme keeps it
+   in sync. */
+:root,
+[data-theme="dark"] {
+  color-scheme: dark;
+
+  /* Brand primitives (supplied palette). */
+  --mauve: #52414c;
+  --ebony: #596157;
+  --green: #5b8c5a;
+  --sand: #cfd186;
+  --accent: #e3655b;
+
+  /* Brand ramps. */
+  --accent-light: #f3a59e;
+  --accent-hover: #ef8178;
+  --accent-strong: #bd3f35;
+  --green-light: #a5cda2;
+  --sand-text: var(--sand);
+
+  /* Semantic surfaces and type. */
+  --bg: #161716;
+  --surface: #1e201e;
+  --surface-raised: #272926;
+  --surface-hover: #363a33;
+  --border: #343732;
+  --border-strong: #555b51;
+  --text: #f3f1eb;
+  --muted: #b0b2a8;
+
+  /* Text sitting on accent fills or photos. */
+  --on-accent: #171715;
+  --on-media: #ffffff;
+
+  /* Featured / identity surfaces built from mauve. */
+  --mauve-surface: #30272d;
+  --mauve-muted: #c8bbc2;
+  --mauve-border: #85707d;
+
+  /* Scrims and elevation. */
+  --overlay: #141614;
+  --shadow: #000000;
+
+  /* Stripe Connect onboarding is a light hosted form. */
+  --stripe-embed-bg: #ffffff;
+
+  /* Derived tints. */
+  --accent-tint: color-mix(in srgb, var(--accent) 7%, transparent);
+
+  /* Legacy aliases. */
+  --ink: var(--text);
+  --line: var(--border);
+}
+
+[data-theme="light"] {
+  color-scheme: light;
+
+  /* Darker ramps so coral, sand, and green still read on cream. */
+  --accent-light: #b4453f;
+  --accent-hover: #d4574e;
+  --green-light: #3e6d3d;
+  --sand-text: #5f642c;
+
+  --bg: #f3f1eb;
+  --surface: #fcfbf6;
+  --surface-raised: #ffffff;
+  --surface-hover: #e7e4d8;
+  --border: #d6d1c3;
+  --border-strong: #b3ae9f;
+  --text: #1f211c;
+  --muted: #596157;
+
+  --on-accent: #171715;
+  --on-media: #ffffff;
+
+  --mauve-surface: #f0e7eb;
+  --mauve-muted: #52414c;
+  --mauve-border: #b7a3ab;
+
+  --overlay: #141614;
+  --shadow: #1f211c;
+
+  --stripe-embed-bg: #ffffff;
+  --accent-tint: color-mix(in srgb, var(--accent) 10%, transparent);
+}
