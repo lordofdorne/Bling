@@ -5,6 +5,28 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#161716" />
     <title>Bling — Live calls for creators</title>
+    <script>
+      (function () {
+        var theme = "dark";
+        try {
+          var pref = localStorage.getItem("bling-theme");
+          if (pref === "light") theme = "light";
+          else if (
+            pref === "system" &&
+            window.matchMedia("(prefers-color-scheme: light)").matches
+          )
+            theme = "light";
+        } catch (e) {}
+        document.documentElement.setAttribute("data-theme", theme);
+        var meta = document.querySelector('meta[name="theme-color"]');
+        if (meta) {
+          meta.setAttribute(
+            "content",
+            theme === "light" ? "#f3f1eb" : "#161716",
+          );
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

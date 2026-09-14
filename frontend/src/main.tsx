@@ -3,10 +3,10 @@ import { createRoot } from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { App } from "./App";
-import { syncDocumentThemeColor } from "./lib/theme";
+import { applyTheme, getThemePreference } from "./lib/theme";
 import "./styles.css";
 
-syncDocumentThemeColor();
+applyTheme(getThemePreference());
 
 const queryClient = new QueryClient({
   defaultOptions: {

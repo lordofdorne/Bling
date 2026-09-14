@@ -4,6 +4,7 @@ import { Dashboard } from "./components/Dashboard";
 import { ProtectedRoute } from "./components/ProtectedRoute";
 import { PublicHotline } from "./components/PublicHotline";
 import { DiscoverPage, LegacyCreatorRedirect } from "./components/DiscoverPage";
+import { ThemeProvider } from "./lib/ThemeProvider";
 
 function NotFound() {
   return (
@@ -19,7 +20,7 @@ function NotFound() {
 
 export function App() {
   return (
-    <>
+    <ThemeProvider>
       <Routes>
         <Route path="/" element={<DiscoverPage />} />
         <Route path="/following" element={<DiscoverPage view="following" />} />
@@ -38,6 +39,6 @@ export function App() {
         <Route path="/u/:username" element={<PublicHotline />} />
         <Route path="*" element={<NotFound />} />
       </Routes>
-    </>
+    </ThemeProvider>
   );
 }

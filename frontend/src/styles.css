@@ -60,7 +60,7 @@ a {
 }
 .eyebrow {
   margin: 0 0 18px;
-  color: var(--sand);
+  color: var(--sand-text);
   font-size: 0.78rem;
   font-weight: 800;
   letter-spacing: 0.16em;
@@ -186,7 +186,7 @@ button.button {
   padding: 14px 18px;
   border: 0;
   border-radius: 11px;
-  color: var(--bg);
+  color: var(--on-accent);
   background: var(--accent);
   font: inherit;
   font-weight: 800;
@@ -396,7 +396,7 @@ button.button {
 }
 .tier-editor legend {
   padding: 0 7px;
-  color: var(--sand);
+  color: var(--sand-text);
   font-size: 0.78rem;
   font-weight: 800;
   letter-spacing: 0.08em;
@@ -457,7 +457,7 @@ button.button {
   padding: 9px 13px;
   border: 1px solid color-mix(in srgb, var(--sand) 45%, transparent);
   border-radius: 999px;
-  color: var(--sand);
+  color: var(--sand-text);
   background: color-mix(in srgb, var(--sand) 10%, transparent);
   font-size: 0.88rem;
   font-weight: 800;
@@ -479,7 +479,7 @@ button.button {
   gap: 4px;
 }
 .caller-list-heading span {
-  color: var(--sand);
+  color: var(--sand-text);
   font-weight: 750;
 }
 .caller-list ol {
@@ -675,7 +675,7 @@ button:focus-visible,
 a:focus-visible,
 input:focus-visible,
 textarea:focus-visible {
-  outline: 2px solid var(--sand);
+  outline: 2px solid var(--sand-text);
   outline-offset: 4px;
 }
 input[type="radio"],
@@ -719,7 +719,7 @@ small {
   color: var(--muted);
 }
 .eyebrow {
-  color: var(--sand);
+  color: var(--sand-text);
   font-size: 11px;
   letter-spacing: 0.13em;
   font-weight: 650;
@@ -742,7 +742,7 @@ small {
 .brand .brand-mark {
   display: grid;
   place-items: center;
-  color: var(--bg);
+  color: var(--on-accent);
   background: var(--accent);
   width: 32px;
   height: 32px;
@@ -795,7 +795,7 @@ button.button {
   background: var(--surface-raised);
 }
 .follow-button.is-following {
-  color: var(--sand);
+  color: var(--sand-text);
   border-color: color-mix(in srgb, var(--sand) 40%, transparent);
   background: color-mix(in srgb, var(--sand) 4%, transparent);
 }
@@ -837,7 +837,7 @@ button.button {
   left: 20px;
   z-index: 100;
   background: var(--sand);
-  color: var(--bg);
+  color: var(--on-accent);
   padding: 12px 20px;
 }
 .skip-link:focus {
@@ -906,7 +906,7 @@ button.button {
   place-items: center;
   width: 43px;
   height: 43px;
-  color: var(--sand);
+  color: var(--sand-text);
   background: color-mix(in srgb, var(--sand) 5%, transparent);
   border: 1px solid color-mix(in srgb, var(--sand) 13%, transparent);
   border-radius: 12px;
@@ -941,7 +941,7 @@ button.button {
   color: var(--muted);
 }
 .viewer-search:focus-within {
-  border-color: var(--sand);
+  border-color: var(--sand-text);
 }
 .viewer-search input {
   width: 100%;
@@ -1083,7 +1083,7 @@ button.button {
   font-size: 10px;
 }
 .sidebar-top > a.sidebar-more {
-  color: var(--sand);
+  color: var(--sand-text);
   font-size: 11px;
   padding-top: 14px;
 }
@@ -1190,7 +1190,7 @@ button.button {
   line-height: 1.08;
 }
 .featured-copy em {
-  color: var(--sand);
+  color: var(--sand-text);
   font-style: normal;
 }
 .featured-copy > p {
@@ -1222,7 +1222,7 @@ button.button {
 .featured-person strong svg,
 .creator-meta > span svg,
 .profile-heading h2 svg {
-  color: var(--sand);
+  color: var(--sand-text);
 }
 .featured-actions {
   display: flex;
@@ -1278,7 +1278,7 @@ button.button {
   gap: 8px;
   align-items: center;
   background: color-mix(in srgb, var(--overlay) 86%, transparent);
-  color: var(--sand);
+  color: var(--sand-text);
   padding: 9px 11px;
   border: 1px solid color-mix(in srgb, var(--sand) 33%, transparent);
   border-radius: 5px;
@@ -1291,7 +1291,7 @@ button.button {
   justify-content: center;
   gap: 3px;
   height: 20px;
-  color: var(--sand);
+  color: var(--sand-text);
 }
 .sound-bars i {
   display: block;
@@ -1336,7 +1336,7 @@ button.button {
 }
 .category-tabs button.selected {
   background: var(--sand);
-  color: var(--bg);
+  color: var(--on-accent);
   border-color: var(--sand);
 }
 .section-heading {
@@ -1469,7 +1469,7 @@ button.button {
   text-decoration: none;
 }
 .creator-meta a:hover {
-  color: var(--sand);
+  color: var(--sand-text);
 }
 .creator-meta h3 {
   font-size: 12px;
@@ -1520,7 +1520,7 @@ button.button {
   height: 60px;
   border-radius: 50%;
   border: 1px solid color-mix(in srgb, var(--sand) 20%, transparent);
-  color: var(--sand);
+  color: var(--sand-text);
   transform: rotate(-12deg);
 }
 .community-banner .eyebrow {
@@ -1691,7 +1691,7 @@ button.button {
   max-width: 500px;
 }
 .profile-cover-copy > span:last-child {
-  color: var(--sand);
+  color: var(--sand-text);
   font-size: 12px;
 }
 .profile-heading {
@@ -1729,7 +1729,7 @@ button.button {
 }
 .topic-tag {
   display: inline-block;
-  color: var(--sand);
+  color: var(--sand-text);
   font-size: 11px;
   border-radius: 20px;
   padding: 5px 10px;
@@ -1802,7 +1802,7 @@ button.button {
   border-bottom: 1px solid var(--border);
 }
 .studio-tip > svg {
-  color: var(--sand);
+  color: var(--sand-text);
   display: block;
   margin-bottom: 15px;
 }
@@ -1870,7 +1870,7 @@ button.button {
   color: var(--muted);
 }
 .studio-overview article > span:first-child svg {
-  color: var(--sand);
+  color: var(--sand-text);
 }
 .studio-overview strong {
   font-size: 23px;
@@ -1930,7 +1930,7 @@ button.button {
   font-size: 12px;
 }
 .show-card .eyebrow {
-  color: var(--sand);
+  color: var(--sand-text);
   font-size: 11px;
 }
 .controls-card {
@@ -1958,7 +1958,7 @@ button.button {
   font-weight: 600;
 }
 .panel-heading > span:first-child svg {
-  color: var(--sand);
+  color: var(--sand-text);
 }
 .panel-label {
   font-size: 9px;
@@ -2132,7 +2132,7 @@ button.button {
   grid-column: 1 / -1;
 }
 .tier-editor legend {
-  color: var(--sand);
+  color: var(--sand-text);
   font-size: 10px;
 }
 .tier-editor label:not(.tier-enabled) {
@@ -2199,7 +2199,7 @@ button.button {
 .caller-list-heading span {
   font-size: 12px;
   font-weight: 500;
-  color: var(--sand);
+  color: var(--sand-text);
 }
 .caller-list-heading .button {
   font-size: 11px;
@@ -2246,8 +2246,8 @@ button.button {
   font-size: 12px;
 }
 .caller-search input:focus {
-  border-color: var(--sand);
-  outline: 3px solid color-mix(in srgb, var(--sand) 16%, transparent);
+  border-color: var(--sand-text);
+  outline: 3px solid color-mix(in srgb, var(--sand-text) 16%, transparent);
 }
 .caller-search input::placeholder {
   color: var(--muted);
@@ -2399,7 +2399,7 @@ button.button {
 }
 .auth-story em {
   font-style: normal;
-  color: var(--sand);
+  color: var(--sand-text);
 }
 .auth-story > p:not(.eyebrow) {
   color: var(--mauve-muted);
@@ -2436,7 +2436,7 @@ button.button {
   position: absolute;
   right: 15px;
   top: 15px;
-  color: var(--sand);
+  color: var(--sand-text);
 }
 .auth-art-label {
   position: absolute;
@@ -2548,7 +2548,7 @@ button.button {
   font-size: 11px;
 }
 .hotline-how b {
-  color: var(--sand);
+  color: var(--sand-text);
   font-size: 11px;
   margin-right: 5px;
 }
@@ -3180,7 +3180,7 @@ button.button {
   place-items: center;
   width: 100%;
   height: 100%;
-  color: var(--sand);
+  color: var(--sand-text);
   font-size: 12px;
   font-weight: 600;
 }
@@ -3205,7 +3205,7 @@ button.button {
   height: 100px;
   border: 1px solid color-mix(in srgb, var(--on-media) 15%, transparent);
   border-radius: 50%;
-  color: var(--sand);
+  color: var(--sand-text);
   font-size: 55px;
 }
 .featured-visual > .creator-cover-fallback {
@@ -3259,7 +3259,7 @@ button.button {
 }
 .notification-entry .text-button {
   font-size: 11px;
-  color: var(--sand);
+  color: var(--sand-text);
 }
 .public-profile-bar {
   display: flex;
@@ -3287,7 +3287,7 @@ button.button {
 }
 .settings-title .eyebrow {
   margin: 0 0 8px;
-  color: var(--sand);
+  color: var(--sand-text);
 }
 .settings-title h1 {
   margin: 0;
@@ -3327,10 +3327,12 @@ button.button {
   left: 0;
   height: 2px;
   border-radius: 2px 2px 0 0;
-  background: var(--sand);
+  background: var(--sand-text);
   content: "";
 }
 .settings-panel {
+  display: grid;
+  gap: 20px;
   padding-top: 26px;
 }
 .settings-panel .show-card {
@@ -3341,6 +3343,57 @@ button.button {
   grid-column: auto;
   width: 100%;
   padding: clamp(22px, 4vw, 34px);
+}
+.theme-switch {
+  margin: 0;
+  padding: 18px 0 0;
+  border: 0;
+}
+.theme-switch-options {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+.theme-option {
+  display: grid;
+  gap: 4px;
+  padding: 14px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg);
+  color: var(--muted);
+  cursor: pointer;
+}
+.theme-option strong {
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 700;
+}
+.theme-option span {
+  font-size: 11px;
+  line-height: 1.45;
+}
+.theme-option:hover {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+.theme-option.selected,
+.theme-option:has(input:checked) {
+  border-color: var(--sand-text);
+  background: color-mix(in srgb, var(--sand) 16%, var(--surface));
+  color: var(--sand-text);
+}
+.theme-option:focus-within {
+  outline: 2px solid var(--sand-text);
+  outline-offset: 3px;
+}
+.theme-option input:focus-visible {
+  outline: none;
+}
+@media (max-width: 640px) {
+  .theme-switch-options {
+    grid-template-columns: 1fr;
+  }
 }
 .settings-section-heading {
   display: flex;
@@ -3460,7 +3513,7 @@ button.button {
   font-weight: 600;
 }
 .account-settings-list a {
-  color: var(--sand);
+  color: var(--sand-text);
 }
 .saved-payment-list {
   display: grid;
@@ -3494,7 +3547,7 @@ button.button {
   place-items: center;
   border: 1px solid var(--border-strong);
   border-radius: 6px;
-  color: var(--sand) !important;
+  color: var(--sand-text) !important;
   background: var(--surface-raised);
   font-weight: 800;
 }
