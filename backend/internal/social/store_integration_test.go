@@ -181,7 +181,7 @@ func TestLiveEventsAtomicAndReadOwnership(t *testing.T) {
 		t.Fatal(err)
 	}
 	for i := 0; i < 2; i++ {
-		if _, err := shows.Start(ctx, draft.ID, creator.ID, time.Now()); err != nil {
+		if _, err := shows.Start(ctx, draft.ID, creator.ID, time.Now(), true); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -257,7 +257,7 @@ func TestPresenceExpiryAndPrivateCacheDecoration(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := shows.Start(ctx, draft.ID, creator.ID, time.Now()); err != nil {
+	if _, err := shows.Start(ctx, draft.ID, creator.ID, time.Now(), true); err != nil {
 		t.Fatal(err)
 	}
 	defer client.Del(ctx, presenceKey(draft.ID))

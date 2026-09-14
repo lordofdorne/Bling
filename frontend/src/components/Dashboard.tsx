@@ -7,6 +7,7 @@ import {
 } from "@stripe/react-stripe-js";
 import { loadStripe } from "@stripe/stripe-js";
 import { Link, useLocation, useNavigate } from "react-router-dom";
+import { ApiError } from "../lib/api";
 import { useLogout, useMe } from "../lib/auth";
 import {
   useActiveCall,
@@ -208,7 +209,10 @@ function activityLabel(activity: PaymentActivity) {
 type TierDraft = Pick<
   HotlineTier,
   "name" | "callDurationSeconds" | "priceCents" | "enabled"
-> & { key: string; durationInput: string; priceInput: string };
+> & { key: string; durationInput: string; priceInput: string; paid: boolean };
+
+const MINIMUM_PAID_TIER_CENTS = 50;
+const DEFAULT_PAID_TIER_CENTS = 500;
 
 function durationInputFromSeconds(seconds: number) {
   return Number((seconds / 60).toFixed(2)).toString();
@@ -275,6 +279,10 @@ function TierConfigurationForm({
   starting: boolean;
 }) {
   const save = useSaveTierConfiguration(showID);
+  const payouts = usePayoutStatus();
+  // Only a confirmed ready account unlocks paid tiers. A pending or failed
+  // status is not permission to charge callers.
+  const payoutsReady = payouts.data?.ready === true;
   const [tiers, setTiers] = useState<TierDraft[]>(() =>
     initialTiers.map((tier) => ({
       key: tier.id,
@@ -283,6 +291,7 @@ function TierConfigurationForm({
       durationInput: durationInputFromSeconds(tier.callDurationSeconds),
       priceCents: tier.priceCents,
       priceInput: priceInputFromCents(tier.priceCents),
+      paid: tier.priceCents > 0,
       enabled: tier.enabled,
     })),
   );
@@ -307,6 +316,12 @@ function TierConfigurationForm({
     });
     setDirty(true);
   }
+
+  const paidBelowMinimum = tiers.some(
+    (tier) => tier.paid && tier.priceCents < MINIMUM_PAID_TIER_CENTS,
+  );
+  const paidWithoutPayouts =
+    !payoutsReady && tiers.some((tier) => tier.enabled && tier.priceCents > 0);
 
   async function saveChanges() {
     try {
@@ -333,6 +348,26 @@ function TierConfigurationForm({
           entry and capture only when you select a caller.
         </p>
       </div>
+      {!payouts.isPending && !payoutsReady && (
+        <div className="tier-payout-notice">
+          <span className="feature-icon">
+            <UiIcon name="wallet" size={20} />
+          </span>
+          <div>
+            <strong>Set up payouts to charge for calls.</strong>
+            <p>
+              Bling can only take a caller’s money once it can pass your share
+              on to you. Free tiers work today.
+            </p>
+          </div>
+          <Link
+            className="button secondary compact"
+            to="/dashboard/settings/payouts"
+          >
+            Set up payouts
+          </Link>
+        </div>
+      )}
       <div className="tier-editor-list">
         {tiers.map((tier, index) => (
           <fieldset className="tier-editor" key={tier.key}>
@@ -394,35 +429,76 @@ function TierConfigurationForm({
               <small>Choose between 0.5 and 60 minutes.</small>
             </label>
             <label>
-              Price (USD)
-              <input
-                type="text"
-                inputMode="decimal"
-                autoComplete="off"
-                aria-label={`${tier.name || `Tier ${index + 1}`} price in USD`}
-                value={tier.priceInput}
-                onFocus={(event) => event.currentTarget.select()}
+              Pricing
+              <select
+                aria-label={`${tier.name || `Tier ${index + 1}`} pricing`}
+                value={tier.paid ? "paid" : "free"}
                 onChange={(event) => {
-                  const priceCents = centsFromPriceInput(event.target.value);
-                  if (priceCents === null) return;
+                  if (event.target.value === "paid") {
+                    const priceCents =
+                      tier.priceCents > 0
+                        ? tier.priceCents
+                        : DEFAULT_PAID_TIER_CENTS;
+                    update(index, {
+                      paid: true,
+                      priceCents,
+                      priceInput: priceInputFromCents(priceCents),
+                    });
+                    return;
+                  }
                   update(index, {
-                    priceInput: event.target.value,
-                    priceCents,
+                    paid: false,
+                    priceCents: 0,
+                    priceInput: priceInputFromCents(0),
                   });
                 }}
-                onBlur={() => {
-                  const normalized = priceInputFromCents(tier.priceCents);
-                  if (normalized !== tier.priceInput) {
-                    update(index, { priceInput: normalized });
-                  }
-                }}
-              />
+              >
+                <option value="free">Free</option>
+                {/* Charging callers is only possible once Bling can pay the
+                    creator, so the option stays disabled until payouts are
+                    ready. */}
+                <option value="paid" disabled={!payoutsReady}>
+                  {payoutsReady ? "Paid" : "Paid (set up payouts first)"}
+                </option>
+              </select>
               <small>
-                {tier.priceCents > 0
-                  ? `Estimated payout: ${formatPrice(estimatedCreatorEarningsCents(tier.priceCents))} · 80% less your half of 2.9% + $0.30.`
-                  : "Use $0 for free or at least $0.50 for a paid tier."}
+                {tier.paid
+                  ? "Callers authorize this card charge before they join."
+                  : "Free callers join without a card."}
               </small>
             </label>
+            {tier.paid && (
+              <label>
+                Price (USD)
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  autoComplete="off"
+                  aria-label={`${tier.name || `Tier ${index + 1}`} price in USD`}
+                  value={tier.priceInput}
+                  onFocus={(event) => event.currentTarget.select()}
+                  onChange={(event) => {
+                    const priceCents = centsFromPriceInput(event.target.value);
+                    if (priceCents === null) return;
+                    update(index, {
+                      priceInput: event.target.value,
+                      priceCents,
+                    });
+                  }}
+                  onBlur={() => {
+                    const normalized = priceInputFromCents(tier.priceCents);
+                    if (normalized !== tier.priceInput) {
+                      update(index, { priceInput: normalized });
+                    }
+                  }}
+                />
+                <small>
+                  {tier.priceCents >= MINIMUM_PAID_TIER_CENTS
+                    ? `Estimated payout: ${formatPrice(estimatedCreatorEarningsCents(tier.priceCents))} · 80% less your half of 2.9% + $0.30.`
+                    : "Charge at least $0.50 for a paid tier."}
+                </small>
+              </label>
+            )}
             <label className="tier-enabled">
               <input
                 type="checkbox"
@@ -480,7 +556,8 @@ function TierConfigurationForm({
                 callDurationSeconds: 300,
                 durationInput: "5",
                 priceCents: 0,
-                priceInput: "0.00",
+                priceInput: priceInputFromCents(0),
+                paid: false,
                 enabled: true,
               },
             ]);
@@ -495,7 +572,7 @@ function TierConfigurationForm({
           className="button secondary"
           type="button"
           onClick={() => void saveChanges()}
-          disabled={!dirty || save.isPending}
+          disabled={!dirty || paidBelowMinimum || save.isPending}
         >
           {save.isPending ? "Saving…" : dirty ? "Save tiers" : "Tiers saved"}
         </button>
@@ -503,14 +580,26 @@ function TierConfigurationForm({
           className="primary-button"
           type="button"
           onClick={onStart}
-          disabled={dirty || starting || tiers.length === 0}
+          disabled={
+            dirty || starting || tiers.length === 0 || paidWithoutPayouts
+          }
         >
           {starting ? "Starting…" : "Start Hotline"}
         </button>
       </div>
 
-      {dirty && (
-        <p className="tier-save-hint">Save tier changes before going live.</p>
+      {paidBelowMinimum ? (
+        <p className="tier-save-hint">
+          A paid tier must charge at least $0.50.
+        </p>
+      ) : paidWithoutPayouts ? (
+        <p className="tier-save-hint">
+          Finish payout setup, or price these tiers as free, before going live.
+        </p>
+      ) : (
+        dirty && (
+          <p className="tier-save-hint">Save tier changes before going live.</p>
+        )
       )}
       {save.isError && (
         <div className="form-error" role="alert">
@@ -637,8 +726,8 @@ function CreatorPayoutSettings() {
                 : "Set up monthly payouts"}
             </h3>
             <p>
-              You can earn before doing this. Securely add your identity and
-              bank details when you are ready to get paid. You receive{" "}
+              Paid tiers stay locked until this is done. Securely add your
+              identity and bank details to charge for calls. You receive{" "}
               {100 - payouts.data.platformFeePercent}% of every paid call, less
               half of the basic card fee (2.9% + $0.30). Bling pays the other
               half.
@@ -1141,7 +1230,7 @@ export function Dashboard() {
                   <small>
                     {payouts.data
                       ? `${100 - payouts.data.platformFeePercent}% creator share, less half the basic card fee`
-                      : "Earn now and set up monthly payouts when ready"}
+                      : "Set up payouts to charge for calls"}
                   </small>
                 </article>
                 <article>
@@ -1235,7 +1324,10 @@ export function Dashboard() {
                     startShow.isError ||
                     endShow.isError) && (
                     <div className="form-error" role="alert">
-                      Unable to update your Hotline. Please try again.
+                      {startShow.error instanceof ApiError &&
+                      startShow.error.code === "PAYOUT_SETUP_REQUIRED"
+                        ? startShow.error.message
+                        : "Unable to update your Hotline. Please try again."}
                     </div>
                   )}
                 </section>

@@ -164,6 +164,8 @@ func (h showHandler) writeError(w http.ResponseWriter, err error) {
 		writeError(w, http.StatusConflict, "ACTIVE_SHOW_EXISTS", "You already have a live show.")
 	case errors.Is(err, showdomain.ErrInvalidTransition):
 		writeError(w, http.StatusConflict, "INVALID_SHOW_STATE", "This show cannot make that transition.")
+	case errors.Is(err, showdomain.ErrPayoutSetupRequired):
+		writeError(w, http.StatusConflict, "PAYOUT_SETUP_REQUIRED", "Finish payout setup before starting a Hotline with paid tiers.")
 	case errors.Is(err, showdomain.ErrShowNotConfigurable):
 		writeError(w, http.StatusConflict, "SHOW_NOT_CONFIGURABLE", "Tiers can only be changed before the Hotline starts.")
 	case errors.Is(err, showdomain.ErrTierConfiguration):

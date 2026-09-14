@@ -40,7 +40,7 @@ func NewRouter(logger *slog.Logger, postgres *pgxpool.Pool, redisClient *redis.C
 		sessionTTL:   cfg.SessionTTL,
 		rateWindow:   cfg.AuthRateLimitWindow,
 	}
-	showHandler := showHandler{service: showdomain.NewService(showdomain.NewPostgresStore(postgres)), logger: logger}
+	showHandler := showHandler{service: showdomain.NewService(showdomain.NewPostgresStore(postgres)).WithPayouts(payoutService), logger: logger}
 	queueHandler := queueHandler{service: queueService, payments: paymentService, logger: logger, cookieSecure: cfg.CookieSecure, cookieTTL: cfg.SessionTTL}
 	paymentHandler := paymentHandler{service: paymentService, authentication: authHandler.service, logger: logger, setCookie: queueHandler.setViewerCookie, webhookSecret: cfg.StripeWebhookSecret, payouts: payoutService, finances: financeService}
 	payoutHandler := payoutHandler{service: payoutService, balances: balanceService, logger: logger}

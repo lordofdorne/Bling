@@ -181,3 +181,36 @@ func TestReconcileIgnoresUnknownAccount(t *testing.T) {
 		t.Fatalf("error=%v", err)
 	}
 }
+
+func TestReadyRefreshesAnAccountThatIsNotStoredReady(t *testing.T) {
+	ready := StripeAccount{ID: "acct_creator", TransfersStatus: TransfersStatusActive, BankPayoutsStatus: TransfersStatusActive, ExternalAccountPresent: true, DetailsSubmitted: true}
+	repository := &fakeRepository{account: Account{CreatorID: "creator-1", StripeAccountID: ready.ID, TransfersStatus: TransfersStatusPending}}
+	gateway := &fakeGateway{account: ready}
+	service := NewService(repository, gateway, "US", "https://bling.test")
+
+	value, err := service.Ready(context.Background(), "creator-1")
+	if err != nil || !value || gateway.retrieved != 1 {
+		t.Fatalf("ready=%v retrieved=%d err=%v", value, gateway.retrieved, err)
+	}
+
+	// A stored account that already reads as ready needs no Stripe round trip.
+	value, err = service.Ready(context.Background(), "creator-1")
+	if err != nil || !value || gateway.retrieved != 1 {
+		t.Fatalf("cached ready=%v retrieved=%d err=%v", value, gateway.retrieved, err)
+	}
+}
+
+func TestReadyIsFalseWithoutAnAccountOrStripe(t *testing.T) {
+	missing := NewService(&fakeRepository{err: ErrAccountNotFound}, nil, "US", "https://bling.test")
+	if value, err := missing.Ready(context.Background(), "creator-1"); err != nil || value {
+		t.Fatalf("ready=%v err=%v", value, err)
+	}
+	pending := NewService(&fakeRepository{account: Account{CreatorID: "creator-1", StripeAccountID: "acct_creator", TransfersStatus: TransfersStatusPending}}, nil, "US", "https://bling.test")
+	if value, err := pending.Ready(context.Background(), "creator-1"); err != nil || value {
+		t.Fatalf("ready=%v err=%v", value, err)
+	}
+	var unconfigured *Service
+	if value, err := unconfigured.Ready(context.Background(), "creator-1"); err != nil || value {
+		t.Fatalf("ready=%v err=%v", value, err)
+	}
+}

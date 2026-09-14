@@ -57,15 +57,15 @@ func (s *PostgresStore) CurrentForCreator(ctx context.Context, creatorID string)
 	return result, mapQueryError("get current show", err)
 }
 
-func (s *PostgresStore) Start(ctx context.Context, showID, creatorID string, now time.Time) (Show, error) {
-	return s.transition(ctx, showID, creatorID, ActionStart, now)
+func (s *PostgresStore) Start(ctx context.Context, showID, creatorID string, now time.Time, payoutsReady bool) (Show, error) {
+	return s.transition(ctx, showID, creatorID, ActionStart, now, payoutsReady)
 }
 
 func (s *PostgresStore) End(ctx context.Context, showID, creatorID string, now time.Time) (Show, error) {
-	return s.transition(ctx, showID, creatorID, ActionEnd, now)
+	return s.transition(ctx, showID, creatorID, ActionEnd, now, false)
 }
 
-func (s *PostgresStore) transition(ctx context.Context, showID, creatorID string, action Action, now time.Time) (Show, error) {
+func (s *PostgresStore) transition(ctx context.Context, showID, creatorID string, action Action, now time.Time, payoutsReady bool) (Show, error) {
 	tx, err := s.pool.BeginTx(ctx, pgx.TxOptions{})
 	if err != nil {
 		return Show{}, fmt.Errorf("begin show transition: %w", err)
@@ -90,13 +90,20 @@ func (s *PostgresStore) transition(ctx context.Context, showID, creatorID string
 		return current, nil
 	}
 	if action == ActionStart {
-		var enabled bool
+		// The tiers are read inside the transaction that holds the show lock, so
+		// a tier configuration committing concurrently cannot turn a free show
+		// into a paid one after its readiness was resolved.
+		var enabled, paid bool
 		if err := tx.QueryRow(ctx, `SELECT
-			EXISTS(SELECT 1 FROM show_tiers WHERE show_id=$1 AND enabled=true)`, showID).Scan(&enabled); err != nil {
+			EXISTS(SELECT 1 FROM show_tiers WHERE show_id=$1 AND enabled=true),
+			EXISTS(SELECT 1 FROM show_tiers WHERE show_id=$1 AND enabled=true AND price_cents>0)`, showID).Scan(&enabled, &paid); err != nil {
 			return Show{}, fmt.Errorf("check enabled show tiers: %w", err)
 		}
 		if !enabled {
 			return Show{}, ErrTierConfiguration
+		}
+		if paid && !payoutsReady {
+			return Show{}, ErrPayoutSetupRequired
 		}
 	}
 

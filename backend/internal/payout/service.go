@@ -56,6 +56,35 @@ func (s *Service) Status(ctx context.Context, creatorID string) (Status, error) 
 	return statusFor(account), nil
 }
 
+// Ready reports whether Bling can send this creator money.
+//
+// A stored account that does not already read as ready is re-read from Stripe,
+// so a creator who has just finished onboarding is not held back by a
+// projection no webhook has reconciled yet.
+func (s *Service) Ready(ctx context.Context, creatorID string) (bool, error) {
+	if s == nil || s.repository == nil {
+		return false, nil
+	}
+	account, err := s.repository.ByCreator(ctx, creatorID)
+	if errors.Is(err, ErrAccountNotFound) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	if account.Ready() {
+		return true, nil
+	}
+	if !s.Enabled() {
+		return false, nil
+	}
+	status, err := s.Status(ctx, creatorID)
+	if err != nil {
+		return false, err
+	}
+	return status.Ready, nil
+}
+
 func (s *Service) OnboardingLink(ctx context.Context, creatorID, email string) (string, error) {
 	if !s.Enabled() {
 		return "", ErrDisabled
