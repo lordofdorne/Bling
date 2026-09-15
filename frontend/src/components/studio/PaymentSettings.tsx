@@ -14,6 +14,8 @@ import {
   useRefreshPaymentMethods,
   useRemovePaymentMethod,
 } from "../../lib/payments";
+import { usePaymentActivity } from "../../lib/finance";
+import { activityLabel, formatPrice } from "./format";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -111,6 +113,69 @@ function PaymentMethodSetupPanel({
   );
 }
 
+function CreatorPaymentActivity() {
+  const paymentActivity = usePaymentActivity();
+  return (
+    <section aria-label="Payment activity" className="flex flex-col gap-4">
+      <header>
+        <h2 className="text-lg font-bold tracking-tight">Payment activity</h2>
+        <p className="text-muted-foreground mt-1 text-sm">
+          Review completed charges, refunds, and your creator share.
+        </p>
+      </header>
+      <Card>
+        <CardContent>
+          {paymentActivity.isPending ? (
+            <p className="text-muted-foreground text-sm">
+              Loading payment activity…
+            </p>
+          ) : paymentActivity.isError ? (
+            <Alert variant="destructive">
+              <AlertDescription>
+                Unable to load payment activity.
+              </AlertDescription>
+            </Alert>
+          ) : paymentActivity.data.activity.length === 0 ? (
+            <div className="text-muted-foreground text-sm">
+              <strong className="text-foreground block">
+                No paid calls yet
+              </strong>
+              Your first completed paid call will appear here.
+            </div>
+          ) : (
+            <ol className="flex flex-col">
+              {paymentActivity.data.activity.map((activity) => (
+                <li
+                  key={activity.paymentAttemptId}
+                  className="flex flex-col gap-1 border-b py-3 first:pt-0 last:border-b-0 last:pb-0"
+                >
+                  <div className="flex items-baseline justify-between gap-3">
+                    <strong className="text-sm font-semibold">
+                      {formatPrice(activity.amountCents)}
+                    </strong>
+                    <span className="text-muted-foreground text-xs">
+                      {activityLabel(activity)}
+                    </span>
+                  </div>
+                  <span className="text-muted-foreground text-xs">
+                    Creator share:{" "}
+                    {formatPrice(
+                      activity.amountCents - activity.platformFeeCents,
+                    )}
+                    {activity.creatorProcessingFeeCents > 0
+                      ? ` · includes your ${formatPrice(activity.creatorProcessingFeeCents)} half of the card fee`
+                      : ""}
+                  </span>
+                </li>
+              ))}
+            </ol>
+          )}
+        </CardContent>
+      </Card>
+    </section>
+  );
+}
+
 export function PaymentSettings() {
   const methods = usePaymentMethods();
   const setup = usePaymentMethodSetup();
@@ -123,105 +188,108 @@ export function PaymentSettings() {
   }
 
   return (
-    <section aria-label="Saved payments" className="flex flex-col gap-6">
-      <header>
-        <h2 className="text-xl font-bold tracking-tight">Payment methods</h2>
-        <p className="text-muted-foreground mt-1 text-sm">
-          Save a card for faster call requests and manage it here.
-        </p>
-      </header>
+    <div className="flex flex-col gap-8">
+      <section aria-label="Saved payments" className="flex flex-col gap-4">
+        <header>
+          <h2 className="text-lg font-bold tracking-tight">Payment methods</h2>
+          <p className="text-muted-foreground mt-1 text-sm">
+            Save a card for faster call requests and manage it here.
+          </p>
+        </header>
 
-      <Card>
-        <CardContent className="flex flex-col gap-4">
-          {setup.data ? (
-            <PaymentMethodSetupPanel
-              setup={setup.data}
-              onSaved={() => void saved()}
-              onCancel={() => setup.reset()}
-            />
-          ) : (
-            <>
-              {methods.isPending ? (
-                <p className="text-muted-foreground text-sm">
-                  Loading saved payment methods…
-                </p>
-              ) : methods.isError ? (
-                <Alert variant="destructive">
-                  <AlertDescription>
-                    Unable to load saved payment methods.
-                  </AlertDescription>
-                </Alert>
-              ) : methods.data.length === 0 ? (
-                <div className="flex items-center gap-4 py-2">
-                  <span className="bg-muted text-muted-foreground grid size-10 place-items-center rounded-lg">
-                    <CreditCard className="size-5" />
-                  </span>
-                  <div>
-                    <strong className="text-sm">
-                      No saved payment methods
-                    </strong>
-                    <p className="text-muted-foreground text-xs">
-                      Add a card now or save one during your next paid call.
-                    </p>
+        <Card>
+          <CardContent className="flex flex-col gap-4">
+            {setup.data ? (
+              <PaymentMethodSetupPanel
+                setup={setup.data}
+                onSaved={() => void saved()}
+                onCancel={() => setup.reset()}
+              />
+            ) : (
+              <>
+                {methods.isPending ? (
+                  <p className="text-muted-foreground text-sm">
+                    Loading saved payment methods…
+                  </p>
+                ) : methods.isError ? (
+                  <Alert variant="destructive">
+                    <AlertDescription>
+                      Unable to load saved payment methods.
+                    </AlertDescription>
+                  </Alert>
+                ) : methods.data.length === 0 ? (
+                  <div className="flex items-center gap-4 py-2">
+                    <span className="bg-muted text-muted-foreground grid size-10 place-items-center rounded-lg">
+                      <CreditCard className="size-5" />
+                    </span>
+                    <div>
+                      <strong className="text-sm">
+                        No saved payment methods
+                      </strong>
+                      <p className="text-muted-foreground text-xs">
+                        Add a card now or save one during your next paid call.
+                      </p>
+                    </div>
                   </div>
-                </div>
-              ) : (
-                <ul className="flex flex-col">
-                  {methods.data.map((method) => (
-                    <li
-                      className="flex items-center gap-4 border-b py-4 first:pt-0 last:border-b-0 last:pb-0"
-                      key={method.id}
-                    >
-                      <span className="bg-muted grid size-10 place-items-center rounded-lg text-sm font-bold uppercase">
-                        {method.brand.slice(0, 1)}
-                      </span>
-                      <div className="flex-1">
-                        <strong className="text-sm capitalize">
-                          {method.brand.replaceAll("_", " ")} ••••{" "}
-                          {method.last4}
-                        </strong>
-                        <p className="text-muted-foreground text-xs">
-                          Expires {String(method.expMonth).padStart(2, "0")}/
-                          {String(method.expYear).slice(-2)}
-                        </p>
-                      </div>
-                      <Button
-                        variant="secondary"
-                        size="sm"
-                        type="button"
-                        onClick={() => remove.mutate(method.id)}
-                        disabled={remove.isPending}
-                        aria-label={`Remove ${method.brand} ending in ${method.last4}`}
+                ) : (
+                  <ul className="flex flex-col">
+                    {methods.data.map((method) => (
+                      <li
+                        className="flex items-center gap-4 border-b py-4 first:pt-0 last:border-b-0 last:pb-0"
+                        key={method.id}
                       >
-                        Remove
-                      </Button>
-                    </li>
-                  ))}
-                </ul>
-              )}
-              <Button
-                type="button"
-                className="w-fit"
-                variant={methods.data?.length ? "secondary" : "default"}
-                onClick={() => setup.mutate()}
-                disabled={setup.isPending}
-              >
-                <Plus className="size-4" />
-                {setup.isPending
-                  ? "Opening secure form…"
-                  : "Add payment method"}
-              </Button>
-              {(setup.isError || remove.isError) && (
-                <Alert variant="destructive">
-                  <AlertDescription>
-                    {setup.error?.message ?? remove.error?.message}
-                  </AlertDescription>
-                </Alert>
-              )}
-            </>
-          )}
-        </CardContent>
-      </Card>
-    </section>
+                        <span className="bg-muted grid size-10 place-items-center rounded-lg text-sm font-bold uppercase">
+                          {method.brand.slice(0, 1)}
+                        </span>
+                        <div className="flex-1">
+                          <strong className="text-sm capitalize">
+                            {method.brand.replaceAll("_", " ")} ••••{" "}
+                            {method.last4}
+                          </strong>
+                          <p className="text-muted-foreground text-xs">
+                            Expires {String(method.expMonth).padStart(2, "0")}/
+                            {String(method.expYear).slice(-2)}
+                          </p>
+                        </div>
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          type="button"
+                          onClick={() => remove.mutate(method.id)}
+                          disabled={remove.isPending}
+                          aria-label={`Remove ${method.brand} ending in ${method.last4}`}
+                        >
+                          Remove
+                        </Button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                <Button
+                  type="button"
+                  className="w-fit"
+                  variant={methods.data?.length ? "secondary" : "default"}
+                  onClick={() => setup.mutate()}
+                  disabled={setup.isPending}
+                >
+                  <Plus className="size-4" />
+                  {setup.isPending
+                    ? "Opening secure form…"
+                    : "Add payment method"}
+                </Button>
+                {(setup.isError || remove.isError) && (
+                  <Alert variant="destructive">
+                    <AlertDescription>
+                      {setup.error?.message ?? remove.error?.message}
+                    </AlertDescription>
+                  </Alert>
+                )}
+              </>
+            )}
+          </CardContent>
+        </Card>
+      </section>
+      <CreatorPaymentActivity />
+    </div>
   );
 }

@@ -424,7 +424,9 @@ describe("App routes", () => {
       await screen.findByRole("button", { name: "Start Hotline" }),
     );
 
-    expect(await screen.findByText("Hotline live")).toBeInTheDocument();
+    expect(
+      await screen.findByRole("heading", { name: "Your audience can join." }),
+    ).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: "End Hotline" }),
     ).toBeInTheDocument();
@@ -651,20 +653,21 @@ describe("App routes", () => {
       }),
     );
 
-    renderAt("/dashboard");
+    renderAt("/dashboard/settings/payments");
     expect(await screen.findByText("Refunded")).toBeInTheDocument();
     expect(
       screen.getByText(
         "Creator share: $19.49 · includes your $0.51 half of the card fee",
       ),
     ).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("link", { name: "Payout settings" }));
+    fireEvent.click(screen.getByRole("link", { name: "Creator payouts" }));
     expect(
-      await screen.findByRole("heading", { name: "Payouts" }),
+      await screen.findByRole("heading", { name: "Your earnings split" }),
     ).toBeInTheDocument();
-    expect(screen.getByText("Verified with Stripe")).toBeInTheDocument();
-    expect(screen.getByText("80% of each paid call")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Edit" })).toBeInTheDocument();
+    expect(await screen.findByText("Payouts enabled")).toBeInTheDocument();
+    expect(
+      screen.getByText("Creator share", { exact: false }),
+    ).toBeInTheDocument();
   });
 
   it("renders the balance ledger on the payouts dashboard", async () => {
@@ -740,14 +743,16 @@ describe("App routes", () => {
 
     renderAt("/dashboard/settings/payouts");
 
-    expect(await screen.findByText("Call earning")).toBeInTheDocument();
+    expect(await screen.findByText("Paid call")).toBeInTheDocument();
     expect(screen.getByText("+$19.49")).toBeInTheDocument();
-    expect(screen.getByText("Reserved for payout")).toBeInTheDocument();
-    expect(screen.getByText("−$25.00")).toBeInTheDocument();
-    // The hero leads with what can be paid out, not the gross balance.
+    expect(screen.getByText("Monthly payout")).toBeInTheDocument();
+    expect(screen.getAllByText("Posted").length).toBe(2);
+    // The balance cards lead with what can be paid out next.
+    expect(screen.getByText("Available for next payout")).toBeInTheDocument();
     expect(screen.getByText("$75.00")).toBeInTheDocument();
-    expect(screen.getByText("$25.00 is still clearing.")).toBeInTheDocument();
-    expect(screen.getAllByText("Not set up").length).toBeGreaterThan(0);
+    expect(screen.getByText("Pending clearance")).toBeInTheDocument();
+    expect(screen.getByText("$25.00")).toBeInTheDocument();
+    expect(screen.getByText("Action required")).toBeInTheDocument();
   });
 
   it("ends the active Hotline", async () => {
