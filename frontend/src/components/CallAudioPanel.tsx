@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import { BlingCall } from "../lib/calls";
 import { useWebRTCCall } from "../lib/useWebRTCCall";
 import { CallRole } from "../lib/webrtc";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
 
 export function CallAudioPanel({
   call,
@@ -24,7 +26,12 @@ export function CallAudioPanel({
   }, [rtc.remoteStream]);
 
   const canConnect = rtc.phase === "idle" || rtc.phase === "microphone-denied";
-  const hasMicrophone = ["waiting", "connecting", "reconnecting", "live"].includes(rtc.phase);
+  const hasMicrophone = [
+    "waiting",
+    "connecting",
+    "reconnecting",
+    "live",
+  ].includes(rtc.phase);
   const connectLabel =
     role === "creator"
       ? rtc.phase === "microphone-denied"
@@ -35,61 +42,62 @@ export function CallAudioPanel({
         : "Allow microphone & connect";
 
   return (
-    <div className="audio-call-panel">
+    <div className="bg-muted mt-4 flex w-full flex-col items-center gap-3 rounded-xl p-5">
       <audio ref={audio} autoPlay playsInline />
-      <div className="call-timer" aria-label="Call time remaining">
+      <div
+        className="font-mono text-3xl font-semibold tabular-nums"
+        aria-label="Call time remaining"
+      >
         {formatDuration(rtc.remainingSeconds)}
       </div>
-      <p className="connection-label">{phaseLabel(rtc.phase, role)}</p>
+      <p className="text-muted-foreground max-w-prose text-center text-sm">
+        {phaseLabel(rtc.phase, role)}
+      </p>
       {canConnect && (
-        <button
-          className="primary-button"
-          type="button"
-          onClick={() => void rtc.connect()}
-        >
+        <Button type="button" onClick={() => void rtc.connect()}>
           {connectLabel}
-        </button>
+        </Button>
       )}
       {rtc.phase === "requesting-microphone" && (
-        <div className="status">Waiting for microphone permission…</div>
+        <div className="text-muted-foreground text-sm">
+          Waiting for microphone permission…
+        </div>
       )}
       {rtc.phase === "microphone-denied" && (
-        <div className="form-error" role="alert">
-          Microphone access was denied. Allow it in your browser settings, then
-          retry or end this call.
-        </div>
+        <Alert variant="destructive">
+          <AlertDescription>
+            Microphone access was denied. Allow it in your browser settings,
+            then retry or end this call.
+          </AlertDescription>
+        </Alert>
       )}
       {rtc.error && (
-        <div className="form-error" role="alert">
-          {rtc.error}
-        </div>
+        <Alert variant="destructive">
+          <AlertDescription>{rtc.error}</AlertDescription>
+        </Alert>
       )}
       {playRequired && (
-        <button
-          className="button secondary"
+        <Button
+          variant="secondary"
           type="button"
           onClick={() => void audio.current?.play()}
         >
           Play incoming audio
-        </button>
+        </Button>
       )}
-      <div className="call-actions">
+      <div className="flex flex-wrap justify-center gap-2">
         {hasMicrophone && (
-          <button
-            className="button secondary"
-            type="button"
-            onClick={rtc.toggleMuted}
-          >
+          <Button variant="secondary" type="button" onClick={rtc.toggleMuted}>
             {rtc.muted ? "Unmute microphone" : "Mute microphone"}
-          </button>
+          </Button>
         )}
-        <button
-          className="danger-button"
+        <Button
+          variant="destructive"
           type="button"
           onClick={() => void rtc.end()}
         >
           End call
-        </button>
+        </Button>
       </div>
     </div>
   );

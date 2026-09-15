@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { cn } from "@/lib/utils";
 
 type Readiness = {
   status: "ok" | "unavailable";
@@ -25,8 +26,19 @@ export function ApiStatus() {
       ? "ready"
       : "offline";
   return (
-    <div className={`status status-${state}`} role="status">
-      <span aria-hidden="true" />
+    <div
+      className="text-muted-foreground flex items-center gap-2 text-sm"
+      role="status"
+    >
+      <span
+        aria-hidden="true"
+        className={cn(
+          "size-2 rounded-full",
+          state === "ready" && "bg-[var(--green-light)]",
+          state === "checking" && "bg-muted-foreground",
+          state === "offline" && "bg-primary",
+        )}
+      />
       {state === "checking" && "Checking local API…"}
       {state === "ready" && "Local stack is ready"}
       {state === "offline" && "Start the local API and dependencies"}
