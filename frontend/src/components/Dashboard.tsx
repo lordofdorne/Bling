@@ -36,6 +36,8 @@ import { UiIcon } from "./UiIcon";
 import { Brand } from "./ViewerShell";
 import { PayoutSetup } from "./PayoutSetup";
 import { ThemeSwitch } from "./ThemeSwitch";
+import { Grid, GridItem } from "./Grid";
+import { useControlSize } from "../lib/useDesignTokens";
 import {
   PaymentMethodSetup,
   usePaymentMethods,
@@ -634,26 +636,26 @@ function CreatorPayoutSettings() {
         </div>
       </div>
       {creatorBalance.data && (
-        <div className="balance-summary" aria-label="Creator balance">
-          <div>
+        <Grid className="balance-summary" gap="sm" aria-label="Creator balance">
+          <GridItem span={4}>
             <span>Available</span>
             <strong>
               {formatPrice(creatorBalance.data.balance.availableCents)}
             </strong>
-          </div>
-          <div>
+          </GridItem>
+          <GridItem span={4}>
             <span>Pending</span>
             <strong>
               {formatPrice(creatorBalance.data.balance.pendingCents)}
             </strong>
-          </div>
-          <div>
+          </GridItem>
+          <GridItem span={4}>
             <span>Total balance</span>
             <strong>
               {formatPrice(creatorBalance.data.balance.totalCents)}
             </strong>
-          </div>
-        </div>
+          </GridItem>
+        </Grid>
       )}
       {paymentActivity.data?.payoutFailure && (
         <div className="settings-alert" role="alert">
@@ -1054,6 +1056,7 @@ export function Dashboard() {
   const logout = useLogout();
   const navigate = useNavigate();
   const location = useLocation();
+  const controlSize = useControlSize();
   const username = me.data?.username ?? "";
   const currentShow = useCurrentShow();
   const createShow = useCreateShow();
@@ -1088,9 +1091,19 @@ export function Dashboard() {
           <span>CREATOR STUDIO</span>
         </div>
         <div className="studio-header-actions">
-          <Link className="text-button" to="/">
+          <Link className="text-button studio-explore-link" to="/">
             Explore Bling <UiIcon name="arrow" size={15} />
           </Link>
+          <button
+            className="text-button studio-header-sign-out"
+            type="button"
+            onClick={signOut}
+            disabled={logout.isPending}
+            aria-label={logout.isPending ? "Signing out" : "Sign out"}
+          >
+            <UiIcon name="logout" size={18} />
+            <span>{logout.isPending ? "Signing out…" : "Sign out"}</span>
+          </button>
           <span className="account-avatar">
             {username.slice(0, 2).toUpperCase()}
           </span>
@@ -1098,7 +1111,7 @@ export function Dashboard() {
       </header>
       <div className="studio-layout">
         <aside className="studio-sidebar" aria-label="Creator navigation">
-          <div>
+          <div className="studio-nav-links">
             <p className="nav-label">Your workspace</p>
             <Link
               className={!isSettings ? "active" : undefined}
@@ -1176,15 +1189,6 @@ export function Dashboard() {
               </strong>
               <p>Share your link. Open the line. Make someone’s day.</p>
             </div>
-            <button
-              className="text-button"
-              type="button"
-              onClick={signOut}
-              disabled={logout.isPending}
-            >
-              <UiIcon name="logout" size={18} />
-              {logout.isPending ? "Signing out…" : "Sign out"}
-            </button>
           </div>
         </aside>
         <main id="studio-main" className="dashboard-content">
@@ -1201,12 +1205,15 @@ export function Dashboard() {
                     happen.
                   </p>
                 </div>
-                <Link className="button secondary" to={`/u/${username}`}>
+                <Link
+                  className={`button secondary${controlSize === "lg" ? " button-lg" : ""}`}
+                  to={`/u/${username}`}
+                >
                   View channel <UiIcon name="arrow" size={16} />
                 </Link>
               </div>
-              <div className="studio-overview" aria-label="Channel overview">
-                <article>
+              <Grid className="studio-overview" aria-label="Channel overview">
+                <GridItem as="article" span={4}>
                   <span>
                     <UiIcon name="broadcast" size={18} />
                     Hotline status
@@ -1230,8 +1237,8 @@ export function Dashboard() {
                   <span
                     className={`metric-indicator ${activeShow?.status === "LIVE" ? "on-air" : ""}`}
                   />
-                </article>
-                <article>
+                </GridItem>
+                <GridItem as="article" span={4}>
                   <span>
                     <UiIcon name="wallet" size={18} />
                     Payout account
@@ -1250,8 +1257,8 @@ export function Dashboard() {
                       ? `${100 - payouts.data.platformFeePercent}% creator share, less half the basic card fee`
                       : "Set up payouts to charge for calls"}
                   </small>
-                </article>
-                <article>
+                </GridItem>
+                <GridItem as="article" span={4}>
                   <span>
                     <UiIcon name="people" size={18} />
                     Grow your community
@@ -1259,144 +1266,152 @@ export function Dashboard() {
                   <strong>Make it personal.</strong>
                   <small>Invite your audience to your public page</small>
                   <UiIcon name="spark" size={34} />
-                </article>
-              </div>
-              <div className="studio-panels">
-                <section
-                  id="hotline-controls"
-                  className="show-card controls-card"
-                  aria-label="Hotline controls"
-                >
-                  <div className="panel-heading">
-                    <span>
-                      <UiIcon name="broadcast" size={18} />
-                      Stream manager
-                    </span>
-                    <span className="panel-label">LIVE CONTROL ROOM</span>
-                  </div>
-                  {currentShow.isPending ? (
-                    <div className="status">Loading show status…</div>
-                  ) : currentShow.isError ? (
-                    <div className="form-error" role="alert">
-                      Unable to load your Hotline status.
+                </GridItem>
+              </Grid>
+              <Grid className="studio-panels">
+                <GridItem span={8} tablet={8} phone={4}>
+                  <section
+                    id="hotline-controls"
+                    className="show-card controls-card"
+                    aria-label="Hotline controls"
+                  >
+                    <div className="panel-heading">
+                      <span>
+                        <UiIcon name="broadcast" size={18} />
+                        Stream manager
+                      </span>
+                      <span className="panel-label">LIVE CONTROL ROOM</span>
                     </div>
-                  ) : activeShow?.status === "LIVE" ? (
-                    <>
-                      <div className="show-card-heading">
-                        <div>
-                          <div className="live-badge">
-                            <span /> Hotline live
+                    {currentShow.isPending ? (
+                      <div className="status">Loading show status…</div>
+                    ) : currentShow.isError ? (
+                      <div className="form-error" role="alert">
+                        Unable to load your Hotline status.
+                      </div>
+                    ) : activeShow?.status === "LIVE" ? (
+                      <>
+                        <div className="show-card-heading">
+                          <div>
+                            <div className="live-badge">
+                              <span /> Hotline live
+                            </div>
+                            <h2>Your audience can join.</h2>
                           </div>
-                          <h2>Your audience can join.</h2>
+                          <button
+                            className="danger-button"
+                            type="button"
+                            onClick={() => endShow.mutate(activeShow.id)}
+                            disabled={endShow.isPending}
+                          >
+                            {endShow.isPending ? "Ending…" : "End Hotline"}
+                          </button>
                         </div>
+                        <p>
+                          Public URL: <strong>/u/{username}</strong>
+                        </p>
+                        <CallerList showID={activeShow.id} />
+                      </>
+                    ) : activeShow?.status === "CREATED" ? (
+                      <TierConfiguration
+                        showID={activeShow.id}
+                        starting={startShow.isPending}
+                        onStart={() => startShow.mutate(activeShow.id)}
+                      />
+                    ) : (
+                      <div className="studio-offline">
+                        <div className="studio-offline-art" aria-hidden="true">
+                          <span className="studio-ring ring-one" />
+                          <span className="studio-ring ring-two" />
+                          <span className="studio-mic">
+                            <UiIcon name="call" size={36} />
+                          </span>
+                          <span className="offline-art-label">
+                            YOUR NEXT GREAT CONVERSATION
+                          </span>
+                        </div>
+                        <span className="offline-pill">OFF AIR</span>
+                        <h2>No active Hotline</h2>
+                        <p>
+                          Create a draft to configure caller priority, duration,
+                          and pricing before opening your public page.
+                        </p>
                         <button
-                          className="danger-button"
+                          className="primary-button"
                           type="button"
-                          onClick={() => endShow.mutate(activeShow.id)}
-                          disabled={endShow.isPending}
+                          onClick={() => createShow.mutate()}
+                          disabled={createShow.isPending}
                         >
-                          {endShow.isPending ? "Ending…" : "End Hotline"}
+                          <UiIcon name="plus" size={17} />
+                          {createShow.isPending
+                            ? "Creating…"
+                            : "Set up Hotline"}
                         </button>
                       </div>
-                      <p>
-                        Public URL: <strong>/u/{username}</strong>
-                      </p>
-                      <CallerList showID={activeShow.id} />
-                    </>
-                  ) : activeShow?.status === "CREATED" ? (
-                    <TierConfiguration
-                      showID={activeShow.id}
-                      starting={startShow.isPending}
-                      onStart={() => startShow.mutate(activeShow.id)}
-                    />
-                  ) : (
-                    <div className="studio-offline">
-                      <div className="studio-offline-art" aria-hidden="true">
-                        <span className="studio-ring ring-one" />
-                        <span className="studio-ring ring-two" />
-                        <span className="studio-mic">
-                          <UiIcon name="call" size={36} />
-                        </span>
-                        <span className="offline-art-label">
-                          YOUR NEXT GREAT CONVERSATION
-                        </span>
+                    )}
+                    {(createShow.isError ||
+                      startShow.isError ||
+                      endShow.isError) && (
+                      <div className="form-error" role="alert">
+                        {startShow.error instanceof ApiError &&
+                        startShow.error.code === "PAYOUT_SETUP_REQUIRED"
+                          ? startShow.error.message
+                          : "Unable to update your Hotline. Please try again."}
                       </div>
-                      <span className="offline-pill">OFF AIR</span>
-                      <h2>No active Hotline</h2>
-                      <p>
-                        Create a draft to configure caller priority, duration,
-                        and pricing before opening your public page.
-                      </p>
-                      <button
-                        className="primary-button"
-                        type="button"
-                        onClick={() => createShow.mutate()}
-                        disabled={createShow.isPending}
-                      >
-                        <UiIcon name="plus" size={17} />
-                        {createShow.isPending ? "Creating…" : "Set up Hotline"}
-                      </button>
-                    </div>
-                  )}
-                  {(createShow.isError ||
-                    startShow.isError ||
-                    endShow.isError) && (
-                    <div className="form-error" role="alert">
-                      {startShow.error instanceof ApiError &&
-                      startShow.error.code === "PAYOUT_SETUP_REQUIRED"
-                        ? startShow.error.message
-                        : "Unable to update your Hotline. Please try again."}
-                    </div>
-                  )}
-                </section>
-
-                <section
-                  id="payment-activity"
-                  className="show-card activity-card"
-                  aria-label="Payment activity"
-                >
-                  <p className="eyebrow">Payment activity</p>
-                  <h2>Recent paid calls</h2>
-                  {paymentActivity.isPending ? (
-                    <div className="status">Loading payment activity…</div>
-                  ) : paymentActivity.isError ? (
-                    <div className="form-error" role="alert">
-                      Unable to load payment activity.
-                    </div>
-                  ) : paymentActivity.data.activity.length === 0 ? (
-                    <div className="payment-empty">
-                      <span className="feature-icon">
-                        <UiIcon name="wallet" size={22} />
-                      </span>
-                      <h3>No paid calls yet.</h3>
-                      <p>
-                        Your paid call activity will appear here after your
-                        first conversation.
-                      </p>
-                    </div>
-                  ) : (
-                    <ol className="payment-activity-list">
-                      {paymentActivity.data.activity.map((activity) => (
-                        <li key={activity.paymentAttemptId}>
-                          <div>
-                            <strong>{formatPrice(activity.amountCents)}</strong>
-                            <span>{activityLabel(activity)}</span>
-                          </div>
-                          <span>
-                            Creator share:{" "}
-                            {formatPrice(
-                              activity.amountCents - activity.platformFeeCents,
-                            )}
-                            {activity.creatorProcessingFeeCents > 0
-                              ? ` · includes your ${formatPrice(activity.creatorProcessingFeeCents)} half of the card fee`
-                              : ""}
-                          </span>
-                        </li>
-                      ))}
-                    </ol>
-                  )}
-                </section>
-              </div>
+                    )}
+                  </section>
+                </GridItem>
+                <GridItem span={4} tablet={8} phone={4}>
+                  <section
+                    id="payment-activity"
+                    className="show-card activity-card"
+                    aria-label="Payment activity"
+                  >
+                    <p className="eyebrow">Payment activity</p>
+                    <h2>Recent paid calls</h2>
+                    {paymentActivity.isPending ? (
+                      <div className="status">Loading payment activity…</div>
+                    ) : paymentActivity.isError ? (
+                      <div className="form-error" role="alert">
+                        Unable to load payment activity.
+                      </div>
+                    ) : paymentActivity.data.activity.length === 0 ? (
+                      <div className="payment-empty">
+                        <span className="feature-icon">
+                          <UiIcon name="wallet" size={22} />
+                        </span>
+                        <h3>No paid calls yet.</h3>
+                        <p>
+                          Your paid call activity will appear here after your
+                          first conversation.
+                        </p>
+                      </div>
+                    ) : (
+                      <ol className="payment-activity-list">
+                        {paymentActivity.data.activity.map((activity) => (
+                          <li key={activity.paymentAttemptId}>
+                            <div>
+                              <strong>
+                                {formatPrice(activity.amountCents)}
+                              </strong>
+                              <span>{activityLabel(activity)}</span>
+                            </div>
+                            <span>
+                              Creator share:{" "}
+                              {formatPrice(
+                                activity.amountCents -
+                                  activity.platformFeeCents,
+                              )}
+                              {activity.creatorProcessingFeeCents > 0
+                                ? ` · includes your ${formatPrice(activity.creatorProcessingFeeCents)} half of the card fee`
+                                : ""}
+                            </span>
+                          </li>
+                        ))}
+                      </ol>
+                    )}
+                  </section>
+                </GridItem>
+              </Grid>
             </>
           )}
           {logout.isError && (

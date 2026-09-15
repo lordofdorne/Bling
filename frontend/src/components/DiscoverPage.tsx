@@ -11,6 +11,8 @@ import { FollowButton } from "./FollowButton";
 import { CreatorAvatar, CreatorCover } from "./CreatorIdentity";
 import { ViewerShell } from "./ViewerShell";
 import { UiIcon } from "./UiIcon";
+import { Grid, GridItem } from "./Grid";
+import { useControlSize } from "../lib/useDesignTokens";
 
 const categoryIcons = [
   "discover",
@@ -87,6 +89,7 @@ export function DiscoverPage({
   });
   const items = creatorItems(discovery.data?.pages);
   const feature = items.find((p) => p.isLive);
+  const controlSize = useControlSize();
   const signedOut = view === "following" && !me.isPending && !me.data;
   function chooseCategory(value: string) {
     setParams((current) => {
@@ -119,8 +122,13 @@ export function DiscoverPage({
         </div>
       </div>
       {view === "home" && !query && category === "All" && feature && (
-        <section className="featured-live" aria-label="Featured creator">
-          <div className="featured-copy">
+        <Grid
+          as="section"
+          gap="none"
+          className="featured-live"
+          aria-label="Featured creator"
+        >
+          <GridItem className="featured-copy" span={6} tablet={4} phone={4}>
             <div className="featured-kicker">
               <span className="live-pill">LIVE</span>
               <span>In the spotlight</span>
@@ -145,15 +153,18 @@ export function DiscoverPage({
               </span>
             </div>
             <div className="featured-actions">
-              <Link className="primary-button" to={`/u/${feature.username}`}>
+              <Link
+                className={`primary-button${controlSize === "lg" ? " button-lg" : ""}`}
+                to={`/u/${feature.username}`}
+              >
                 <UiIcon name="call" size={17} />
                 Drop into the conversation
                 <UiIcon name="arrow" size={17} />
               </Link>
               <FollowButton profile={feature} />
             </div>
-          </div>
-          <div className="featured-visual">
+          </GridItem>
+          <GridItem className="featured-visual" span={6} tablet={4} phone={4}>
             <CreatorCover profile={feature} />
             <div className="featured-image-shade" />
             <span className="image-caption">
@@ -171,8 +182,8 @@ export function DiscoverPage({
               </span>
               THE HOTLINE IS OPEN
             </div>
-          </div>
-        </section>
+          </GridItem>
+        </Grid>
       )}
       <section className="feed-section" aria-label="Creator discovery">
         <div className="category-tabs" aria-label="Filter by category">
@@ -261,11 +272,13 @@ export function DiscoverPage({
           </div>
         ) : items.length ? (
           <>
-            <div className="creator-grid">
+            <Grid className="creator-grid">
               {items.map((creator) => (
-                <CreatorCard creator={creator} key={creator.id} />
+                <GridItem key={creator.id} span={4} wide={3}>
+                  <CreatorCard creator={creator} />
+                </GridItem>
               ))}
-            </div>
+            </Grid>
             {discovery.hasNextPage && (
               <div className="load-more">
                 <button

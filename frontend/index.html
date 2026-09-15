@@ -18,6 +18,18 @@
             theme = "light";
         } catch (e) {}
         document.documentElement.setAttribute("data-theme", theme);
+        var width = window.innerWidth;
+        var screen =
+          width <= 720
+            ? "phone"
+            : width <= 980
+              ? "tablet"
+              : width <= 1180
+                ? "laptop"
+                : width <= 1699
+                  ? "desktop"
+                  : "wide";
+        document.documentElement.setAttribute("data-screen", screen);
         var meta = document.querySelector('meta[name="theme-color"]');
         if (meta) {
           meta.setAttribute(
