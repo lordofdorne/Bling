@@ -14,7 +14,13 @@ The redesign covers viewer discovery, following, public creator profiles, the cr
 
 Dark neutral backgrounds and lighter text tints support legibility. Coral actions use dark text; small live badges use a darker coral for white-text contrast. Color is paired with status text or icons. The base font uses the existing system stack; no font dependency was added.
 
-Styles live in `frontend/src/styles.css`. Shared navigation and brand components are in `ViewerShell.tsx`; icons are in `UiIcon.tsx`. Layouts adapt to narrow phones, tablets, and wide desktop screens, with scrollable category and studio navigation on small screens. Focus styles, labeled controls, skip links, reduced-motion support, and larger touch targets are included.
+## Components and styling
+
+The interface is built on [shadcn/ui](https://ui.shadcn.com) (new-york style) over Tailwind v4 and Radix primitives. The components live in `frontend/src/components/ui/` and are written in place rather than pulled with the shadcn CLI, whose registry this environment cannot reach; they are otherwise the upstream files and can be updated from upstream.
+
+No component carries a hex value. `frontend/src/styles.css` is the Tailwind entry, and a single `@theme inline` block maps shadcn's semantic names onto the Bling tokens above — `--color-primary` to `--accent`, `--color-card` to `--surface`, `--color-muted-foreground` to `--muted`, and so on — so every component inherits the palette and both themes from `tokens.css`. That file plus the token bridge is the whole stylesheet; page layout is Tailwind utilities.
+
+Shared navigation and brand components are in `ViewerShell.tsx`, the studio shell and its sections in `components/studio/`, and icons come from `lucide-react`. Layouts adapt to narrow phones, tablets, and wide desktop screens; the sidebars become a Sheet on small screens. Focus styles, labeled controls, skip links, and larger touch targets are included.
 
 ## Real application behavior
 
