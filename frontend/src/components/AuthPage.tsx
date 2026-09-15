@@ -68,7 +68,7 @@ export function AuthPage({ mode }: AuthPageProps) {
         </Button>
       </header>
 
-      <div className="mx-auto grid w-full max-w-5xl gap-10 px-6 pb-16 lg:grid-cols-2 lg:items-center">
+      <div className="mx-auto grid w-full max-w-5xl gap-10 px-6 pb-16 lg:min-h-[calc(100vh-160px)] lg:grid-cols-2 lg:items-center">
         <section className="hidden lg:block">
           <p className="text-[var(--sand-text)] text-xs font-bold tracking-[0.14em] uppercase">
             Closer to your community

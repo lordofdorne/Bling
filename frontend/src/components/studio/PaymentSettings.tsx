@@ -202,6 +202,7 @@ export function PaymentSettings() {
               <Button
                 type="button"
                 className="w-fit"
+                variant={methods.data?.length ? "secondary" : "default"}
                 onClick={() => setup.mutate()}
                 disabled={setup.isPending}
               >
