@@ -1,11 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import {
-  fireEvent,
-  render,
-  screen,
-  waitFor,
-  within,
-} from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { App } from "./App";
 
@@ -498,18 +493,18 @@ describe("App routes", () => {
       }),
     );
 
+    const user = userEvent.setup();
     renderAt("/dashboard");
-    const pricing = await screen.findByRole("combobox", {
-      name: "Standard pricing",
-    });
+    await user.click(
+      await screen.findByRole("combobox", { name: "Standard pricing" }),
+    );
     expect(
-      within(pricing).getByRole("option", { name: "Free" }),
-    ).not.toBeDisabled();
+      await screen.findByRole("option", { name: "Free" }),
+    ).not.toHaveAttribute("data-disabled");
     expect(
-      within(pricing).getByRole("option", {
-        name: "Paid (set up payouts first)",
-      }),
-    ).toBeDisabled();
+      screen.getByRole("option", { name: "Paid (set up payouts first)" }),
+    ).toHaveAttribute("data-disabled");
+    await user.keyboard("{Escape}");
     expect(
       await screen.findByText("Set up payouts to charge for calls."),
     ).toBeInTheDocument();
@@ -581,18 +576,16 @@ describe("App routes", () => {
       }),
     );
 
+    const user = userEvent.setup();
     renderAt("/dashboard");
-    const pricing = await screen.findByRole("combobox", {
-      name: "Standard pricing",
-    });
-    expect(
-      within(pricing).getByRole("option", { name: "Paid" }),
-    ).not.toBeDisabled();
     expect(
       screen.queryByRole("textbox", { name: "Standard price in USD" }),
     ).not.toBeInTheDocument();
 
-    fireEvent.change(pricing, { target: { value: "paid" } });
+    await user.click(
+      await screen.findByRole("combobox", { name: "Standard pricing" }),
+    );
+    await user.click(await screen.findByRole("option", { name: "Paid" }));
 
     const price = await screen.findByRole("textbox", {
       name: "Standard price in USD",
@@ -667,11 +660,94 @@ describe("App routes", () => {
     ).toBeInTheDocument();
     fireEvent.click(screen.getByRole("link", { name: "Payout settings" }));
     expect(
-      await screen.findByRole("heading", { name: "Your payouts are ready." }),
+      await screen.findByRole("heading", { name: "Payouts" }),
     ).toBeInTheDocument();
-    expect(
-      screen.getByText(/receive 80% of each paid call/i),
-    ).toBeInTheDocument();
+    expect(screen.getByText("Verified with Stripe")).toBeInTheDocument();
+    expect(screen.getByText("80% of each paid call")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Edit" })).toBeInTheDocument();
+  });
+
+  it("renders the balance ledger on the payouts dashboard", async () => {
+    const creator = {
+      id: "user-1",
+      username: "alice",
+      email: "alice@example.com",
+      createdAt: "2026-08-24T12:00:00Z",
+    };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        const path = String(input);
+        if (path === "/api/v1/me")
+          return Response.json({ data: { user: creator } });
+        if (path === "/api/v1/shows/current")
+          return new Response(
+            JSON.stringify({ error: { code: "SHOW_NOT_FOUND" } }),
+            { status: 404, headers: { "Content-Type": "application/json" } },
+          );
+        if (path === "/api/v1/payouts/account")
+          return Response.json({
+            data: {
+              payouts: {
+                connected: false,
+                transfersStatus: "",
+                bankPayoutsStatus: "",
+                externalAccountPresent: false,
+                chargesEnabled: false,
+                payoutsEnabled: false,
+                detailsSubmitted: false,
+                ready: false,
+                requirementsDue: [],
+                platformFeePercent: 20,
+                creatorProcessingFeePercent: 50,
+              },
+            },
+          });
+        if (path === "/api/v1/payouts/balance")
+          return Response.json({
+            data: {
+              balance: {
+                currency: "usd",
+                totalCents: 10000,
+                pendingCents: 2500,
+                availableCents: 7500,
+              },
+              activity: [
+                {
+                  id: 2,
+                  kind: "EARNING",
+                  amountCents: 1949,
+                  currency: "usd",
+                  effectiveAt: "2026-09-12T18:30:00Z",
+                  createdAt: "2026-09-12T18:30:00Z",
+                },
+                {
+                  id: 1,
+                  kind: "PAYOUT_RESERVATION",
+                  amountCents: -2500,
+                  currency: "usd",
+                  effectiveAt: "2026-09-01T09:00:00Z",
+                  createdAt: "2026-09-01T09:00:00Z",
+                },
+              ],
+            },
+          });
+        if (path === "/api/v1/payments/activity")
+          return Response.json({ data: { activity: [], payoutFailure: null } });
+        return new Response(null, { status: 404 });
+      }),
+    );
+
+    renderAt("/dashboard/settings/payouts");
+
+    expect(await screen.findByText("Call earning")).toBeInTheDocument();
+    expect(screen.getByText("+$19.49")).toBeInTheDocument();
+    expect(screen.getByText("Reserved for payout")).toBeInTheDocument();
+    expect(screen.getByText("−$25.00")).toBeInTheDocument();
+    // The hero leads with what can be paid out, not the gross balance.
+    expect(screen.getByText("$75.00")).toBeInTheDocument();
+    expect(screen.getByText("$25.00 is still clearing.")).toBeInTheDocument();
+    expect(screen.getAllByText("Not set up").length).toBeGreaterThan(0);
   });
 
   it("ends the active Hotline", async () => {

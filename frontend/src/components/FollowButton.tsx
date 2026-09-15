@@ -1,11 +1,12 @@
 import { Link, useLocation } from "react-router-dom";
+import { Check, Plus } from "lucide-react";
 import { useMe } from "../lib/auth";
 import {
   useFollowBusy,
   useFollowCreator,
   type CreatorProfile,
 } from "../lib/social";
-import { UiIcon } from "./UiIcon";
+import { Button } from "@/components/ui/button";
 
 export function FollowButton({
   profile,
@@ -19,23 +20,35 @@ export function FollowButton({
   const busy = useFollowBusy();
   const location = useLocation();
   if (me.data?.id === profile.id) return null;
-  const className = `follow-button ${profile.isFollowing ? "is-following" : ""} ${compact ? "compact" : ""}`;
+
+  const variant = profile.isFollowing ? "secondary" : "outline";
+  const size = compact ? "icon" : "default";
+
   if (!me.isPending && !me.data)
     return (
-      <Link
-        className={className}
-        to={`/login?next=${encodeURIComponent(location.pathname + location.search)}`}
+      <Button
+        asChild
+        variant={variant}
+        size={size}
+        className="rounded-full"
         aria-label={`Sign in to follow ${profile.displayName}`}
       >
-        <UiIcon name="plus" size={16} />
-        <span>Follow</span>
-      </Link>
+        <Link
+          to={`/login?next=${encodeURIComponent(location.pathname + location.search)}`}
+        >
+          <Plus className="size-4" />
+          {!compact && <span>Follow</span>}
+        </Link>
+      </Button>
     );
+
   return (
-    <span className="follow-control">
-      <button
+    <span className="inline-flex flex-col items-end gap-1">
+      <Button
         type="button"
-        className={className}
+        variant={variant}
+        size={size}
+        className="rounded-full"
         aria-pressed={profile.isFollowing}
         aria-label={`${profile.isFollowing ? "Unfollow" : "Follow"} ${profile.displayName}`}
         disabled={me.isPending || busy}
@@ -43,17 +56,23 @@ export function FollowButton({
           follow.mutate({ profile, following: !profile.isFollowing })
         }
       >
-        <UiIcon name={profile.isFollowing ? "check" : "plus"} size={16} />
-        <span>
-          {follow.isPending
-            ? "Saving…"
-            : profile.isFollowing
-              ? "Following"
-              : "Follow"}
-        </span>
-      </button>
+        {profile.isFollowing ? (
+          <Check className="size-4" />
+        ) : (
+          <Plus className="size-4" />
+        )}
+        {!compact && (
+          <span>
+            {follow.isPending
+              ? "Saving…"
+              : profile.isFollowing
+                ? "Following"
+                : "Follow"}
+          </span>
+        )}
+      </Button>
       {follow.isError && (
-        <span className="follow-error" role="alert">
+        <span className="text-destructive text-xs" role="alert">
           {follow.error.message}
         </span>
       )}

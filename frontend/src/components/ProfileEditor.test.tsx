@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { ProfileEditor } from "./ProfileEditor";
 import type { CreatorProfile } from "../lib/social";
 
@@ -59,9 +60,9 @@ it("saves real profile fields and keeps a success confirmation after refetch", a
   fireEvent.change(screen.getByLabelText("About your channel"), {
     target: { value: "Ceramics and conversation" },
   });
-  fireEvent.change(screen.getByLabelText("Category"), {
-    target: { value: "Creative" },
-  });
+  const user = userEvent.setup();
+  await user.click(screen.getByRole("combobox", { name: "Category" }));
+  await user.click(await screen.findByRole("option", { name: "Creative" }));
   fireEvent.click(screen.getByRole("button", { name: "Save profile" }));
   expect(await screen.findByRole("status")).toHaveTextContent("Profile saved.");
   expect(fetchMock).toHaveBeenCalledWith(

@@ -38,7 +38,7 @@ export function PayoutSetup({
     [session.publishableKey],
   );
   return (
-    <div className="payout-setup-embed">
+    <div className="[&_iframe]:w-full rounded-xl bg-[var(--stripe-embed-bg)] p-4">
       <ConnectComponentsProvider connectInstance={instance}>
         <ConnectAccountOnboarding onExit={onExit} />
       </ConnectComponentsProvider>
