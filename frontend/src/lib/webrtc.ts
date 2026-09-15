@@ -34,8 +34,11 @@ type WebRTCDependencies = {
   getUserMedia: (constraints: MediaStreamConstraints) => Promise<MediaStream>;
   createPeer: (configuration: RTCConfiguration) => RTCPeerConnection;
   createSocket: (url: string) => WebSocket;
-  setTimer: typeof window.setTimeout;
-  clearTimer: typeof window.clearTimeout;
+  // Spelled out rather than `typeof window.setTimeout`: with @types/node in the
+  // program that alias resolves to Node's timer signature, which returns a
+  // Timeout object instead of the numeric handle the browser gives back.
+  setTimer: (handler: () => void, timeout: number) => number;
+  clearTimer: (timer: number) => void;
   random: () => number;
 };
 
