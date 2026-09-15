@@ -1,4 +1,16 @@
 import { Link, Navigate, useParams, useSearchParams } from "react-router-dom";
+import {
+  ArrowRight,
+  Code2,
+  Compass,
+  Gamepad2,
+  Heart,
+  Music,
+  Phone,
+  Search,
+  Sparkles,
+  Users,
+} from "lucide-react";
 import { useMe } from "../lib/auth";
 import {
   categories,
@@ -10,67 +22,79 @@ import {
 import { FollowButton } from "./FollowButton";
 import { CreatorAvatar, CreatorCover } from "./CreatorIdentity";
 import { ViewerShell } from "./ViewerShell";
-import { UiIcon } from "./UiIcon";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 import { Grid, GridItem } from "./Grid";
-import { useControlSize } from "../lib/useDesignTokens";
+import { cn } from "@/lib/utils";
 
-const categoryIcons = [
-  "discover",
-  "call",
-  "music",
-  "gaming",
-  "spark",
-  "code",
-] as const;
+const categoryIcons = [Compass, Phone, Music, Gamepad2, Sparkles, Code2];
+
+function LivePill({ live }: { live: boolean }) {
+  return (
+    <Badge
+      variant={live ? "default" : "secondary"}
+      className="gap-1.5 rounded-full px-2.5 py-1 text-[10px] tracking-[0.1em] uppercase"
+    >
+      {live && <span className="bg-primary-foreground size-1.5 rounded-full" />}
+      {live ? "Live" : "Offline"}
+    </Badge>
+  );
+}
+
 function CreatorCard({ creator }: { creator: CreatorProfile }) {
   return (
-    <article className="creator-card">
+    <Card className="gap-0 overflow-hidden py-0 transition-shadow hover:shadow-lg">
       <Link
-        className={`creator-cover cover-${creator.category === "Music" ? "sage" : creator.category === "Gaming" ? "sand" : "lavender"}`}
+        className="group relative block aspect-[16/10] overflow-hidden"
         to={`/u/${creator.username}`}
         aria-label={`Visit ${creator.displayName}`}
       >
         <CreatorCover profile={creator} />
-        <div className="cover-shade" />
-        <span className={creator.isLive ? "live-pill" : "offline-pill"}>
-          {creator.isLive ? "LIVE" : "OFFLINE"}
+        <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/10 to-transparent" />
+        <span className="absolute top-3 left-3">
+          <LivePill live={creator.isLive} />
         </span>
-        <span className="cover-topic">{creator.category}</span>
         {creator.isLive && creator.channelVisitors !== null && (
           <span
-            className="viewer-count"
+            className="text-on-media absolute top-3 right-3 flex items-center gap-1 rounded-full bg-black/50 px-2 py-1 text-[11px] font-semibold text-white"
             title="People on this channel page in the last 90 seconds"
           >
-            <UiIcon name="people" size={13} />
+            <Users className="size-3" />
             {formatCount(creator.channelVisitors)} on page
           </span>
         )}
-        <span className="cover-arrow">
-          <UiIcon name="arrow" />
+        <span className="absolute bottom-3 left-4 text-base font-semibold text-white">
+          {creator.category}
+        </span>
+        <span className="absolute right-3 bottom-3 grid size-8 place-items-center rounded-full bg-white/15 text-white transition-transform group-hover:translate-x-0.5">
+          <ArrowRight className="size-4" />
         </span>
       </Link>
-      <div className="creator-details">
+      <div className="flex items-center gap-3 p-4">
         <Link
           to={`/u/${creator.username}`}
           aria-label={`${creator.displayName} profile`}
         >
           <CreatorAvatar profile={creator} />
         </Link>
-        <div className="creator-meta">
+        <div className="min-w-0 flex-1">
           <Link to={`/u/${creator.username}`}>
-            <h3>{creator.displayName}</h3>
+            <h3 className="truncate text-sm font-semibold">
+              {creator.displayName}
+            </h3>
           </Link>
-          <span>@{creator.username}</span>
-          <small>
-            {formatCount(creator.followerCount)}{" "}
+          <p className="text-muted-foreground truncate text-xs">
+            @{creator.username} · {formatCount(creator.followerCount)}{" "}
             {creator.followerCount === 1 ? "follower" : "followers"}
-          </small>
+          </p>
         </div>
         <FollowButton profile={creator} compact />
       </div>
-    </article>
+    </Card>
   );
 }
+
 export function DiscoverPage({
   view = "home",
 }: {
@@ -89,8 +113,8 @@ export function DiscoverPage({
   });
   const items = creatorItems(discovery.data?.pages);
   const feature = items.find((p) => p.isLive);
-  const controlSize = useControlSize();
   const signedOut = view === "following" && !me.isPending && !me.data;
+
   function chooseCategory(value: string) {
     setParams((current) => {
       const next = new URLSearchParams(current);
@@ -100,249 +124,307 @@ export function DiscoverPage({
       return next;
     });
   }
+
   return (
     <ViewerShell>
-      <div className="feed-intro">
-        <div>
-          <p className="eyebrow">A little closer to your people</p>
-          <h1>
-            {view === "following"
-              ? "Your people. Your place."
-              : view === "browse"
-                ? "Find your corner."
-                : "Good company. Real connection."}
-          </h1>
-          <p>
-            {view === "following"
-              ? "The creators you follow, together in one feed."
-              : view === "browse"
-                ? "Follow your curiosity. There’s a conversation for it."
-                : "Find a conversation you love. Be a part of it."}
-          </p>
-        </div>
+      <div className="mb-8">
+        <p className="text-[var(--sand-text)] text-xs font-bold tracking-[0.14em] uppercase">
+          A little closer to your people
+        </p>
+        <h1 className="mt-2 text-3xl font-extrabold tracking-tight md:text-4xl">
+          {view === "following"
+            ? "Your people. Your place."
+            : view === "browse"
+              ? "Find your corner."
+              : "Good company. Real connection."}
+        </h1>
+        <p className="text-muted-foreground mt-2 text-sm">
+          {view === "following"
+            ? "The creators you follow, together in one feed."
+            : view === "browse"
+              ? "Follow your curiosity. There’s a conversation for it."
+              : "Find a conversation you love. Be a part of it."}
+        </p>
       </div>
+
       {view === "home" && !query && category === "All" && feature && (
-        <Grid
-          as="section"
-          gap="none"
-          className="featured-live"
+        <Card
+          className="mb-10 gap-0 overflow-hidden border-[var(--mauve-border)] bg-[var(--mauve-surface)] py-0"
           aria-label="Featured creator"
         >
-          <GridItem className="featured-copy" span={6} tablet={4} phone={4}>
-            <div className="featured-kicker">
-              <span className="live-pill">LIVE</span>
-              <span>In the spotlight</span>
-            </div>
-            <h2>
-              Less scrolling.
-              <br />
-              More <em>connecting.</em>
-            </h2>
-            <p>
-              {feature.bio ||
-                `The line is open. Join ${feature.displayName} for a real conversation.`}
-            </p>
-            <div className="featured-person">
-              <CreatorAvatar profile={feature} />
-              <span>
-                <strong>{feature.displayName}</strong>
-                <small>
-                  {feature.category} · {formatCount(feature.followerCount)}{" "}
-                  followers
-                </small>
-              </span>
-            </div>
-            <div className="featured-actions">
-              <Link
-                className={`primary-button${controlSize === "lg" ? " button-lg" : ""}`}
-                to={`/u/${feature.username}`}
-              >
-                <UiIcon name="call" size={17} />
-                Drop into the conversation
-                <UiIcon name="arrow" size={17} />
-              </Link>
-              <FollowButton profile={feature} />
-            </div>
-          </GridItem>
-          <GridItem className="featured-visual" span={6} tablet={4} phone={4}>
-            <CreatorCover profile={feature} />
-            <div className="featured-image-shade" />
-            <span className="image-caption">
-              A seat at the conversation.
-              <br />
-              <strong>And it has your name on it.</strong>
-            </span>
-            <div className="on-air-chip">
-              <span className="sound-bars">
-                <i />
-                <i />
-                <i />
-                <i />
-                <i />
-              </span>
-              THE HOTLINE IS OPEN
-            </div>
-          </GridItem>
-        </Grid>
-      )}
-      <section className="feed-section" aria-label="Creator discovery">
-        <div className="category-tabs" aria-label="Filter by category">
-          {["All", ...categories].map((item, index) => (
-            <button
-              key={item}
-              aria-pressed={category === item}
-              className={category === item ? "selected" : ""}
-              onClick={() => chooseCategory(item)}
+          <Grid gap="none">
+            <GridItem
+              span={7}
+              tablet={8}
+              phone={4}
+              className="flex flex-col gap-5 p-6 md:p-8"
             >
-              <UiIcon name={categoryIcons[index]} size={16} />
-              {item === "All"
-                ? view === "home"
-                  ? "For you"
-                  : "All categories"
-                : item}
-            </button>
-          ))}
+              <div className="flex items-center gap-3">
+                <LivePill live />
+                <span className="text-muted-foreground text-sm">
+                  In the spotlight
+                </span>
+              </div>
+              <h2 className="text-3xl leading-tight font-extrabold tracking-tight md:text-4xl">
+                Less scrolling.
+                <br />
+                More{" "}
+                <em className="text-[var(--sand-text)] not-italic">
+                  connecting.
+                </em>
+              </h2>
+              <p className="text-muted-foreground max-w-prose text-sm">
+                {feature.bio ||
+                  `The line is open. Join ${feature.displayName} for a real conversation.`}
+              </p>
+              <div className="flex items-center gap-3">
+                <CreatorAvatar profile={feature} />
+                <span>
+                  <strong className="block text-sm font-semibold">
+                    {feature.displayName}
+                  </strong>
+                  <small className="text-muted-foreground text-xs">
+                    {feature.category} · {formatCount(feature.followerCount)}{" "}
+                    followers
+                  </small>
+                </span>
+              </div>
+              <div className="flex flex-wrap items-center gap-3">
+                <Button asChild size="lg">
+                  <Link to={`/u/${feature.username}`}>
+                    <Phone className="size-4" />
+                    Drop into the conversation
+                    <ArrowRight className="size-4" />
+                  </Link>
+                </Button>
+                <FollowButton profile={feature} />
+              </div>
+            </GridItem>
+            <GridItem
+              span={5}
+              tablet={8}
+              phone={4}
+              className="relative min-h-[240px]"
+            >
+              <CreatorCover profile={feature} />
+              <div className="absolute inset-0 bg-gradient-to-t from-black/70 to-transparent" />
+              <span className="absolute right-4 bottom-5 left-5 text-sm text-white/85">
+                A seat at the conversation.
+                <br />
+                <strong className="text-white">
+                  And it has your name on it.
+                </strong>
+              </span>
+              <Badge
+                variant="secondary"
+                className="absolute top-4 right-4 gap-2 rounded-full px-3 py-1.5 text-[10px] tracking-[0.12em] uppercase"
+              >
+                <span className="bg-primary size-1.5 animate-pulse rounded-full" />
+                The hotline is open
+              </Badge>
+            </GridItem>
+          </Grid>
+        </Card>
+      )}
+
+      <section aria-label="Creator discovery">
+        <div
+          className="mb-6 flex flex-wrap gap-2"
+          aria-label="Filter by category"
+        >
+          {["All", ...categories].map((item, index) => {
+            const Icon = categoryIcons[index];
+            const selected = category === item;
+            return (
+              <Button
+                key={item}
+                variant={selected ? "secondary" : "ghost"}
+                size="sm"
+                aria-pressed={selected}
+                className={cn(
+                  "rounded-full border",
+                  selected
+                    ? "border-[var(--sand)] bg-[var(--sand)]/15 text-[var(--sand-text)]"
+                    : "border-border text-muted-foreground",
+                )}
+                onClick={() => chooseCategory(item)}
+              >
+                <Icon className="size-4" />
+                {item === "All"
+                  ? view === "home"
+                    ? "For you"
+                    : "All categories"
+                  : item}
+              </Button>
+            );
+          })}
         </div>
-        <div className="section-heading">
+
+        <div className="mb-5 flex flex-wrap items-end justify-between gap-4">
           <div>
-            <h2>
+            <h2 className="flex items-center gap-2 text-xl font-bold tracking-tight">
               {query
                 ? `Results for “${query}”`
                 : view === "following"
                   ? "From your following"
                   : category !== "All"
                     ? category
-                    : "Popular on Bling"}{" "}
-              <span className="heading-dot">✦</span>
+                    : "Popular on Bling"}
+              <Sparkles className="text-primary size-4" />
             </h2>
-            <p>
+            <p className="text-muted-foreground mt-1 text-sm">
               {view === "following"
                 ? "Your follows are saved across your devices."
                 : "Live creators first, then the most followed."}
             </p>
           </div>
-          <div className="discovery-controls">
-            <button
-              className={`live-filter ${liveOnly ? "selected" : ""}`}
-              aria-pressed={liveOnly}
-              onClick={() =>
-                setParams((current) => {
-                  const next = new URLSearchParams(current);
-                  if (liveOnly) next.delete("live");
-                  else next.set("live", "true");
-                  return next;
-                })
-              }
-            >
-              <span className="live-dot" />
-              Live now
-            </button>
-          </div>
+          <Button
+            variant={liveOnly ? "secondary" : "outline"}
+            size="sm"
+            className="rounded-full"
+            aria-pressed={liveOnly}
+            onClick={() =>
+              setParams((current) => {
+                const next = new URLSearchParams(current);
+                if (liveOnly) next.delete("live");
+                else next.set("live", "true");
+                return next;
+              })
+            }
+          >
+            <span className="bg-primary size-2 rounded-full" />
+            Live now
+          </Button>
         </div>
+
         {signedOut ? (
-          <div className="discovery-empty">
-            <span className="feature-icon">
-              <UiIcon name="heart" size={26} />
+          <Card className="items-center gap-3 p-10 text-center">
+            <span className="bg-muted text-primary grid size-12 place-items-center rounded-xl">
+              <Heart className="size-6" />
             </span>
-            <h2>Your people are waiting.</h2>
-            <p>Sign in to follow creators and see when they go live.</p>
-            <Link className="primary-button" to="/login?next=%2Ffollowing">
-              Sign in
-            </Link>
-            <Link className="text-link" to="/register?next=%2Ffollowing">
-              Create a viewer account
-            </Link>
-          </div>
+            <h2 className="text-xl font-bold">Your people are waiting.</h2>
+            <p className="text-muted-foreground text-sm">
+              Sign in to follow creators and see when they go live.
+            </p>
+            <Button asChild>
+              <Link to="/login?next=%2Ffollowing">Sign in</Link>
+            </Button>
+            <Button asChild variant="link">
+              <Link to="/register?next=%2Ffollowing">
+                Create a viewer account
+              </Link>
+            </Button>
+          </Card>
         ) : me.isError || (discovery.isError && !discovery.data) ? (
-          <div className="discovery-empty" role="alert">
-            <h2>We couldn’t load creators.</h2>
-            <p>Please try again in a moment.</p>
-            <button
-              className="button secondary"
+          <Card className="items-center gap-3 p-10 text-center" role="alert">
+            <h2 className="text-xl font-bold">We couldn’t load creators.</h2>
+            <p className="text-muted-foreground text-sm">
+              Please try again in a moment.
+            </p>
+            <Button
+              variant="secondary"
               onClick={() =>
                 void (me.isError ? me.refetch() : discovery.refetch())
               }
             >
               Try again
-            </button>
-          </div>
+            </Button>
+          </Card>
         ) : discovery.isPending ? (
-          <div className="discovery-empty" role="status">
+          <Card
+            className="text-muted-foreground items-center p-10 text-center text-sm"
+            role="status"
+          >
             Finding your next conversation…
-          </div>
+          </Card>
         ) : items.length ? (
           <>
-            <Grid className="creator-grid">
+            <Grid>
               {items.map((creator) => (
-                <GridItem key={creator.id} span={4} wide={3}>
+                <GridItem key={creator.id} span={4} tablet={4} phone={4}>
                   <CreatorCard creator={creator} />
                 </GridItem>
               ))}
             </Grid>
             {discovery.hasNextPage && (
-              <div className="load-more">
-                <button
-                  className="button secondary"
+              <div className="mt-8 flex justify-center">
+                <Button
+                  variant="secondary"
                   disabled={discovery.isFetchingNextPage}
                   onClick={() => void discovery.fetchNextPage()}
                 >
                   {discovery.isFetchingNextPage
                     ? "Loading…"
                     : "Load more creators"}
-                </button>
+                </Button>
               </div>
             )}
             {discovery.isFetchNextPageError && (
-              <p role="alert">Couldn’t load more creators. Try again.</p>
+              <p role="alert" className="text-destructive mt-4 text-sm">
+                Couldn’t load more creators. Try again.
+              </p>
             )}
           </>
         ) : (
-          <div className="discovery-empty">
-            <span className="feature-icon">
-              <UiIcon
-                name={view === "following" ? "heart" : "search"}
-                size={26}
-              />
+          <Card className="items-center gap-3 p-10 text-center">
+            <span className="bg-muted text-primary grid size-12 place-items-center rounded-xl">
+              {view === "following" ? (
+                <Heart className="size-6" />
+              ) : (
+                <Search className="size-6" />
+              )}
             </span>
-            <h2>
+            <h2 className="text-xl font-bold">
               {view === "following"
                 ? "Make yourself at home."
                 : "A new conversation starts with you."}
             </h2>
-            <p>
+            <p className="text-muted-foreground max-w-md text-sm">
               {view === "following"
                 ? "Follow creators to build your feed, or clear your filters to see more."
                 : "No creators match these filters yet. Explore all channels or open your own Hotline."}
             </p>
-            <Link className="primary-button" to="/">
-              Explore all creators
-              <UiIcon name="arrow" size={17} />
-            </Link>
-            <Link className="text-link" to="/dashboard">
-              Open creator studio
-            </Link>
-          </div>
+            <Button asChild>
+              <Link to="/">
+                Explore all creators
+                <ArrowRight className="size-4" />
+              </Link>
+            </Button>
+            <Button asChild variant="link">
+              <Link to="/dashboard">Open creator studio</Link>
+            </Button>
+          </Card>
         )}
       </section>
+
       {view !== "following" && !query && (
-        <section className="community-banner">
-          <span className="community-symbol">
-            <UiIcon name="call" size={32} />
+        <Card className="mt-10 flex-row flex-wrap items-center gap-5 p-6">
+          <span className="bg-muted text-primary grid size-14 shrink-0 place-items-center rounded-xl">
+            <Phone className="size-7" />
           </span>
-          <div>
-            <p className="eyebrow">Beyond the comments</p>
-            <h2>Don’t just be in the audience. Be in the conversation.</h2>
-            <p>Your favorite creators are one call away.</p>
+          <div className="min-w-[240px] flex-1">
+            <p className="text-[var(--sand-text)] text-xs font-bold tracking-[0.14em] uppercase">
+              Beyond the comments
+            </p>
+            <h2 className="mt-1 text-lg font-bold">
+              Don’t just be in the audience. Be in the conversation.
+            </h2>
+            <p className="text-muted-foreground mt-1 text-sm">
+              Your favorite creators are one call away.
+            </p>
           </div>
-          <Link className="button secondary" to="/following">
-            Find your people
-            <UiIcon name="arrow" size={16} />
-          </Link>
-        </section>
+          <Button asChild variant="secondary">
+            <Link to="/following">
+              Find your people
+              <ArrowRight className="size-4" />
+            </Link>
+          </Button>
+        </Card>
       )}
     </ViewerShell>
   );
 }
+
 // Preserve previously shared discovery links, now backed by real channels.
 export function LegacyCreatorRedirect() {
   const { username = "" } = useParams();
