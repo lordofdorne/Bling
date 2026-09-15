@@ -667,12 +667,11 @@ describe("App routes", () => {
     ).toBeInTheDocument();
     fireEvent.click(screen.getByRole("link", { name: "Payout settings" }));
     expect(
-      await screen.findByRole("heading", { name: "Payout destination" }),
+      await screen.findByRole("heading", { name: "Payouts" }),
     ).toBeInTheDocument();
-    expect(screen.getByLabelText("Payout setup: Ready")).toBeInTheDocument();
-    expect(
-      screen.getByText(/keep 80% of every paid call/i),
-    ).toBeInTheDocument();
+    expect(screen.getByText("Verified with Stripe")).toBeInTheDocument();
+    expect(screen.getByText("80% of each paid call")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Edit" })).toBeInTheDocument();
   });
 
   it("renders the balance ledger on the payouts dashboard", async () => {
@@ -752,13 +751,10 @@ describe("App routes", () => {
     expect(screen.getByText("+$19.49")).toBeInTheDocument();
     expect(screen.getByText("Reserved for payout")).toBeInTheDocument();
     expect(screen.getByText("−$25.00")).toBeInTheDocument();
-    // The balance meter reports the available share of the total.
-    expect(
-      screen.getByText("75% of your balance is ready to send"),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByLabelText("Payout setup: Not set up"),
-    ).toBeInTheDocument();
+    // The hero leads with what can be paid out, not the gross balance.
+    expect(screen.getByText("$75.00")).toBeInTheDocument();
+    expect(screen.getByText("$25.00 is still clearing.")).toBeInTheDocument();
+    expect(screen.getByText("Not set up")).toBeInTheDocument();
   });
 
   it("ends the active Hotline", async () => {
