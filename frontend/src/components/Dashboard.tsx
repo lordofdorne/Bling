@@ -196,6 +196,34 @@ function formatPrice(cents: number) {
   }).format(cents / 100);
 }
 
+function formatPayoutDate(value?: string) {
+  if (!value) return "Paid monthly";
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  }).format(new Date(value));
+}
+
+function ledgerEntryLabel(kind: string) {
+  switch (kind) {
+    case "EARNING":
+      return "Paid call";
+    case "REFUND_REVERSAL":
+      return "Refund";
+    case "DISPUTE_DEBIT":
+      return "Dispute hold";
+    case "DISPUTE_RELEASE":
+      return "Dispute released";
+    case "PAYOUT_RESERVATION":
+      return "Monthly payout";
+    case "PAYOUT_RELEASE":
+      return "Payout returned";
+    default:
+      return "Balance adjustment";
+  }
+}
+
 function formatCallLength(seconds: number) {
   const minutes = seconds / 60;
   return `${Number(minutes.toFixed(2))} ${minutes === 1 ? "minute" : "minutes"}`;
@@ -615,48 +643,127 @@ function TierConfigurationForm({
 
 type SettingsSection = "profile" | "payments" | "payouts" | "account";
 
+const settingsSections: Array<{
+  id: SettingsSection;
+  label: string;
+  description: string;
+  group: "Creator" | "Money" | "Account";
+  icon: "people" | "wallet" | "settings";
+}> = [
+  {
+    id: "profile",
+    label: "Profile",
+    description: "Public name, biography, imagery, and discovery settings",
+    group: "Creator",
+    icon: "people",
+  },
+  {
+    id: "payments",
+    label: "Payments",
+    description: "Saved payment methods and paid-call activity",
+    group: "Money",
+    icon: "wallet",
+  },
+  {
+    id: "payouts",
+    label: "Creator payouts",
+    description: "Balance, payout account, and monthly deposits",
+    group: "Money",
+    icon: "wallet",
+  },
+  {
+    id: "account",
+    label: "Account & appearance",
+    description: "Sign-in details, channel address, and display theme",
+    group: "Account",
+    icon: "settings",
+  },
+];
+
 function CreatorPayoutSettings() {
   const payouts = usePayoutStatus();
   const payoutSession = usePayoutAccountSession();
   const creatorBalance = useCreatorBalance();
   const paymentActivity = usePaymentActivity();
 
+  const balance = creatorBalance.data?.balance;
+  const ledger = creatorBalance.data?.activity ?? [];
+  const setupLabel = payouts.data?.connected
+    ? payouts.data.transfersStatus === "active"
+      ? "Manage bank account"
+      : "Continue payout setup"
+    : "Set up payouts";
+
   return (
-    <section
-      className="show-card payout-card settings-section-card"
-      aria-label="Creator payouts"
-    >
-      <div className="settings-section-heading">
-        <span className="feature-icon">
-          <UiIcon name="wallet" size={21} />
-        </span>
-        <div>
-          <h2>Payouts</h2>
-          <p>Review your balance and manage where your monthly payout goes.</p>
+    <div className="payout-dashboard" aria-label="Creator payouts">
+      <div className="payout-toolbar">
+        <div className="payout-toolbar-status">
+          <span
+            className={`payout-status-dot ${payouts.data?.ready ? "ready" : ""}`}
+          />
+          <span>
+            <strong>
+              {payouts.isPending
+                ? "Checking payout account"
+                : payouts.isError
+                  ? "Payout status unavailable"
+                  : payouts.data.ready
+                    ? "Payouts enabled"
+                    : "Action required"}
+            </strong>
+            <small>
+              {payouts.data?.ready
+                ? "Your eligible balance is paid monthly"
+                : "Finish setup before your first bank deposit"}
+            </small>
+          </span>
         </div>
+        {!payoutSession.data && (
+          <button
+            className="button secondary compact"
+            type="button"
+            onClick={() => payoutSession.mutate()}
+            disabled={payoutSession.isPending || payouts.isPending}
+          >
+            <UiIcon name="settings" size={15} />
+            {payoutSession.isPending ? "Opening…" : setupLabel}
+          </button>
+        )}
       </div>
-      {creatorBalance.data && (
-        <Grid className="balance-summary" gap="sm" aria-label="Creator balance">
-          <GridItem span={4}>
-            <span>Available</span>
-            <strong>
-              {formatPrice(creatorBalance.data.balance.availableCents)}
-            </strong>
-          </GridItem>
-          <GridItem span={4}>
-            <span>Pending</span>
-            <strong>
-              {formatPrice(creatorBalance.data.balance.pendingCents)}
-            </strong>
-          </GridItem>
-          <GridItem span={4}>
-            <span>Total balance</span>
-            <strong>
-              {formatPrice(creatorBalance.data.balance.totalCents)}
-            </strong>
-          </GridItem>
-        </Grid>
-      )}
+
+      <section className="payout-balance-grid" aria-label="Creator balance">
+        <article className="payout-balance-primary">
+          <span>Available for next payout</span>
+          <strong>
+            {creatorBalance.isPending
+              ? "—"
+              : formatPrice(balance?.availableCents ?? 0)}
+          </strong>
+          <small>
+            Next payout: {formatPayoutDate(balance?.nextPayoutAt)}
+          </small>
+          <div className="payout-balance-accent" aria-hidden="true" />
+        </article>
+        <article>
+          <span>Pending clearance</span>
+          <strong>
+            {creatorBalance.isPending
+              ? "—"
+              : formatPrice(balance?.pendingCents ?? 0)}
+          </strong>
+          <small>Calls still inside the earnings hold</small>
+        </article>
+        <article>
+          <span>Total balance</span>
+          <strong>
+            {creatorBalance.isPending
+              ? "—"
+              : formatPrice(balance?.totalCents ?? 0)}
+          </strong>
+          <small>Available and pending earnings</small>
+        </article>
+      </section>
+
       {paymentActivity.data?.payoutFailure && (
         <div className="settings-alert" role="alert">
           <strong>Your latest payout needs attention.</strong>
@@ -666,98 +773,166 @@ function CreatorPayoutSettings() {
           </span>
         </div>
       )}
-      <div className="settings-divider" />
-      {payouts.isPending ? (
-        <div className="status">Checking payout status…</div>
-      ) : payouts.isError ? (
-        <div className="form-error" role="alert">
-          Unable to load payout status.
-        </div>
-      ) : payoutSession.data ? (
-        <PayoutSetup
-          session={payoutSession.data}
-          onExit={() => {
-            payoutSession.reset();
-            void payouts.refetch();
-          }}
-        />
-      ) : payouts.data.ready ? (
-        <div className="payout-ready-row">
-          <span className="feature-icon success">
-            <UiIcon name="check" size={20} />
-          </span>
-          <div>
-            <h3>Your payouts are ready.</h3>
-            <p>
-              You receive {100 - payouts.data.platformFeePercent}% of each paid
-              call, less half of the basic card fee (2.9% + $0.30). Bling pays
-              the other half. Available balances are sent monthly.
-            </p>
-            {payouts.data.externalAccountPresent && (
-              <div className="payout-bank-summary">
-                <strong>
-                  {payouts.data.externalAccountBankName || "Bank account"}
-                </strong>
-                <span>
-                  •••• {payouts.data.externalAccountLast4}
-                  {payouts.data.externalAccountCurrency
-                    ? ` · ${payouts.data.externalAccountCurrency.toUpperCase()}`
-                    : ""}
+
+      {payoutSession.data ? (
+        <section className="payout-setup-panel" aria-label="Secure payout setup">
+          <div className="payout-section-title">
+            <div>
+              <p className="eyebrow">Secure setup</p>
+              <h2>Connect your payout account</h2>
+            </div>
+            <button
+              className="text-button"
+              type="button"
+              onClick={() => payoutSession.reset()}
+            >
+              Close
+            </button>
+          </div>
+          <PayoutSetup
+            session={payoutSession.data}
+            onExit={() => {
+              payoutSession.reset();
+              void payouts.refetch();
+            }}
+          />
+        </section>
+      ) : (
+        <div className="payout-information-grid">
+          <section className="payout-destination" aria-label="Payout destination">
+            <div className="payout-section-title">
+              <div>
+                <p className="eyebrow">Payout destination</p>
+                <h2>Bank account</h2>
+              </div>
+              <span className={`status-chip ${payouts.data?.ready ? "success" : ""}`}>
+                {payouts.data?.ready ? "Verified" : "Setup needed"}
+              </span>
+            </div>
+            {payouts.data?.externalAccountPresent ? (
+              <div className="payout-bank-row">
+                <span className="payout-bank-icon">
+                  <UiIcon name="wallet" size={20} />
                 </span>
+                <span>
+                  <strong>
+                    {payouts.data.externalAccountBankName || "Bank account"}
+                  </strong>
+                  <small>
+                    •••• {payouts.data.externalAccountLast4}
+                    {payouts.data.externalAccountCurrency
+                      ? ` · ${payouts.data.externalAccountCurrency.toUpperCase()}`
+                      : ""}
+                  </small>
+                </span>
+              </div>
+            ) : (
+              <div className="payout-bank-empty">
+                <strong>No payout account ready</strong>
+                <span>Add your identity and bank details through Stripe.</span>
               </div>
             )}
             <button
-              className="button secondary compact"
+              className="text-button payout-manage-link"
               type="button"
               onClick={() => payoutSession.mutate()}
               disabled={payoutSession.isPending}
             >
-              {payoutSession.isPending
-                ? "Opening secure setup…"
-                : "Update bank account"}
+              {setupLabel} <UiIcon name="arrow" size={14} />
             </button>
-          </div>
-        </div>
-      ) : (
-        <div className="payout-setup-copy">
-          <div>
-            <h3>
-              {payouts.data.connected
-                ? payouts.data.transfersStatus === "active"
-                  ? "Add your bank account"
-                  : "Finish your payout setup"
-                : "Set up monthly payouts"}
-            </h3>
-            <p>
-              Paid tiers stay locked until this is done. Securely add your
-              identity and bank details to charge for calls. You receive{" "}
-              {100 - payouts.data.platformFeePercent}% of every paid call, less
-              half of the basic card fee (2.9% + $0.30). Bling pays the other
-              half.
-            </p>
-          </div>
-          <button
-            className="primary-button"
-            type="button"
-            onClick={() => payoutSession.mutate()}
-            disabled={payoutSession.isPending}
-          >
-            {payoutSession.isPending
-              ? "Opening secure setup…"
-              : payouts.data.connected
-                ? payouts.data.transfersStatus === "active"
-                  ? "Add bank account"
-                  : "Continue payout setup"
-                : "Set up payouts"}
-          </button>
-          {payoutSession.isError && (
-            <div className="form-error" role="alert">
-              {payoutSession.error.message}
+          </section>
+
+          <section className="payout-terms" aria-label="Earnings split">
+            <div className="payout-section-title">
+              <div>
+                <p className="eyebrow">Every paid call</p>
+                <h2>Your earnings split</h2>
+              </div>
+              <span className="payout-rate">80%</span>
             </div>
-          )}
+            <div className="payout-split-bar" aria-hidden="true">
+              <span />
+            </div>
+            <div className="payout-split-labels">
+              <span>
+                <strong>80%</strong> Creator share
+              </span>
+              <span>
+                <strong>20%</strong> Bling
+              </span>
+            </div>
+            <p>
+              You and Bling each pay half of the basic card fee. Bling absorbs
+              the extra cent when it cannot split evenly.
+            </p>
+          </section>
         </div>
       )}
-    </section>
+
+      <section className="payout-ledger" aria-label="Balance activity">
+        <div className="payout-section-title">
+          <div>
+            <p className="eyebrow">Balance activity</p>
+            <h2>Recent transactions</h2>
+          </div>
+          <span>{ledger.length} entries</span>
+        </div>
+        {creatorBalance.isError ? (
+          <div className="form-error" role="alert">
+            Unable to load your balance activity.
+          </div>
+        ) : ledger.length === 0 ? (
+          <div className="payout-ledger-empty">
+            <span className="payout-bank-icon">
+              <UiIcon name="calendar" size={20} />
+            </span>
+            <strong>No balance activity yet</strong>
+            <p>Completed paid calls and monthly payouts will appear here.</p>
+          </div>
+        ) : (
+          <div className="payout-table-wrap">
+            <table className="payout-table">
+              <thead>
+                <tr>
+                  <th scope="col">Transaction</th>
+                  <th scope="col">Date</th>
+                  <th scope="col">Status</th>
+                  <th scope="col">Amount</th>
+                </tr>
+              </thead>
+              <tbody>
+                {ledger.map((entry) => {
+                  const pending = new Date(entry.effectiveAt) > new Date();
+                  return (
+                    <tr key={entry.id}>
+                      <td>
+                        <strong>{ledgerEntryLabel(entry.kind)}</strong>
+                        <small>{entry.kind.replaceAll("_", " ")}</small>
+                      </td>
+                      <td>{formatPayoutDate(entry.createdAt)}</td>
+                      <td>
+                        <span className={`status-chip ${pending ? "" : "success"}`}>
+                          {pending ? "Pending" : "Posted"}
+                        </span>
+                      </td>
+                      <td className={entry.amountCents < 0 ? "negative" : "positive"}>
+                        {entry.amountCents > 0 ? "+" : ""}
+                        {formatPrice(entry.amountCents)}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+      {payoutSession.isError && (
+        <div className="form-error" role="alert">
+          {payoutSession.error.message}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -957,6 +1132,59 @@ function UserPaymentSettings() {
   );
 }
 
+function CreatorPaymentActivity() {
+  const paymentActivity = usePaymentActivity();
+
+  return (
+    <section
+      className="show-card settings-section-card"
+      aria-label="Payment activity"
+    >
+      <div className="settings-section-heading">
+        <span className="feature-icon">
+          <UiIcon name="calendar" size={21} />
+        </span>
+        <div>
+          <h2>Payment activity</h2>
+          <p>Review completed charges, refunds, and your creator share.</p>
+        </div>
+      </div>
+      {paymentActivity.isPending ? (
+        <div className="status">Loading payment activity…</div>
+      ) : paymentActivity.isError ? (
+        <div className="form-error" role="alert">
+          Unable to load payment activity.
+        </div>
+      ) : paymentActivity.data.activity.length === 0 ? (
+        <div className="settings-empty-row">
+          <strong>No paid calls yet</strong>
+          <span>Your first completed paid call will appear here.</span>
+        </div>
+      ) : (
+        <ol className="payment-activity-list settings-activity-list">
+          {paymentActivity.data.activity.map((activity) => (
+            <li key={activity.paymentAttemptId}>
+              <div>
+                <strong>{formatPrice(activity.amountCents)}</strong>
+                <span>{activityLabel(activity)}</span>
+              </div>
+              <span>
+                Creator share:{" "}
+                {formatPrice(
+                  activity.amountCents - activity.platformFeeCents,
+                )}
+                {activity.creatorProcessingFeeCents > 0
+                  ? ` · includes your ${formatPrice(activity.creatorProcessingFeeCents)} half of the card fee`
+                  : ""}
+              </span>
+            </li>
+          ))}
+        </ol>
+      )}
+    </section>
+  );
+}
+
 function CreatorAccountSettings({ username }: { username: string }) {
   const me = useMe();
   return (
@@ -1011,37 +1239,68 @@ function CreatorSettings({
   section,
   username,
 }: {
-  section: SettingsSection;
+  section: SettingsSection | null;
   username: string;
 }) {
-  const tabs: { id: SettingsSection; label: string }[] = [
-    { id: "profile", label: "Profile" },
-    { id: "payments", label: "Payments" },
-    { id: "payouts", label: "Payouts" },
-    { id: "account", label: "Account" },
-  ];
+  const active = settingsSections.find((item) => item.id === section);
+
+  if (!section) {
+    return (
+      <div className="settings-page settings-home">
+        <header className="settings-title">
+          <p className="eyebrow">Creator studio</p>
+          <h1>Settings</h1>
+          <p>Manage your channel, money, and account in one place.</p>
+        </header>
+        <div className="settings-directory">
+          {(["Creator", "Money", "Account"] as const).map((group) => (
+            <section key={group} aria-labelledby={`settings-${group}`}>
+              <h2 id={`settings-${group}`}>{group}</h2>
+              <div className="settings-directory-list">
+                {settingsSections
+                  .filter((item) => item.group === group)
+                  .map((item) => (
+                    <Link
+                      key={item.id}
+                      to={`/dashboard/settings/${item.id}`}
+                    >
+                      <span className="settings-directory-icon">
+                        <UiIcon name={item.icon} size={19} />
+                      </span>
+                      <span>
+                        <strong>{item.label}</strong>
+                        <small>{item.description}</small>
+                      </span>
+                      <UiIcon name="chevron" size={17} />
+                    </Link>
+                  ))}
+              </div>
+            </section>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="settings-page">
+    <div className="settings-page settings-detail">
       <header className="settings-title">
-        <p className="eyebrow">Creator studio</p>
-        <h1>Settings</h1>
-        <p>Manage your public presence, appearance, payouts, and account.</p>
+        <p className="settings-breadcrumb">
+          <Link to="/dashboard/settings">Settings</Link>
+          <span>/</span>
+          {active?.label}
+        </p>
+        <h1>{active?.label}</h1>
+        <p>{active?.description}</p>
       </header>
-      <nav className="settings-tabs" aria-label="Settings sections">
-        {tabs.map((tab) => (
-          <Link
-            key={tab.id}
-            to={`/dashboard/settings/${tab.id}`}
-            className={section === tab.id ? "active" : undefined}
-            aria-current={section === tab.id ? "page" : undefined}
-          >
-            {tab.label}
-          </Link>
-        ))}
-      </nav>
       <div className="settings-panel">
         {section === "profile" && <ProfileEditor />}
-        {section === "payments" && <UserPaymentSettings />}
+        {section === "payments" && (
+          <>
+            <UserPaymentSettings />
+            <CreatorPaymentActivity />
+          </>
+        )}
         {section === "payouts" && <CreatorPayoutSettings />}
         {section === "account" && (
           <CreatorAccountSettings username={username} />
@@ -1062,14 +1321,12 @@ export function Dashboard() {
   const createShow = useCreateShow();
   const startShow = useStartShow(username);
   const endShow = useEndShow(username);
-  const payouts = usePayoutStatus();
-  const paymentActivity = usePaymentActivity();
   const activeShow = currentShow.data;
   const settingsMatch = location.pathname.match(
     /^\/dashboard\/settings(?:\/(profile|payments|payouts|account))?\/?$/,
   );
   const isSettings = Boolean(settingsMatch);
-  const settingsSection = (settingsMatch?.[1] ?? "profile") as SettingsSection;
+  const settingsSection = (settingsMatch?.[1] ?? null) as SettingsSection | null;
 
   async function signOut() {
     try {
@@ -1109,170 +1366,135 @@ export function Dashboard() {
           </span>
         </div>
       </header>
-      <div className="studio-layout">
-        <aside className="studio-sidebar" aria-label="Creator navigation">
-          <div className="studio-nav-links">
-            <p className="nav-label">Your workspace</p>
-            <Link
-              className={!isSettings ? "active" : undefined}
-              to="/dashboard"
-            >
-              <UiIcon name="home" />
-              Overview
-            </Link>
-            <Link to="/dashboard#hotline-controls">
-              <UiIcon name="broadcast" />
-              Stream manager
-            </Link>
-            <Link to="/dashboard#payment-activity">
-              <UiIcon name="wallet" />
-              Payment activity
-            </Link>
-            <Link
-              className={
-                isSettings && settingsSection === "payouts"
-                  ? "active"
-                  : undefined
-              }
-              to="/dashboard/settings/payouts"
-            >
-              <UiIcon name="settings" />
-              Payout settings
-            </Link>
-            <Link
-              className={
-                isSettings && settingsSection === "payments"
-                  ? "active"
-                  : undefined
-              }
-              to="/dashboard/settings/payments"
-            >
-              <UiIcon name="wallet" />
-              Saved payments
-            </Link>
-            <div className="sidebar-rule" />
-            <p className="nav-label">Your channel</p>
-            <Link to={`/u/${username}`}>
-              <UiIcon name="people" />
-              View public page <UiIcon name="arrow" size={14} />
-            </Link>
-            <Link
-              className={
-                isSettings && settingsSection === "profile"
-                  ? "active"
-                  : undefined
-              }
-              to="/dashboard/settings/profile"
-            >
-              <UiIcon name="people" />
-              Public profile
-            </Link>
-            <Link
-              className={
-                isSettings && settingsSection === "account"
-                  ? "active"
-                  : undefined
-              }
-              to="/dashboard/settings/account"
-            >
-              <UiIcon name="settings" />
-              Account details
-            </Link>
-          </div>
-          <div className="studio-sidebar-bottom">
-            <div className="studio-tip">
-              <UiIcon name="spark" />
-              <strong>
-                A good show starts
-                <br />
-                with a conversation.
-              </strong>
-              <p>Share your link. Open the line. Make someone’s day.</p>
+      <div className={`studio-layout${isSettings ? " settings-layout" : ""}`}>
+        {isSettings ? (
+          <aside
+            className="studio-sidebar settings-sidebar"
+            aria-label="Settings navigation"
+          >
+            <div className="studio-nav-links">
+              <Link className="settings-back" to="/dashboard">
+                <UiIcon name="chevron" size={16} />
+                Back to studio
+              </Link>
+              <Link
+                className={settingsSection === null ? "active" : undefined}
+                to="/dashboard/settings"
+              >
+                <UiIcon name="settings" />
+                Settings
+              </Link>
+              {(["Creator", "Money", "Account"] as const).map((group) => (
+                <div className="settings-nav-group" key={group}>
+                  <p className="nav-label">{group}</p>
+                  {settingsSections
+                    .filter((item) => item.group === group)
+                    .map((item) => (
+                      <Link
+                        key={item.id}
+                        className={
+                          settingsSection === item.id ? "active" : undefined
+                        }
+                        to={`/dashboard/settings/${item.id}`}
+                      >
+                        <UiIcon name={item.icon} />
+                        {item.label}
+                      </Link>
+                    ))}
+                </div>
+              ))}
             </div>
-          </div>
-        </aside>
-        <main id="studio-main" className="dashboard-content">
+          </aside>
+        ) : (
+          <aside className="studio-sidebar" aria-label="Creator navigation">
+            <div className="studio-nav-links">
+              <p className="nav-label">Workspace</p>
+              <Link className="active" to="/dashboard">
+                <UiIcon name="broadcast" />
+                Studio
+              </Link>
+              <Link to="/dashboard/settings">
+                <UiIcon name="settings" />
+                Settings
+              </Link>
+              <div className="sidebar-rule" />
+              <p className="nav-label">Channel</p>
+              <Link to={`/u/${username}`}>
+                <UiIcon name="people" />
+                View public page <UiIcon name="arrow" size={14} />
+              </Link>
+            </div>
+            <div className="studio-sidebar-bottom">
+              <div className="studio-tip">
+                <UiIcon name="spark" />
+                <strong>Your channel is built one conversation at a time.</strong>
+                <p>Share your link, open the line, and make someone’s day.</p>
+              </div>
+            </div>
+          </aside>
+        )}
+        <main
+          id="studio-main"
+          className={`dashboard-content${isSettings ? " settings-content" : ""}`}
+        >
           {isSettings ? (
             <CreatorSettings section={settingsSection} username={username} />
           ) : (
             <>
               <div className="studio-title">
                 <div>
-                  <p className="eyebrow">Your channel, at a glance</p>
-                  <h1>Welcome, {username}.</h1>
+                  <p className="eyebrow">Creator studio</p>
+                  <h1>
+                    {activeShow?.status === "LIVE"
+                      ? "You’re live."
+                      : `Welcome, ${username}.`}
+                  </h1>
                   <p className="lede">
-                    A little preparation. A great conversation. Let’s make it
-                    happen.
+                    Manage your Hotline and connect with the people waiting to
+                    talk.
                   </p>
                 </div>
-                <Link
-                  className={`button secondary${controlSize === "lg" ? " button-lg" : ""}`}
-                  to={`/u/${username}`}
-                >
-                  View channel <UiIcon name="arrow" size={16} />
-                </Link>
               </div>
-              <Grid className="studio-overview" aria-label="Channel overview">
-                <GridItem as="article" span={4}>
-                  <span>
-                    <UiIcon name="broadcast" size={18} />
-                    Hotline status
-                  </span>
-                  <strong>
-                    {currentShow.isPending
-                      ? "Loading…"
-                      : currentShow.isError
-                        ? "Unavailable"
-                        : activeShow?.status === "LIVE"
-                          ? "On air"
-                          : activeShow?.status === "CREATED"
-                            ? "In preparation"
-                            : "Offline"}
-                  </strong>
-                  <small>
-                    {activeShow?.status === "LIVE"
-                      ? "Your audience can join the line"
-                      : "Your next conversation starts here"}
-                  </small>
+              <div className="studio-commandbar" aria-label="Channel status">
+                <div className="studio-status">
                   <span
-                    className={`metric-indicator ${activeShow?.status === "LIVE" ? "on-air" : ""}`}
+                    className={`studio-status-dot ${activeShow?.status === "LIVE" ? "on-air" : ""}`}
                   />
-                </GridItem>
-                <GridItem as="article" span={4}>
                   <span>
-                    <UiIcon name="wallet" size={18} />
-                    Payout account
+                    <strong>
+                      {currentShow.isPending
+                        ? "Checking status"
+                        : currentShow.isError
+                          ? "Status unavailable"
+                          : activeShow?.status === "LIVE"
+                            ? "Hotline live"
+                            : activeShow?.status === "CREATED"
+                              ? "Draft ready"
+                              : "Hotline offline"}
+                    </strong>
+                    <small>
+                      {activeShow?.status === "LIVE"
+                        ? "Your public line is open"
+                        : "Your public line is closed"}
+                    </small>
                   </span>
-                  <strong>
-                    {payouts.isPending
-                      ? "Loading…"
-                      : payouts.isError
-                        ? "Unavailable"
-                        : payouts.data.ready
-                          ? "Connected"
-                          : "Set up payouts"}
-                  </strong>
-                  <small>
-                    {payouts.data
-                      ? `${100 - payouts.data.platformFeePercent}% creator share, less half the basic card fee`
-                      : "Set up payouts to charge for calls"}
-                  </small>
-                </GridItem>
-                <GridItem as="article" span={4}>
-                  <span>
-                    <UiIcon name="people" size={18} />
-                    Grow your community
-                  </span>
-                  <strong>Make it personal.</strong>
-                  <small>Invite your audience to your public page</small>
-                  <UiIcon name="spark" size={34} />
-                </GridItem>
-              </Grid>
-              <Grid className="studio-panels">
-                <GridItem span={8} tablet={8} phone={4}>
+                </div>
+                <div className="studio-commandbar-actions">
+                  <Link className="text-button" to="/dashboard/settings">
+                    <UiIcon name="settings" size={16} /> Settings
+                  </Link>
+                  <Link
+                    className={`button secondary${controlSize === "lg" ? " button-lg" : ""}`}
+                    to={`/u/${username}`}
+                  >
+                    View channel <UiIcon name="arrow" size={16} />
+                  </Link>
+                </div>
+              </div>
+              <div className="studio-panels">
                   <section
                     id="hotline-controls"
-                    className="show-card controls-card"
+                    className="show-card controls-card studio-manager"
                     aria-label="Hotline controls"
                   >
                     <div className="panel-heading">
@@ -1319,16 +1541,9 @@ export function Dashboard() {
                       />
                     ) : (
                       <div className="studio-offline">
-                        <div className="studio-offline-art" aria-hidden="true">
-                          <span className="studio-ring ring-one" />
-                          <span className="studio-ring ring-two" />
-                          <span className="studio-mic">
-                            <UiIcon name="call" size={36} />
-                          </span>
-                          <span className="offline-art-label">
-                            YOUR NEXT GREAT CONVERSATION
-                          </span>
-                        </div>
+                        <span className="studio-offline-icon" aria-hidden="true">
+                          <UiIcon name="call" size={28} />
+                        </span>
                         <span className="offline-pill">OFF AIR</span>
                         <h2>No active Hotline</h2>
                         <p>
@@ -1359,59 +1574,7 @@ export function Dashboard() {
                       </div>
                     )}
                   </section>
-                </GridItem>
-                <GridItem span={4} tablet={8} phone={4}>
-                  <section
-                    id="payment-activity"
-                    className="show-card activity-card"
-                    aria-label="Payment activity"
-                  >
-                    <p className="eyebrow">Payment activity</p>
-                    <h2>Recent paid calls</h2>
-                    {paymentActivity.isPending ? (
-                      <div className="status">Loading payment activity…</div>
-                    ) : paymentActivity.isError ? (
-                      <div className="form-error" role="alert">
-                        Unable to load payment activity.
-                      </div>
-                    ) : paymentActivity.data.activity.length === 0 ? (
-                      <div className="payment-empty">
-                        <span className="feature-icon">
-                          <UiIcon name="wallet" size={22} />
-                        </span>
-                        <h3>No paid calls yet.</h3>
-                        <p>
-                          Your paid call activity will appear here after your
-                          first conversation.
-                        </p>
-                      </div>
-                    ) : (
-                      <ol className="payment-activity-list">
-                        {paymentActivity.data.activity.map((activity) => (
-                          <li key={activity.paymentAttemptId}>
-                            <div>
-                              <strong>
-                                {formatPrice(activity.amountCents)}
-                              </strong>
-                              <span>{activityLabel(activity)}</span>
-                            </div>
-                            <span>
-                              Creator share:{" "}
-                              {formatPrice(
-                                activity.amountCents -
-                                  activity.platformFeeCents,
-                              )}
-                              {activity.creatorProcessingFeeCents > 0
-                                ? ` · includes your ${formatPrice(activity.creatorProcessingFeeCents)} half of the card fee`
-                                : ""}
-                            </span>
-                          </li>
-                        ))}
-                      </ol>
-                    )}
-                  </section>
-                </GridItem>
-              </Grid>
+              </div>
             </>
           )}
           {logout.isError && (

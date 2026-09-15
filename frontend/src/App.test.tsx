@@ -429,7 +429,9 @@ describe("App routes", () => {
       await screen.findByRole("button", { name: "Start Hotline" }),
     );
 
-    expect(await screen.findByText("Hotline live")).toBeInTheDocument();
+    expect(
+      await screen.findByRole("heading", { name: "Your audience can join." }),
+    ).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: "End Hotline" }),
     ).toBeInTheDocument();
@@ -586,7 +588,7 @@ describe("App routes", () => {
       name: "Standard pricing",
     });
     expect(
-      within(pricing).getByRole("option", { name: "Paid" }),
+      await within(pricing).findByRole("option", { name: "Paid" }),
     ).not.toBeDisabled();
     expect(
       screen.queryByRole("textbox", { name: "Standard price in USD" }),
@@ -658,14 +660,14 @@ describe("App routes", () => {
       }),
     );
 
-    renderAt("/dashboard");
+    renderAt("/dashboard/settings/payments");
     expect(await screen.findByText("Refunded")).toBeInTheDocument();
     expect(
       screen.getByText(
         "Creator share: $19.49 · includes your $0.51 half of the card fee",
       ),
     ).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("link", { name: "Payout settings" }));
+    fireEvent.click(screen.getByRole("link", { name: "Creator payouts" }));
     expect(
       await screen.findByRole("heading", { name: "Your payouts are ready." }),
     ).toBeInTheDocument();
