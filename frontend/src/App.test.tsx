@@ -1,11 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import {
-  fireEvent,
-  render,
-  screen,
-  waitFor,
-  within,
-} from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { App } from "./App";
 
@@ -498,18 +493,18 @@ describe("App routes", () => {
       }),
     );
 
+    const user = userEvent.setup();
     renderAt("/dashboard");
-    const pricing = await screen.findByRole("combobox", {
-      name: "Standard pricing",
-    });
+    await user.click(
+      await screen.findByRole("combobox", { name: "Standard pricing" }),
+    );
     expect(
-      within(pricing).getByRole("option", { name: "Free" }),
-    ).not.toBeDisabled();
+      await screen.findByRole("option", { name: "Free" }),
+    ).not.toHaveAttribute("data-disabled");
     expect(
-      within(pricing).getByRole("option", {
-        name: "Paid (set up payouts first)",
-      }),
-    ).toBeDisabled();
+      screen.getByRole("option", { name: "Paid (set up payouts first)" }),
+    ).toHaveAttribute("data-disabled");
+    await user.keyboard("{Escape}");
     expect(
       await screen.findByText("Set up payouts to charge for calls."),
     ).toBeInTheDocument();
@@ -581,18 +576,16 @@ describe("App routes", () => {
       }),
     );
 
+    const user = userEvent.setup();
     renderAt("/dashboard");
-    const pricing = await screen.findByRole("combobox", {
-      name: "Standard pricing",
-    });
-    expect(
-      within(pricing).getByRole("option", { name: "Paid" }),
-    ).not.toBeDisabled();
     expect(
       screen.queryByRole("textbox", { name: "Standard price in USD" }),
     ).not.toBeInTheDocument();
 
-    fireEvent.change(pricing, { target: { value: "paid" } });
+    await user.click(
+      await screen.findByRole("combobox", { name: "Standard pricing" }),
+    );
+    await user.click(await screen.findByRole("option", { name: "Paid" }));
 
     const price = await screen.findByRole("textbox", {
       name: "Standard price in USD",
@@ -754,7 +747,7 @@ describe("App routes", () => {
     // The hero leads with what can be paid out, not the gross balance.
     expect(screen.getByText("$75.00")).toBeInTheDocument();
     expect(screen.getByText("$25.00 is still clearing.")).toBeInTheDocument();
-    expect(screen.getByText("Not set up")).toBeInTheDocument();
+    expect(screen.getAllByText("Not set up").length).toBeGreaterThan(0);
   });
 
   it("ends the active Hotline", async () => {
