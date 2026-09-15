@@ -199,7 +199,7 @@ export function StudioShell({
         <Button
           variant="ghost"
           size="icon"
-          className="lg:hidden"
+          className="laptop:hidden"
           aria-label="Toggle studio navigation"
           aria-expanded={menuOpen}
           onClick={() => setMenuOpen(!menuOpen)}
@@ -226,7 +226,7 @@ export function StudioShell({
 
       <div className="flex">
         <aside
-          className="bg-card sticky top-[72px] hidden h-[calc(100vh-72px)] w-[260px] shrink-0 overflow-y-auto border-r lg:block"
+          className="bg-card sticky top-[72px] hidden h-[calc(100vh-72px)] w-[260px] shrink-0 overflow-y-auto border-r laptop:block"
           aria-label="Creator navigation"
         >
           {nav}

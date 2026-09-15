@@ -25,6 +25,7 @@ import { ViewerShell } from "./ViewerShell";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { Grid, GridItem } from "./Grid";
 import { cn } from "@/lib/utils";
 
 const categoryIcons = [Compass, Phone, Music, Gamepad2, Sparkles, Code2];
@@ -148,69 +149,81 @@ export function DiscoverPage({
 
       {view === "home" && !query && category === "All" && feature && (
         <Card
-          className="mb-10 grid gap-0 overflow-hidden border-[var(--mauve-border)] bg-[var(--mauve-surface)] py-0 md:grid-cols-[1.1fr_0.9fr]"
+          className="mb-10 gap-0 overflow-hidden border-[var(--mauve-border)] bg-[var(--mauve-surface)] py-0"
           aria-label="Featured creator"
         >
-          <div className="flex flex-col gap-5 p-6 md:p-8">
-            <div className="flex items-center gap-3">
-              <LivePill live />
-              <span className="text-muted-foreground text-sm">
-                In the spotlight
-              </span>
-            </div>
-            <h2 className="text-3xl leading-tight font-extrabold tracking-tight md:text-4xl">
-              Less scrolling.
-              <br />
-              More{" "}
-              <em className="text-[var(--sand-text)] not-italic">
-                connecting.
-              </em>
-            </h2>
-            <p className="text-muted-foreground max-w-prose text-sm">
-              {feature.bio ||
-                `The line is open. Join ${feature.displayName} for a real conversation.`}
-            </p>
-            <div className="flex items-center gap-3">
-              <CreatorAvatar profile={feature} />
-              <span>
-                <strong className="block text-sm font-semibold">
-                  {feature.displayName}
-                </strong>
-                <small className="text-muted-foreground text-xs">
-                  {feature.category} · {formatCount(feature.followerCount)}{" "}
-                  followers
-                </small>
-              </span>
-            </div>
-            <div className="flex flex-wrap items-center gap-3">
-              <Button asChild size="lg">
-                <Link to={`/u/${feature.username}`}>
-                  <Phone className="size-4" />
-                  Drop into the conversation
-                  <ArrowRight className="size-4" />
-                </Link>
-              </Button>
-              <FollowButton profile={feature} />
-            </div>
-          </div>
-          <div className="relative min-h-[240px]">
-            <CreatorCover profile={feature} />
-            <div className="absolute inset-0 bg-gradient-to-t from-black/70 to-transparent" />
-            <span className="absolute right-4 bottom-5 left-5 text-sm text-white/85">
-              A seat at the conversation.
-              <br />
-              <strong className="text-white">
-                And it has your name on it.
-              </strong>
-            </span>
-            <Badge
-              variant="secondary"
-              className="absolute top-4 right-4 gap-2 rounded-full px-3 py-1.5 text-[10px] tracking-[0.12em] uppercase"
+          <Grid gap="none">
+            <GridItem
+              span={7}
+              tablet={8}
+              phone={4}
+              className="flex flex-col gap-5 p-6 md:p-8"
             >
-              <span className="bg-primary size-1.5 animate-pulse rounded-full" />
-              The hotline is open
-            </Badge>
-          </div>
+              <div className="flex items-center gap-3">
+                <LivePill live />
+                <span className="text-muted-foreground text-sm">
+                  In the spotlight
+                </span>
+              </div>
+              <h2 className="text-3xl leading-tight font-extrabold tracking-tight md:text-4xl">
+                Less scrolling.
+                <br />
+                More{" "}
+                <em className="text-[var(--sand-text)] not-italic">
+                  connecting.
+                </em>
+              </h2>
+              <p className="text-muted-foreground max-w-prose text-sm">
+                {feature.bio ||
+                  `The line is open. Join ${feature.displayName} for a real conversation.`}
+              </p>
+              <div className="flex items-center gap-3">
+                <CreatorAvatar profile={feature} />
+                <span>
+                  <strong className="block text-sm font-semibold">
+                    {feature.displayName}
+                  </strong>
+                  <small className="text-muted-foreground text-xs">
+                    {feature.category} · {formatCount(feature.followerCount)}{" "}
+                    followers
+                  </small>
+                </span>
+              </div>
+              <div className="flex flex-wrap items-center gap-3">
+                <Button asChild size="lg">
+                  <Link to={`/u/${feature.username}`}>
+                    <Phone className="size-4" />
+                    Drop into the conversation
+                    <ArrowRight className="size-4" />
+                  </Link>
+                </Button>
+                <FollowButton profile={feature} />
+              </div>
+            </GridItem>
+            <GridItem
+              span={5}
+              tablet={8}
+              phone={4}
+              className="relative min-h-[240px]"
+            >
+              <CreatorCover profile={feature} />
+              <div className="absolute inset-0 bg-gradient-to-t from-black/70 to-transparent" />
+              <span className="absolute right-4 bottom-5 left-5 text-sm text-white/85">
+                A seat at the conversation.
+                <br />
+                <strong className="text-white">
+                  And it has your name on it.
+                </strong>
+              </span>
+              <Badge
+                variant="secondary"
+                className="absolute top-4 right-4 gap-2 rounded-full px-3 py-1.5 text-[10px] tracking-[0.12em] uppercase"
+              >
+                <span className="bg-primary size-1.5 animate-pulse rounded-full" />
+                The hotline is open
+              </Badge>
+            </GridItem>
+          </Grid>
         </Card>
       )}
 
@@ -326,11 +339,13 @@ export function DiscoverPage({
           </Card>
         ) : items.length ? (
           <>
-            <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
+            <Grid>
               {items.map((creator) => (
-                <CreatorCard creator={creator} key={creator.id} />
+                <GridItem key={creator.id} span={4} tablet={4} phone={4}>
+                  <CreatorCard creator={creator} />
+                </GridItem>
               ))}
-            </div>
+            </Grid>
             {discovery.hasNextPage && (
               <div className="mt-8 flex justify-center">
                 <Button

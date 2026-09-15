@@ -192,7 +192,7 @@ export function ViewerShell({ children }: { children: ReactNode }) {
           <Button
             variant="ghost"
             size="icon"
-            className="lg:hidden"
+            className="laptop:hidden"
             aria-label="Toggle navigation"
             aria-expanded={menuOpen}
             aria-controls="viewer-sidebar"
@@ -300,7 +300,7 @@ export function ViewerShell({ children }: { children: ReactNode }) {
       <div className="flex">
         <aside
           id="viewer-sidebar"
-          className="bg-card sticky top-[72px] hidden h-[calc(100vh-72px)] w-[260px] shrink-0 overflow-y-auto border-r lg:block"
+          className="bg-card sticky top-[72px] hidden h-[calc(100vh-72px)] w-[260px] shrink-0 overflow-y-auto border-r laptop:block"
           aria-label="Main navigation"
         >
           <SidebarNav onNavigate={() => setMenuOpen(false)} />
