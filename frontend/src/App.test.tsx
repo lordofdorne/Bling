@@ -667,10 +667,97 @@ describe("App routes", () => {
     ).toBeInTheDocument();
     fireEvent.click(screen.getByRole("link", { name: "Payout settings" }));
     expect(
-      await screen.findByRole("heading", { name: "Your payouts are ready." }),
+      await screen.findByRole("heading", { name: "Payout destination" }),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText("Payout setup: Ready")).toBeInTheDocument();
+    expect(
+      screen.getByText(/keep 80% of every paid call/i),
+    ).toBeInTheDocument();
+  });
+
+  it("renders the balance ledger on the payouts dashboard", async () => {
+    const creator = {
+      id: "user-1",
+      username: "alice",
+      email: "alice@example.com",
+      createdAt: "2026-08-24T12:00:00Z",
+    };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        const path = String(input);
+        if (path === "/api/v1/me")
+          return Response.json({ data: { user: creator } });
+        if (path === "/api/v1/shows/current")
+          return new Response(
+            JSON.stringify({ error: { code: "SHOW_NOT_FOUND" } }),
+            { status: 404, headers: { "Content-Type": "application/json" } },
+          );
+        if (path === "/api/v1/payouts/account")
+          return Response.json({
+            data: {
+              payouts: {
+                connected: false,
+                transfersStatus: "",
+                bankPayoutsStatus: "",
+                externalAccountPresent: false,
+                chargesEnabled: false,
+                payoutsEnabled: false,
+                detailsSubmitted: false,
+                ready: false,
+                requirementsDue: [],
+                platformFeePercent: 20,
+                creatorProcessingFeePercent: 50,
+              },
+            },
+          });
+        if (path === "/api/v1/payouts/balance")
+          return Response.json({
+            data: {
+              balance: {
+                currency: "usd",
+                totalCents: 10000,
+                pendingCents: 2500,
+                availableCents: 7500,
+              },
+              activity: [
+                {
+                  id: 2,
+                  kind: "EARNING",
+                  amountCents: 1949,
+                  currency: "usd",
+                  effectiveAt: "2026-09-12T18:30:00Z",
+                  createdAt: "2026-09-12T18:30:00Z",
+                },
+                {
+                  id: 1,
+                  kind: "PAYOUT_RESERVATION",
+                  amountCents: -2500,
+                  currency: "usd",
+                  effectiveAt: "2026-09-01T09:00:00Z",
+                  createdAt: "2026-09-01T09:00:00Z",
+                },
+              ],
+            },
+          });
+        if (path === "/api/v1/payments/activity")
+          return Response.json({ data: { activity: [], payoutFailure: null } });
+        return new Response(null, { status: 404 });
+      }),
+    );
+
+    renderAt("/dashboard/settings/payouts");
+
+    expect(await screen.findByText("Call earning")).toBeInTheDocument();
+    expect(screen.getByText("+$19.49")).toBeInTheDocument();
+    expect(screen.getByText("Reserved for payout")).toBeInTheDocument();
+    expect(screen.getByText("−$25.00")).toBeInTheDocument();
+    // The balance meter reports the available share of the total.
+    expect(
+      screen.getByText("75% of your balance is ready to send"),
     ).toBeInTheDocument();
     expect(
-      screen.getByText(/receive 80% of each paid call/i),
+      screen.getByLabelText("Payout setup: Not set up"),
     ).toBeInTheDocument();
   });
 

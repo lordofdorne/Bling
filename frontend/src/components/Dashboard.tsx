@@ -613,86 +613,118 @@ function TierConfigurationForm({
 
 type SettingsSection = "profile" | "payments" | "payouts" | "account";
 
+// The ledger kinds the balance API can return. Each is money the creator can
+// see moving, so each gets a plain-language label rather than the raw enum.
+const LEDGER_KINDS: Record<
+  string,
+  {
+    label: string;
+    icon: "call" | "wallet" | "arrow" | "info" | "check" | "settings";
+  }
+> = {
+  EARNING: { label: "Call earning", icon: "call" },
+  REFUND_REVERSAL: { label: "Refund reversal", icon: "arrow" },
+  DISPUTE_DEBIT: { label: "Dispute hold", icon: "info" },
+  DISPUTE_RELEASE: { label: "Dispute released", icon: "check" },
+  PAYOUT_RESERVATION: { label: "Reserved for payout", icon: "wallet" },
+  PAYOUT_RELEASE: { label: "Returned to balance", icon: "wallet" },
+  ADJUSTMENT: { label: "Adjustment", icon: "settings" },
+};
+
+function ledgerKind(kind: string) {
+  return (
+    LEDGER_KINDS[kind] ?? { label: kind.toLowerCase(), icon: "wallet" as const }
+  );
+}
+
+function formatLedgerDate(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return new Intl.DateTimeFormat("en-US", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  }).format(date);
+}
+
+function formatSignedPrice(cents: number) {
+  return `${cents < 0 ? "−" : "+"}${formatPrice(Math.abs(cents))}`;
+}
+
+function PayoutStat({
+  icon,
+  label,
+  value,
+  note,
+  children,
+}: {
+  icon: "wallet" | "calendar" | "spark" | "call";
+  label: string;
+  value: string;
+  note: string;
+  children?: React.ReactNode;
+}) {
+  return (
+    <article className="payout-stat">
+      <span className="payout-stat-label">
+        <UiIcon name={icon} size={16} />
+        {label}
+      </span>
+      <strong>{value}</strong>
+      {children}
+      <small>{note}</small>
+    </article>
+  );
+}
+
 function CreatorPayoutSettings() {
   const payouts = usePayoutStatus();
   const payoutSession = usePayoutAccountSession();
   const creatorBalance = useCreatorBalance();
   const paymentActivity = usePaymentActivity();
+  const balance = creatorBalance.data?.balance;
+  const activity = creatorBalance.data?.activity ?? [];
+  const ready = payouts.data?.ready === true;
+  // The share of the balance Bling can send today. Only meaningful while the
+  // total is positive: a negative balance carries against future earnings.
+  const readyShare =
+    balance && balance.totalCents > 0
+      ? Math.min(
+          100,
+          Math.max(
+            0,
+            Math.round((balance.availableCents / balance.totalCents) * 100),
+          ),
+        )
+      : null;
+  const statusLabel = payouts.isPending
+    ? "Checking…"
+    : payouts.isError
+      ? "Unavailable"
+      : ready
+        ? "Ready"
+        : payouts.data?.connected
+          ? "Action needed"
+          : "Not set up";
 
-  return (
-    <section
-      className="show-card payout-card settings-section-card"
-      aria-label="Creator payouts"
-    >
-      <div className="settings-section-heading">
-        <span className="feature-icon">
-          <UiIcon name="wallet" size={21} />
-        </span>
-        <div>
-          <h2>Payouts</h2>
-          <p>Review your balance and manage where your monthly payout goes.</p>
-        </div>
-      </div>
-      {creatorBalance.data && (
-        <div className="balance-summary" aria-label="Creator balance">
-          <div>
-            <span>Available</span>
-            <strong>
-              {formatPrice(creatorBalance.data.balance.availableCents)}
-            </strong>
-          </div>
-          <div>
-            <span>Pending</span>
-            <strong>
-              {formatPrice(creatorBalance.data.balance.pendingCents)}
-            </strong>
-          </div>
-          <div>
-            <span>Total balance</span>
-            <strong>
-              {formatPrice(creatorBalance.data.balance.totalCents)}
-            </strong>
-          </div>
-        </div>
-      )}
-      {paymentActivity.data?.payoutFailure && (
-        <div className="settings-alert" role="alert">
-          <strong>Your latest payout needs attention.</strong>
-          <span>
-            Update your payout details before another bank transfer can be sent.
-            Reference: {paymentActivity.data.payoutFailure.failureCode}
-          </span>
-        </div>
-      )}
-      <div className="settings-divider" />
-      {payouts.isPending ? (
-        <div className="status">Checking payout status…</div>
-      ) : payouts.isError ? (
+  function destination() {
+    if (payouts.isPending)
+      return <div className="status">Checking payout status…</div>;
+    if (payouts.isError)
+      return (
         <div className="form-error" role="alert">
           Unable to load payout status.
         </div>
-      ) : payoutSession.data ? (
-        <PayoutSetup
-          session={payoutSession.data}
-          onExit={() => {
-            payoutSession.reset();
-            void payouts.refetch();
-          }}
-        />
-      ) : payouts.data.ready ? (
-        <div className="payout-ready-row">
-          <span className="feature-icon success">
-            <UiIcon name="check" size={20} />
-          </span>
-          <div>
-            <h3>Your payouts are ready.</h3>
-            <p>
-              You receive {100 - payouts.data.platformFeePercent}% of each paid
-              call, less half of the basic card fee (2.9% + $0.30). Bling pays
-              the other half. Available balances are sent monthly.
-            </p>
-            {payouts.data.externalAccountPresent && (
-              <div className="payout-bank-summary">
+      );
+    if (ready)
+      return (
+        <>
+          {payouts.data.externalAccountPresent ? (
+            <div className="payout-bank-summary">
+              <span className="feature-icon">
+                <UiIcon name="wallet" size={20} />
+              </span>
+              <div>
                 <strong>
                   {payouts.data.externalAccountBankName || "Bank account"}
                 </strong>
@@ -703,56 +735,209 @@ function CreatorPayoutSettings() {
                     : ""}
                 </span>
               </div>
-            )}
-            <button
-              className="button secondary compact"
-              type="button"
-              onClick={() => payoutSession.mutate()}
-              disabled={payoutSession.isPending}
-            >
-              {payoutSession.isPending
-                ? "Opening secure setup…"
-                : "Update bank account"}
-            </button>
-          </div>
-        </div>
-      ) : (
-        <div className="payout-setup-copy">
-          <div>
-            <h3>
-              {payouts.data.connected
-                ? payouts.data.transfersStatus === "active"
-                  ? "Add your bank account"
-                  : "Finish your payout setup"
-                : "Set up monthly payouts"}
-            </h3>
-            <p>
-              Paid tiers stay locked until this is done. Securely add your
-              identity and bank details to charge for calls. You receive{" "}
-              {100 - payouts.data.platformFeePercent}% of every paid call, less
-              half of the basic card fee (2.9% + $0.30). Bling pays the other
-              half.
-            </p>
-          </div>
+            </div>
+          ) : (
+            <p>Your identity is verified and transfers are active.</p>
+          )}
+          <p className="payout-split-note">
+            You keep {100 - payouts.data.platformFeePercent}% of every paid
+            call, less half of the basic card fee (2.9% + $0.30). Bling pays the
+            other half.
+          </p>
           <button
-            className="primary-button"
+            className="button secondary"
             type="button"
             onClick={() => payoutSession.mutate()}
             disabled={payoutSession.isPending}
           >
             {payoutSession.isPending
               ? "Opening secure setup…"
-              : payouts.data.connected
-                ? payouts.data.transfersStatus === "active"
-                  ? "Add bank account"
-                  : "Continue payout setup"
-                : "Set up payouts"}
+              : "Update bank account"}
           </button>
-          {payoutSession.isError && (
-            <div className="form-error" role="alert">
-              {payoutSession.error.message}
+        </>
+      );
+    return (
+      <>
+        <h4>
+          {payouts.data.connected
+            ? payouts.data.transfersStatus === "active"
+              ? "Add your bank account"
+              : "Finish your payout setup"
+            : "Set up monthly payouts"}
+        </h4>
+        <p>
+          Paid tiers stay locked until this is done. Securely add your identity
+          and bank details to charge for calls. You keep{" "}
+          {100 - payouts.data.platformFeePercent}% of every paid call, less half
+          of the basic card fee (2.9% + $0.30). Bling pays the other half.
+        </p>
+        <button
+          className="primary-button"
+          type="button"
+          onClick={() => payoutSession.mutate()}
+          disabled={payoutSession.isPending}
+        >
+          {payoutSession.isPending
+            ? "Opening secure setup…"
+            : payouts.data.connected
+              ? payouts.data.transfersStatus === "active"
+                ? "Add bank account"
+                : "Continue payout setup"
+              : "Set up payouts"}
+        </button>
+      </>
+    );
+  }
+
+  return (
+    <section className="payouts-page" aria-label="Creator payouts">
+      <header className="payouts-header">
+        <div>
+          <p className="eyebrow">Payouts</p>
+          <h2>Your earnings</h2>
+          <p>
+            Track what you have earned, what is still clearing, and where your
+            monthly transfer lands.
+          </p>
+        </div>
+        <span
+          className={`payout-status-pill ${ready ? "ready" : "pending"}`}
+          aria-label={`Payout setup: ${statusLabel}`}
+        >
+          <UiIcon name={ready ? "check" : "info"} size={15} />
+          {statusLabel}
+        </span>
+      </header>
+
+      {paymentActivity.data?.payoutFailure && (
+        <div className="settings-alert" role="alert">
+          <strong>Your latest payout needs attention.</strong>
+          <span>
+            Update your payout details before another bank transfer can be sent.
+            Reference: {paymentActivity.data.payoutFailure.failureCode}
+          </span>
+        </div>
+      )}
+
+      {creatorBalance.isError && (
+        <p className="payout-balance-note">
+          Your balance is unavailable right now. Payout setup below still works.
+        </p>
+      )}
+      <div className="payout-stat-grid">
+        <PayoutStat
+          icon="wallet"
+          label="Available"
+          value={balance ? formatPrice(balance.availableCents) : "—"}
+          note="Ready for your next transfer"
+        />
+        <PayoutStat
+          icon="spark"
+          label="Still clearing"
+          value={balance ? formatPrice(balance.pendingCents) : "—"}
+          note="Clears after the earnings hold"
+        />
+        <PayoutStat
+          icon="call"
+          label="Total balance"
+          value={balance ? formatPrice(balance.totalCents) : "—"}
+          note={
+            readyShare === null
+              ? "Available plus still clearing"
+              : `${readyShare}% of your balance is ready to send`
+          }
+        >
+          {readyShare !== null && (
+            <div className="payout-meter">
+              <span
+                className="payout-meter-fill"
+                style={{ width: `${readyShare}%` }}
+              />
             </div>
           )}
+        </PayoutStat>
+        <PayoutStat
+          icon="calendar"
+          label="Next payout"
+          value={
+            balance?.nextPayoutAt
+              ? formatLedgerDate(balance.nextPayoutAt)
+              : "Not scheduled"
+          }
+          note={
+            ready
+              ? "Eligible balances are sent monthly"
+              : "Starts after payout setup"
+          }
+        />
+      </div>
+
+      {payoutSession.data ? (
+        <div className="payout-panel">
+          <PayoutSetup
+            session={payoutSession.data}
+            onExit={() => {
+              payoutSession.reset();
+              void payouts.refetch();
+            }}
+          />
+        </div>
+      ) : (
+        <div className="payouts-columns">
+          <section className="payout-panel" aria-label="Balance activity">
+            <div className="payout-panel-heading">
+              <h3>Balance activity</h3>
+              <span>Every move in and out of your balance</span>
+            </div>
+            {creatorBalance.isPending ? (
+              <div className="status">Loading your balance activity…</div>
+            ) : activity.length === 0 ? (
+              <div className="payout-activity-empty">
+                <span className="feature-icon">
+                  <UiIcon name="call" size={20} />
+                </span>
+                <strong>No balance activity yet.</strong>
+                <span>
+                  Your share of a paid call lands here once the call goes live.
+                </span>
+              </div>
+            ) : (
+              <ul className="payout-activity-list">
+                {activity.map((entry) => {
+                  const kind = ledgerKind(entry.kind);
+                  return (
+                    <li key={entry.id}>
+                      <span className="feature-icon">
+                        <UiIcon name={kind.icon} size={18} />
+                      </span>
+                      <div>
+                        <strong>{kind.label}</strong>
+                        <span>{formatLedgerDate(entry.effectiveAt)}</span>
+                      </div>
+                      <span
+                        className={`payout-activity-amount ${entry.amountCents < 0 ? "debit" : "credit"}`}
+                      >
+                        {formatSignedPrice(entry.amountCents)}
+                      </span>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </section>
+
+          <aside className="payout-panel" aria-label="Payout destination">
+            <div className="payout-panel-heading">
+              <h3>Payout destination</h3>
+              <span>Where Bling sends your monthly transfer</span>
+            </div>
+            {destination()}
+            {payoutSession.isError && (
+              <div className="form-error" role="alert">
+                {payoutSession.error.message}
+              </div>
+            )}
+          </aside>
         </div>
       )}
     </section>
