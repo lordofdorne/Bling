@@ -123,6 +123,7 @@
 
   --icon-button: 36px;
   --touch-min: 44px;
+  --profile-avatar-size: 80px;
 
   /* 12-col adaptive grid. Phone 4, tablet 8, laptop+ 12. */
   --grid-columns: 12;

@@ -14,6 +14,11 @@ import (
 
 type Store struct{ Pool *pgxpool.Pool }
 
+type Avatar struct {
+	ContentType string
+	Data        []byte
+}
+
 func NewStore(pool *pgxpool.Pool) *Store { return &Store{Pool: pool} }
 
 const profileColumns = `p.user_id,p.username,p.display_name,p.bio,p.avatar_url,p.cover_url,p.category,p.published,p.follower_count,p.is_live,p.live_show_id,p.live_started_at`
@@ -34,6 +39,23 @@ func (s *Store) OwnProfile(ctx context.Context, id string) (Profile, error) {
 }
 func (s *Store) SaveProfile(ctx context.Context, id string, input ProfileInput) (Profile, error) {
 	return scanProfile(s.Pool.QueryRow(ctx, `UPDATE creator_profiles p SET display_name=$2,bio=$3,avatar_url=$4,cover_url=$5,category=$6,published=$7 OR is_live,updated_at=clock_timestamp() WHERE user_id=$1 RETURNING `+profileColumns, id, input.DisplayName, input.Bio, input.AvatarURL, input.CoverURL, input.Category, input.Published))
+}
+func (s *Store) SaveAvatar(ctx context.Context, id, contentType string, data []byte) error {
+	_, err := s.Pool.Exec(ctx, `INSERT INTO creator_profile_avatars(user_id,content_type,image_data)
+VALUES($1,$2,$3) ON CONFLICT(user_id) DO UPDATE SET content_type=EXCLUDED.content_type,
+image_data=EXCLUDED.image_data,updated_at=clock_timestamp()`, id, contentType, data)
+	return err
+}
+func (s *Store) Avatar(ctx context.Context, username, ownerID string) (Avatar, error) {
+	var avatar Avatar
+	err := s.Pool.QueryRow(ctx, `SELECT a.content_type,a.image_data FROM creator_profile_avatars a
+JOIN creator_profiles p ON p.user_id=a.user_id
+WHERE p.username=$1 AND p.avatar_url='/api/v1/creators/'||p.username||'/avatar'
+AND (p.published OR p.user_id=NULLIF($2,'')::uuid)`, username, ownerID).Scan(&avatar.ContentType, &avatar.Data)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return avatar, ErrNotFound
+	}
+	return avatar, err
 }
 func (s *Store) List(ctx context.Context, o ListOptions, userID string) (Page, error) {
 	result := Page{Items: []Profile{}}

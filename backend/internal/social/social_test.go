@@ -10,6 +10,11 @@ func TestProfileValidation(t *testing.T) {
 	if err := valid.Validate(); err != nil {
 		t.Fatal(err)
 	}
+	internal := valid
+	internal.AvatarURL = "/api/v1/creators/creator_1/avatar"
+	if err := internal.Validate(); err != nil {
+		t.Fatalf("rejected an internal avatar URL: %v", err)
+	}
 	for _, url := range []string{"javascript:alert(1)", "http://example.com/a", "https://user:secret@example.com/a", "//example.com/a"} {
 		p := valid
 		p.AvatarURL = url
@@ -17,7 +22,20 @@ func TestProfileValidation(t *testing.T) {
 			t.Errorf("accepted unsafe URL %s", url)
 		}
 	}
+	for _, path := range []string{"/api/v1/creators/x/avatar", "/api/v1/creators/creator_1/avatar/extra", "/api/v1/creators/creator_1/cover"} {
+		p := valid
+		p.AvatarURL = path
+		if p.Validate() == nil {
+			t.Errorf("accepted invalid internal avatar path %s", path)
+		}
+	}
 	p := valid
+	p.AvatarURL = "/api/v1/creators/creator_1/avatar"
+	p.CoverURL = p.AvatarURL
+	if p.Validate() == nil {
+		t.Fatal("accepted an internal avatar URL as a cover URL")
+	}
+	p = valid
 	p.DisplayName = strings.Repeat("a", 61)
 	if p.Validate() == nil {
 		t.Fatal("oversize name accepted")

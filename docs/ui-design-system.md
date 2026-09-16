@@ -34,7 +34,7 @@ The studio presents Hotline controls first in document order, with payout setup 
 - `/following` uses authenticated database relationships. Follow controls update optimistically and recover from errors; a fresh session loads the same server state.
 - `/u/:username` is the real channel and caller route. Legacy `/discover/:username` links redirect here.
 - Header notifications display durable live events and read state for currently followed creators. These are in-app updates, with a 30-day window.
-- Creator studio includes profile editing: display name, bio, category, HTTPS avatar/cover URLs and publication. Images have initials fallbacks. New viewer accounts are unlisted until publishing or opening a show.
+- Creator studio includes profile editing: display name, bio, category, a device-uploaded avatar, an HTTPS cover URL, and publication. Images have initials fallbacks. New viewer accounts are unlisted until publishing or opening a show.
 - Presence is labeled “on page,” counts recent channel-page visitors and expires after 90 seconds. It is not a broadcast audience or fabricated analytics.
 
 Fixture data and local-storage follow state have been removed. Existing database accounts may have names left over from previous local testing; those are actual account rows, not new UI fixtures.

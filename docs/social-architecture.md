@@ -6,7 +6,7 @@ Implemented in migration `000010`, `backend/internal/social`, `backend/internal/
 
 The existing account/session system serves both viewers and creators. A user insert initializes an unlisted profile transactionally. Publishing a profile or creating a show makes the account discoverable; a live profile cannot be unpublished. All pre-migration users are backfilled as published creators because the original registration flow was creator-only. No existing call, queue, tier, Stripe, or payout lifecycle logic was changed.
 
-Public responses contain only the profile ID, username, display name, bio, avatar/cover URLs, category, publication/live state, follower count, follow flag, and visitor count. Email, password hashes, sessions, and payment information are excluded. Usernames retain the existing immutable 3–30-character convention. Images are HTTPS URLs supplied by the creator; the API does not fetch remote images. Browser requests omit referrers and render initials when images fail. An upload/CDN pipeline and content moderation are separate work.
+Public responses contain only the profile ID, username, display name, bio, avatar/cover URLs, category, publication/live state, follower count, follow flag, and visitor count. Email, password hashes, sessions, and payment information are excluded. Usernames retain the existing immutable 3–30-character convention. Cover images may be HTTPS URLs supplied by the creator. Avatars may also be JPG, PNG, or WebP files up to 768 KB stored through the authenticated profile-avatar endpoint. Browser requests omit referrers and render initials when images fail.
 
 ## Database and concurrency
 
@@ -35,6 +35,8 @@ All responses use `{ "data": ... }`; errors use the existing structured error en
 | `GET /creators/:username` | Public; unlisted visible only to owner | Profile |
 | `GET /profile` | Signed in | Own profile |
 | `POST /profile` | Signed in | Updated profile; body: `displayName`, `bio`, `avatarUrl`, `coverUrl`, `category`, `published` |
+| `POST /profile/avatar` | Signed in | Stores a JPG, PNG, or WebP `avatar` multipart field (768 KB max) and returns its internal URL |
+| `GET /creators/:username/avatar` | Public for published profiles; owner for drafts | Stored profile-picture bytes |
 | `POST /creators/:username/follow` | Signed in | `{isFollowing:true}`; body `{}` |
 | `DELETE /creators/:username/follow` | Signed in | `{isFollowing:false}` |
 | `GET /following` | Signed in | Same filters/page contract, scoped to the session user |

@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"mime"
 	"net"
@@ -35,6 +36,7 @@ func (h *socialHandler) mount(api chi.Router) {
 		r.Use(h.guard)
 		r.Get("/creators", h.list)
 		r.Get("/creators/{username}", h.profile)
+		r.Get("/creators/{username}/avatar", h.avatar)
 		r.Post("/creators/{username}/presence", h.presence)
 		r.Group(func(p chi.Router) {
 			p.Use(requireCreator(h.authentication, h.logger))
@@ -44,6 +46,7 @@ func (h *socialHandler) mount(api chi.Router) {
 			p.Delete("/creators/{username}/follow", h.unfollow)
 			p.Get("/profile", h.ownProfile)
 			p.Post("/profile", h.saveProfile)
+			p.Post("/profile/avatar", h.saveAvatar)
 			p.Get("/notifications", h.notifications)
 			p.Post("/notifications/read", h.markRead)
 		})
@@ -57,8 +60,12 @@ func (h *socialHandler) guard(next http.Handler) http.Handler {
 		r = r.WithContext(ctx)
 		if r.Method == http.MethodPost {
 			kind, _, _ := mime.ParseMediaType(r.Header.Get("Content-Type"))
-			if kind != "application/json" {
-				writeError(w, 415, "INVALID_CONTENT_TYPE", "Use application/json.")
+			expected := "application/json"
+			if r.URL.Path == "/api/v1/profile/avatar" {
+				expected = "multipart/form-data"
+			}
+			if kind != expected {
+				writeError(w, 415, "INVALID_CONTENT_TYPE", "Use "+expected+".")
 				return
 			}
 		}
@@ -197,7 +204,8 @@ func (h *socialHandler) ownProfile(w http.ResponseWriter, r *http.Request) {
 	h.respond(w, p, err)
 }
 func (h *socialHandler) saveProfile(w http.ResponseWriter, r *http.Request) {
-	id := creatorFromContext(r.Context()).ID
+	creator := creatorFromContext(r.Context())
+	id := creator.ID
 	if !h.allow(w, r, "profile:"+id, 20) {
 		return
 	}
@@ -206,8 +214,61 @@ func (h *socialHandler) saveProfile(w http.ResponseWriter, r *http.Request) {
 		h.fail(w, social.ErrInvalid)
 		return
 	}
+	if strings.HasPrefix(input.AvatarURL, "/api/v1/creators/") && input.AvatarURL != "/api/v1/creators/"+creator.Username+"/avatar" {
+		h.fail(w, social.ErrInvalid)
+		return
+	}
 	p, err := h.service.SaveProfile(r.Context(), id, input)
 	h.respond(w, p, err)
+}
+func (h *socialHandler) saveAvatar(w http.ResponseWriter, r *http.Request) {
+	creator := creatorFromContext(r.Context())
+	if !h.allow(w, r, "avatar:"+creator.ID, 10) {
+		return
+	}
+	file, _, err := r.FormFile("avatar")
+	if err != nil {
+		h.fail(w, social.ErrInvalid)
+		return
+	}
+	defer file.Close()
+	data, err := io.ReadAll(io.LimitReader(file, 768*1024+1))
+	if err != nil || len(data) == 0 || len(data) > 768*1024 {
+		h.fail(w, social.ErrInvalid)
+		return
+	}
+	contentType := http.DetectContentType(data)
+	if contentType != "image/jpeg" && contentType != "image/png" && contentType != "image/webp" {
+		h.fail(w, social.ErrInvalid)
+		return
+	}
+	if err := h.service.Store.SaveAvatar(r.Context(), creator.ID, contentType, data); err != nil {
+		h.fail(w, err)
+		return
+	}
+	h.respond(w, map[string]string{"avatarUrl": "/api/v1/creators/" + creator.Username + "/avatar"}, nil)
+}
+func (h *socialHandler) avatar(w http.ResponseWriter, r *http.Request) {
+	name := strings.ToLower(chi.URLParam(r, "username"))
+	if !social.ValidUsername(name) {
+		h.fail(w, social.ErrNotFound)
+		return
+	}
+	ownerID, err := h.viewer(r)
+	if err != nil {
+		h.fail(w, err)
+		return
+	}
+	avatar, err := h.service.Store.Avatar(r.Context(), name, ownerID)
+	if err != nil {
+		h.fail(w, err)
+		return
+	}
+	w.Header().Set("Content-Type", avatar.ContentType)
+	w.Header().Set("Content-Length", strconv.Itoa(len(avatar.Data)))
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(avatar.Data)
 }
 func (h *socialHandler) follow(w http.ResponseWriter, r *http.Request)   { h.setFollow(w, r, true) }
 func (h *socialHandler) unfollow(w http.ResponseWriter, r *http.Request) { h.setFollow(w, r, false) }

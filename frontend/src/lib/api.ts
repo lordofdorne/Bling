@@ -13,15 +13,28 @@ export class ApiError extends Error {
   }
 }
 
+function fallbackMessage(path: string, status: number) {
+  if (path === "/api/v1/profile/avatar") {
+    if (status === 404)
+      return "Profile picture uploads are unavailable. Restart the API and try again.";
+    if (status === 413) return "Choose an image smaller than 768 KB.";
+    if (status === 415) return "Choose a JPG, PNG, or WebP image.";
+  }
+  return "Something went wrong. Please try again.";
+}
+
 export async function apiRequest<T>(
   path: string,
   init: RequestInit = {},
 ): Promise<T> {
+  const isFormData = init.body instanceof FormData;
   const response = await fetch(path, {
     ...init,
     credentials: "include",
     headers: {
-      ...(init.body ? { "Content-Type": "application/json" } : {}),
+      ...(init.body && !isFormData
+        ? { "Content-Type": "application/json" }
+        : {}),
       ...init.headers,
     },
   });
@@ -36,7 +49,7 @@ export async function apiRequest<T>(
     throw new ApiError(
       response.status,
       body.error?.code ?? "REQUEST_FAILED",
-      body.error?.message ?? "Something went wrong. Please try again.",
+      body.error?.message ?? fallbackMessage(path, response.status),
     );
   }
 

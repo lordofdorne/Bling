@@ -21,6 +21,7 @@ var ErrLiveRequired = errors.New("this creator is not live")
 var Categories = []string{"Just chatting", "Music", "Gaming", "Creative", "Tech"}
 var usernamePattern = regexp.MustCompile(`^[a-z0-9_]{3,30}$`)
 var uuidPattern = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
+var internalAvatarPattern = regexp.MustCompile(`^/api/v1/creators/[a-z0-9_]{3,30}/avatar$`)
 
 func ValidUsername(s string) bool { return usernamePattern.MatchString(s) }
 
@@ -57,8 +58,11 @@ func (p *ProfileInput) Validate() error {
 	if utf8.RuneCountInString(p.DisplayName) < 1 || utf8.RuneCountInString(p.DisplayName) > 60 || utf8.RuneCountInString(p.Bio) > 500 || !validCategory(p.Category) {
 		return ErrInvalid
 	}
-	for _, raw := range []string{p.AvatarURL, p.CoverURL} {
+	for index, raw := range []string{p.AvatarURL, p.CoverURL} {
 		if raw == "" {
+			continue
+		}
+		if index == 0 && internalAvatarPattern.MatchString(raw) {
 			continue
 		}
 		u, err := url.Parse(raw)

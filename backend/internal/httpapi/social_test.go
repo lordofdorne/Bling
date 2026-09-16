@@ -29,6 +29,8 @@ func TestSocialSecurityBoundaries(t *testing.T) {
 		{name: "following authentication", method: "GET", path: "/api/v1/following", status: 401},
 		{name: "notifications authentication", method: "GET", path: "/api/v1/notifications", status: 401},
 		{name: "profile authentication", method: "GET", path: "/api/v1/profile", status: 401},
+		{name: "avatar upload authentication", method: "POST", path: "/api/v1/profile/avatar", body: "--boundary--", contentType: "multipart/form-data; boundary=boundary", status: 401},
+		{name: "avatar upload content type", method: "POST", path: "/api/v1/profile/avatar", body: "{}", contentType: "application/json", status: 415},
 		{name: "follow authentication", method: "POST", path: "/api/v1/creators/alice/follow", body: "{}", contentType: "application/json", status: 401},
 		{name: "unfollow authentication", method: "DELETE", path: "/api/v1/creators/alice/follow", status: 401},
 		{name: "cross origin rejected", method: "POST", path: "/api/v1/creators/alice/follow", body: "{}", contentType: "application/json", origin: "https://evil.example", status: 403},

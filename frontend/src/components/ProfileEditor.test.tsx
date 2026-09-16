@@ -28,6 +28,10 @@ function setup(live = false, fail = false) {
         return Response.json({
           data: { user: { id: profile.id, username: profile.username } },
         });
+      if (String(input) === "/api/v1/profile/avatar")
+        return Response.json({
+          data: { avatarUrl: "/api/v1/creators/alice/avatar" },
+        });
       if (init?.method === "POST") {
         if (fail)
           return Response.json(
@@ -93,6 +97,33 @@ it("preserves the draft when saving fails", async () => {
     "Could not save profile.",
   );
   expect(screen.getByLabelText("Display name")).toHaveValue("Unsaved name");
+});
+it("uploads a profile picture from the device before saving the profile", async () => {
+  const fetchMock = setup();
+  const file = new File([new Uint8Array([0xff, 0xd8, 0xff])], "avatar.jpg", {
+    type: "image/jpeg",
+  });
+  fireEvent.change(await screen.findByLabelText("Profile picture"), {
+    target: { files: [file] },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Save profile" }));
+  expect(await screen.findByRole("status")).toHaveTextContent("Profile saved.");
+
+  const uploadCall = fetchMock.mock.calls.find(
+    ([input]) => String(input) === "/api/v1/profile/avatar",
+  );
+  expect(uploadCall?.[1]).toEqual(
+    expect.objectContaining({ method: "POST", body: expect.any(FormData) }),
+  );
+  const saveCall = fetchMock.mock.calls.find(
+    ([input, init]) =>
+      String(input) === "/api/v1/profile" && init?.method === "POST",
+  );
+  expect(JSON.parse(String(saveCall?.[1]?.body))).toEqual(
+    expect.objectContaining({
+      avatarUrl: "/api/v1/creators/alice/avatar",
+    }),
+  );
 });
 it("keeps a live profile published", async () => {
   setup(true);

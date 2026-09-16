@@ -140,6 +140,20 @@ export function useSaveProfile() {
     onSuccess: () => client.invalidateQueries({ queryKey: ["social"] }),
   });
 }
+export function useUploadAvatar() {
+  return useMutation({
+    mutationFn: async (file: File) => {
+      const body = new FormData();
+      body.set("avatar", file);
+      return (
+        await apiRequest<{ data: { avatarUrl: string } }>(
+          "/api/v1/profile/avatar",
+          { method: "POST", body },
+        )
+      ).data.avatarUrl;
+    },
+  });
+}
 export function useFollowingCount() {
   const me = useMe();
   return useQuery({
