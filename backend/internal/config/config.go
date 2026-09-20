@@ -1,8 +1,10 @@
 package config
 
 import (
+	"encoding/base64"
 	"fmt"
 	"net/netip"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -50,6 +52,14 @@ type Config struct {
 	CreatorPayoutDay          int
 	CreatorPayoutCurrency     string
 	CreatorPayoutsEnabled     bool
+	SupabaseEnabled           bool
+	SupabaseURL               string
+	SupabaseAuthKey           string
+	SupabaseServiceRoleKey    string
+	SupabaseStorageBucket     string
+	SessionEncryptionKeys     string
+	AuthEmailConfirmURL       string
+	AuthPasswordResetURL      string
 }
 
 type ICEServer struct {
@@ -77,6 +87,16 @@ func Load() (Config, error) {
 		StripePublishableKey: strings.TrimSpace(os.Getenv("STRIPE_PUBLISHABLE_KEY")),
 		StripeWebhookSecret:  strings.TrimSpace(os.Getenv("STRIPE_WEBHOOK_SECRET")),
 		StripeConnectCountry: strings.ToUpper(envOrDefault("STRIPE_CONNECT_COUNTRY", "US")),
+		SupabaseEnabled:      strings.EqualFold(envOrDefault("SUPABASE_ENABLED", "false"), "true"),
+		SupabaseURL:          strings.TrimRight(strings.TrimSpace(os.Getenv("SUPABASE_URL")), "/"),
+		SupabaseAuthKey:      strings.TrimSpace(os.Getenv("SUPABASE_AUTH_KEY")),
+		SupabaseServiceRoleKey: strings.TrimSpace(
+			os.Getenv("SUPABASE_SERVICE_ROLE_KEY"),
+		),
+		SupabaseStorageBucket: strings.TrimSpace(os.Getenv("SUPABASE_STORAGE_BUCKET")),
+		SessionEncryptionKeys: strings.TrimSpace(os.Getenv("SESSION_ENCRYPTION_KEYS")),
+		AuthEmailConfirmURL:   strings.TrimSpace(os.Getenv("AUTH_EMAIL_CONFIRM_URL")),
+		AuthPasswordResetURL:  strings.TrimSpace(os.Getenv("AUTH_PASSWORD_RESET_URL")),
 	}
 	for _, raw := range splitCSV(os.Getenv("SOCIAL_TRUSTED_PROXY_CIDRS")) {
 		prefix, err := netip.ParsePrefix(raw)
@@ -192,8 +212,72 @@ func Load() (Config, error) {
 	if cfg.Environment == "production" && turnSharedSecret == "" {
 		return Config{}, fmt.Errorf("TURN_SHARED_SECRET is required in production")
 	}
+	if cfg.SupabaseEnabled {
+		if err := validateSupabase(cfg); err != nil {
+			return Config{}, err
+		}
+	}
 
 	return cfg, nil
+}
+
+func validateSupabase(cfg Config) error {
+	required := map[string]string{
+		"SUPABASE_URL":              cfg.SupabaseURL,
+		"SUPABASE_AUTH_KEY":         cfg.SupabaseAuthKey,
+		"SUPABASE_SERVICE_ROLE_KEY": cfg.SupabaseServiceRoleKey,
+		"SUPABASE_STORAGE_BUCKET":   cfg.SupabaseStorageBucket,
+		"SESSION_ENCRYPTION_KEYS":   cfg.SessionEncryptionKeys,
+		"AUTH_EMAIL_CONFIRM_URL":    cfg.AuthEmailConfirmURL,
+		"AUTH_PASSWORD_RESET_URL":   cfg.AuthPasswordResetURL,
+	}
+	for key, value := range required {
+		if value == "" {
+			return fmt.Errorf("%s is required when SUPABASE_ENABLED is true", key)
+		}
+	}
+	for key, raw := range map[string]string{
+		"SUPABASE_URL":            cfg.SupabaseURL,
+		"AUTH_EMAIL_CONFIRM_URL":  cfg.AuthEmailConfirmURL,
+		"AUTH_PASSWORD_RESET_URL": cfg.AuthPasswordResetURL,
+	} {
+		parsed, err := url.ParseRequestURI(raw)
+		if err != nil || parsed.Host == "" || (parsed.Scheme != "http" && parsed.Scheme != "https") {
+			return fmt.Errorf("%s must be an absolute HTTP URL", key)
+		}
+		if cfg.Environment == "production" && parsed.Scheme != "https" {
+			return fmt.Errorf("%s must use HTTPS in production", key)
+		}
+	}
+	if err := validateEncryptionKeys(cfg.SessionEncryptionKeys); err != nil {
+		return err
+	}
+	return nil
+}
+
+func validateEncryptionKeys(value string) error {
+	seen := make(map[string]struct{})
+	for index, entry := range splitCSV(value) {
+		version, encoded, ok := strings.Cut(entry, ":")
+		if !ok || version == "" || strings.Contains(version, ".") {
+			return fmt.Errorf("SESSION_ENCRYPTION_KEYS entry %d must use version:base64-key", index+1)
+		}
+		if _, exists := seen[version]; exists {
+			return fmt.Errorf("SESSION_ENCRYPTION_KEYS contains duplicate version %q", version)
+		}
+		seen[version] = struct{}{}
+		key, err := base64.RawURLEncoding.DecodeString(encoded)
+		if err != nil {
+			key, err = base64.StdEncoding.DecodeString(encoded)
+		}
+		if err != nil || len(key) != 32 {
+			return fmt.Errorf("SESSION_ENCRYPTION_KEYS entry %q must contain a base64-encoded 32-byte key", version)
+		}
+	}
+	if len(seen) == 0 {
+		return fmt.Errorf("SESSION_ENCRYPTION_KEYS must contain at least one key")
+	}
+	return nil
 }
 
 func integer(key string, fallback int) (int, error) {
