@@ -36,7 +36,7 @@ func NewRouter(logger *slog.Logger, postgres *pgxpool.Pool, redisClient *redis.C
 	var lifecycle authLifecycleService
 	if cfg.SupabaseEnabled {
 		provider, err := auth.NewSupabaseIdentityProvider(
-			cfg.SupabaseURL, cfg.SupabaseAuthKey, cfg.SupabaseServiceRoleKey, cfg.SupabaseHTTPTimeout,
+			cfg.SupabaseURL, cfg.SupabasePublishableKey, cfg.SupabaseSecretKey, cfg.SupabaseHTTPTimeout,
 		)
 		if err != nil {
 			return nil, err

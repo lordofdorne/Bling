@@ -54,8 +54,8 @@ type Config struct {
 	CreatorPayoutsEnabled     bool
 	SupabaseEnabled           bool
 	SupabaseURL               string
-	SupabaseAuthKey           string
-	SupabaseServiceRoleKey    string
+	SupabasePublishableKey    string
+	SupabaseSecretKey         string
 	SupabaseStorageBucket     string
 	SessionEncryptionKeys     string
 	AuthEmailConfirmURL       string
@@ -73,31 +73,29 @@ func Load() (Config, error) {
 	_ = godotenv.Load("../.env", ".env")
 
 	cfg := Config{
-		Environment:          envOrDefault("APP_ENV", "development"),
-		HTTPAddr:             envOrDefault("HTTP_ADDR", ":8080"),
-		DatabaseURL:          os.Getenv("DATABASE_URL"),
-		RedisURL:             os.Getenv("REDIS_URL"),
-		FrontendURL:          envOrDefault("FRONTEND_URL", "http://localhost:5173"),
-		AllowedOrigins:       splitCSV(envOrDefault("ALLOWED_ORIGINS", "http://localhost:5173")),
-		CookieSecure:         strings.EqualFold(envOrDefault("COOKIE_SECURE", "false"), "true"),
-		ReadHeaderTimeout:    5 * time.Second,
-		ReadTimeout:          15 * time.Second,
-		WriteTimeout:         30 * time.Second,
-		IdleTimeout:          60 * time.Second,
-		StripeSecretKey:      strings.TrimSpace(os.Getenv("STRIPE_SECRET_KEY")),
-		StripePublishableKey: strings.TrimSpace(os.Getenv("STRIPE_PUBLISHABLE_KEY")),
-		StripeWebhookSecret:  strings.TrimSpace(os.Getenv("STRIPE_WEBHOOK_SECRET")),
-		StripeConnectCountry: strings.ToUpper(envOrDefault("STRIPE_CONNECT_COUNTRY", "US")),
-		SupabaseEnabled:      strings.EqualFold(envOrDefault("SUPABASE_ENABLED", "false"), "true"),
-		SupabaseURL:          strings.TrimRight(strings.TrimSpace(os.Getenv("SUPABASE_URL")), "/"),
-		SupabaseAuthKey:      strings.TrimSpace(os.Getenv("SUPABASE_AUTH_KEY")),
-		SupabaseServiceRoleKey: strings.TrimSpace(
-			os.Getenv("SUPABASE_SERVICE_ROLE_KEY"),
-		),
-		SupabaseStorageBucket: strings.TrimSpace(os.Getenv("SUPABASE_STORAGE_BUCKET")),
-		SessionEncryptionKeys: strings.TrimSpace(os.Getenv("SESSION_ENCRYPTION_KEYS")),
-		AuthEmailConfirmURL:   strings.TrimSpace(os.Getenv("AUTH_EMAIL_CONFIRM_URL")),
-		AuthPasswordResetURL:  strings.TrimSpace(os.Getenv("AUTH_PASSWORD_RESET_URL")),
+		Environment:            envOrDefault("APP_ENV", "development"),
+		HTTPAddr:               envOrDefault("HTTP_ADDR", ":8080"),
+		DatabaseURL:            os.Getenv("DATABASE_URL"),
+		RedisURL:               os.Getenv("REDIS_URL"),
+		FrontendURL:            envOrDefault("FRONTEND_URL", "http://localhost:5173"),
+		AllowedOrigins:         splitCSV(envOrDefault("ALLOWED_ORIGINS", "http://localhost:5173")),
+		CookieSecure:           strings.EqualFold(envOrDefault("COOKIE_SECURE", "false"), "true"),
+		ReadHeaderTimeout:      5 * time.Second,
+		ReadTimeout:            15 * time.Second,
+		WriteTimeout:           30 * time.Second,
+		IdleTimeout:            60 * time.Second,
+		StripeSecretKey:        strings.TrimSpace(os.Getenv("STRIPE_SECRET_KEY")),
+		StripePublishableKey:   strings.TrimSpace(os.Getenv("STRIPE_PUBLISHABLE_KEY")),
+		StripeWebhookSecret:    strings.TrimSpace(os.Getenv("STRIPE_WEBHOOK_SECRET")),
+		StripeConnectCountry:   strings.ToUpper(envOrDefault("STRIPE_CONNECT_COUNTRY", "US")),
+		SupabaseEnabled:        strings.EqualFold(envOrDefault("SUPABASE_ENABLED", "false"), "true"),
+		SupabaseURL:            strings.TrimRight(strings.TrimSpace(os.Getenv("SUPABASE_URL")), "/"),
+		SupabasePublishableKey: firstNonEmptyEnv("SUPABASE_PUBLISHABLE_KEY", "SUPABASE_AUTH_KEY"),
+		SupabaseSecretKey:      firstNonEmptyEnv("SUPABASE_SECRET_KEY", "SUPABASE_SERVICE_ROLE_KEY"),
+		SupabaseStorageBucket:  strings.TrimSpace(os.Getenv("SUPABASE_STORAGE_BUCKET")),
+		SessionEncryptionKeys:  strings.TrimSpace(os.Getenv("SESSION_ENCRYPTION_KEYS")),
+		AuthEmailConfirmURL:    strings.TrimSpace(os.Getenv("AUTH_EMAIL_CONFIRM_URL")),
+		AuthPasswordResetURL:   strings.TrimSpace(os.Getenv("AUTH_PASSWORD_RESET_URL")),
 	}
 	for _, raw := range splitCSV(os.Getenv("SOCIAL_TRUSTED_PROXY_CIDRS")) {
 		prefix, err := netip.ParsePrefix(raw)
@@ -227,13 +225,13 @@ func Load() (Config, error) {
 
 func validateSupabase(cfg Config) error {
 	required := map[string]string{
-		"SUPABASE_URL":              cfg.SupabaseURL,
-		"SUPABASE_AUTH_KEY":         cfg.SupabaseAuthKey,
-		"SUPABASE_SERVICE_ROLE_KEY": cfg.SupabaseServiceRoleKey,
-		"SUPABASE_STORAGE_BUCKET":   cfg.SupabaseStorageBucket,
-		"SESSION_ENCRYPTION_KEYS":   cfg.SessionEncryptionKeys,
-		"AUTH_EMAIL_CONFIRM_URL":    cfg.AuthEmailConfirmURL,
-		"AUTH_PASSWORD_RESET_URL":   cfg.AuthPasswordResetURL,
+		"SUPABASE_URL":             cfg.SupabaseURL,
+		"SUPABASE_PUBLISHABLE_KEY": cfg.SupabasePublishableKey,
+		"SUPABASE_SECRET_KEY":      cfg.SupabaseSecretKey,
+		"SUPABASE_STORAGE_BUCKET":  cfg.SupabaseStorageBucket,
+		"SESSION_ENCRYPTION_KEYS":  cfg.SessionEncryptionKeys,
+		"AUTH_EMAIL_CONFIRM_URL":   cfg.AuthEmailConfirmURL,
+		"AUTH_PASSWORD_RESET_URL":  cfg.AuthPasswordResetURL,
 	}
 	for key, value := range required {
 		if value == "" {
@@ -309,6 +307,15 @@ func envOrDefault(key, fallback string) string {
 		return value
 	}
 	return fallback
+}
+
+func firstNonEmptyEnv(keys ...string) string {
+	for _, key := range keys {
+		if value := strings.TrimSpace(os.Getenv(key)); value != "" {
+			return value
+		}
+	}
+	return ""
 }
 
 func duration(key string, fallback time.Duration) (time.Duration, error) {

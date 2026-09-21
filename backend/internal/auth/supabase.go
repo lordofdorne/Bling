@@ -17,8 +17,8 @@ const maxIdentityResponseBytes = 1 << 20
 
 type SupabaseIdentityProvider struct {
 	baseURL        string
-	authKey        string
-	serviceRoleKey string
+	publishableKey string
+	secretKey      string
 	client         *http.Client
 	now            func() time.Time
 }
@@ -49,22 +49,22 @@ type supabaseErrorResponse struct {
 	ErrorCode string `json:"error_code"`
 }
 
-func NewSupabaseIdentityProvider(baseURL, authKey, serviceRoleKey string, timeout time.Duration) (*SupabaseIdentityProvider, error) {
+func NewSupabaseIdentityProvider(baseURL, publishableKey, secretKey string, timeout time.Duration) (*SupabaseIdentityProvider, error) {
 	baseURL = strings.TrimRight(strings.TrimSpace(baseURL), "/")
 	parsed, err := url.ParseRequestURI(baseURL)
 	if err != nil || parsed.Host == "" || (parsed.Scheme != "http" && parsed.Scheme != "https") {
 		return nil, errors.New("supabase URL must be an absolute HTTP URL")
 	}
-	if strings.TrimSpace(authKey) == "" {
-		return nil, errors.New("supabase auth key is required")
+	if strings.TrimSpace(publishableKey) == "" {
+		return nil, errors.New("supabase publishable key is required")
 	}
 	if timeout <= 0 {
 		return nil, errors.New("supabase HTTP timeout must be positive")
 	}
 	return &SupabaseIdentityProvider{
 		baseURL:        baseURL,
-		authKey:        strings.TrimSpace(authKey),
-		serviceRoleKey: strings.TrimSpace(serviceRoleKey),
+		publishableKey: strings.TrimSpace(publishableKey),
+		secretKey:      strings.TrimSpace(secretKey),
 		client:         &http.Client{Timeout: timeout},
 		now:            time.Now,
 	}, nil
@@ -76,7 +76,7 @@ func (p *SupabaseIdentityProvider) SignUp(ctx context.Context, email, password, 
 		path += "?redirect_to=" + url.QueryEscape(redirectURL)
 	}
 	var response supabaseSessionResponse
-	err := p.request(ctx, http.MethodPost, path, p.authKey, map[string]string{
+	err := p.request(ctx, http.MethodPost, path, p.publishableKey, "", map[string]string{
 		"email": email, "password": password,
 	}, &response)
 	identity, tokens, err := p.identityResponse(response, err)
@@ -89,7 +89,7 @@ func (p *SupabaseIdentityProvider) SignUp(ctx context.Context, email, password, 
 
 func (p *SupabaseIdentityProvider) SignInWithPassword(ctx context.Context, email, password string) (Identity, IdentityTokens, error) {
 	var response supabaseSessionResponse
-	err := p.request(ctx, http.MethodPost, "/auth/v1/token?grant_type=password", p.authKey, map[string]string{
+	err := p.request(ctx, http.MethodPost, "/auth/v1/token?grant_type=password", p.publishableKey, "", map[string]string{
 		"email": email, "password": password,
 	}, &response)
 	return p.identityResponse(response, err)
@@ -97,7 +97,7 @@ func (p *SupabaseIdentityProvider) SignInWithPassword(ctx context.Context, email
 
 func (p *SupabaseIdentityProvider) Refresh(ctx context.Context, refreshToken string) (Identity, IdentityTokens, error) {
 	var response supabaseSessionResponse
-	err := p.request(ctx, http.MethodPost, "/auth/v1/token?grant_type=refresh_token", p.authKey, map[string]string{
+	err := p.request(ctx, http.MethodPost, "/auth/v1/token?grant_type=refresh_token", p.publishableKey, "", map[string]string{
 		"refresh_token": refreshToken,
 	}, &response)
 	return p.identityResponse(response, err)
@@ -113,7 +113,7 @@ func (p *SupabaseIdentityProvider) VerifyRecoveryOTP(ctx context.Context, tokenH
 
 func (p *SupabaseIdentityProvider) verifyOTP(ctx context.Context, tokenHash, tokenType string) (Identity, IdentityTokens, error) {
 	var response supabaseSessionResponse
-	err := p.request(ctx, http.MethodPost, "/auth/v1/verify", p.authKey, map[string]string{
+	err := p.request(ctx, http.MethodPost, "/auth/v1/verify", p.publishableKey, "", map[string]string{
 		"token_hash": tokenHash, "type": tokenType,
 	}, &response)
 	return p.identityResponse(response, err)
@@ -124,7 +124,7 @@ func (p *SupabaseIdentityProvider) ResendEmailConfirmation(ctx context.Context, 
 	if redirectURL != "" {
 		payload["options"] = map[string]string{"email_redirect_to": redirectURL}
 	}
-	return p.request(ctx, http.MethodPost, "/auth/v1/resend", p.authKey, payload, nil)
+	return p.request(ctx, http.MethodPost, "/auth/v1/resend", p.publishableKey, "", payload, nil)
 }
 
 func (p *SupabaseIdentityProvider) SendPasswordReset(ctx context.Context, email, redirectURL string) error {
@@ -132,22 +132,28 @@ func (p *SupabaseIdentityProvider) SendPasswordReset(ctx context.Context, email,
 	if redirectURL != "" {
 		path += "?redirect_to=" + url.QueryEscape(redirectURL)
 	}
-	return p.request(ctx, http.MethodPost, path, p.authKey, map[string]string{"email": email}, nil)
+	return p.request(ctx, http.MethodPost, path, p.publishableKey, "", map[string]string{"email": email}, nil)
 }
 
 func (p *SupabaseIdentityProvider) UpdatePassword(ctx context.Context, accessToken, password string) error {
-	return p.request(ctx, http.MethodPut, "/auth/v1/user", accessToken, map[string]string{"password": password}, nil)
+	return p.request(ctx, http.MethodPut, "/auth/v1/user", p.publishableKey, accessToken, map[string]string{"password": password}, nil)
 }
 
 func (p *SupabaseIdentityProvider) SignOut(ctx context.Context, accessToken string) error {
-	return p.request(ctx, http.MethodPost, "/auth/v1/logout", accessToken, nil, nil)
+	return p.request(ctx, http.MethodPost, "/auth/v1/logout", p.publishableKey, accessToken, nil, nil)
 }
 
 func (p *SupabaseIdentityProvider) DeleteUser(ctx context.Context, userID string) error {
-	if p.serviceRoleKey == "" {
-		return errors.New("supabase service-role key is required for user deletion")
+	if p.secretKey == "" {
+		return errors.New("supabase secret key is required for user deletion")
 	}
-	return p.request(ctx, http.MethodDelete, "/auth/v1/admin/users/"+url.PathEscape(userID), p.serviceRoleKey, nil, nil)
+	// Current sb_secret keys belong only in the apikey header. Legacy JWT-based
+	// service_role keys also need to be supplied as the bearer credential.
+	bearer := ""
+	if strings.Count(p.secretKey, ".") == 2 {
+		bearer = p.secretKey
+	}
+	return p.request(ctx, http.MethodDelete, "/auth/v1/admin/users/"+url.PathEscape(userID), p.secretKey, bearer, nil, nil)
 }
 
 func (p *SupabaseIdentityProvider) identityResponse(response supabaseSessionResponse, err error) (Identity, IdentityTokens, error) {
@@ -183,7 +189,7 @@ func (r supabaseSessionResponse) identityUser() *supabaseUser {
 	}
 }
 
-func (p *SupabaseIdentityProvider) request(ctx context.Context, method, path, bearer string, payload any, destination any) error {
+func (p *SupabaseIdentityProvider) request(ctx context.Context, method, path, apiKey, bearer string, payload any, destination any) error {
 	var body io.Reader
 	if payload != nil {
 		encoded, err := json.Marshal(payload)
@@ -197,10 +203,6 @@ func (p *SupabaseIdentityProvider) request(ctx context.Context, method, path, be
 		return fmt.Errorf("create identity request: %w", err)
 	}
 	request.Header.Set("Accept", "application/json")
-	apiKey := p.authKey
-	if bearer != "" && bearer == p.serviceRoleKey {
-		apiKey = p.serviceRoleKey
-	}
 	request.Header.Set("apikey", apiKey)
 	if payload != nil {
 		request.Header.Set("Content-Type", "application/json")

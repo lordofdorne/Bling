@@ -15,7 +15,7 @@ func newTestSupabaseProvider(t *testing.T, handler http.HandlerFunc) *SupabaseId
 	t.Helper()
 	server := httptest.NewServer(handler)
 	t.Cleanup(server.Close)
-	provider, err := NewSupabaseIdentityProvider(server.URL, "auth-key", "service-key", time.Second)
+	provider, err := NewSupabaseIdentityProvider(server.URL, "sb_publishable_test", "sb_secret_test", time.Second)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -28,7 +28,7 @@ func TestSupabaseSignInReturnsIdentityAndTokens(t *testing.T) {
 		if r.URL.Path != "/auth/v1/token" || r.URL.Query().Get("grant_type") != "password" {
 			t.Errorf("unexpected request URL %s", r.URL.String())
 		}
-		if r.Header.Get("apikey") != "auth-key" || r.Header.Get("Authorization") != "Bearer auth-key" {
+		if r.Header.Get("apikey") != "sb_publishable_test" || r.Header.Get("Authorization") != "" {
 			t.Errorf("unexpected auth headers")
 		}
 		body, _ := io.ReadAll(r.Body)
@@ -116,8 +116,8 @@ func TestSupabaseDeleteUserUsesAdministrativeCredential(t *testing.T) {
 		if r.Method != http.MethodDelete || r.URL.Path != "/auth/v1/admin/users/user-1" {
 			t.Errorf("unexpected request %s %s", r.Method, r.URL.Path)
 		}
-		if r.Header.Get("Authorization") != "Bearer service-key" || r.Header.Get("apikey") != "service-key" {
-			t.Error("administrative request did not use service-role credentials")
+		if r.Header.Get("Authorization") != "" || r.Header.Get("apikey") != "sb_secret_test" {
+			t.Error("administrative request did not use the secret API key correctly")
 		}
 		w.WriteHeader(http.StatusNoContent)
 	})

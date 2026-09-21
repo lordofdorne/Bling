@@ -30,16 +30,19 @@ Provider-auth milestone completed on 2026-09-20:
 - [x] Added fake-Supabase HTTP integration tests for registration, confirmation, and password recovery.
 - [x] Added handler tests and a frontend guard for pending email confirmation.
 - [x] Applied migrations 001–017 to an isolated PostgreSQL 16 instance and ran the provider repository integration test.
+- [x] Connected the development Supabase project and applied migrations 001–018.
+- [x] Added migration 018 to revoke direct `anon`/`authenticated` table, sequence, and function access and remove those defaults from the Bling migration owner.
+- [x] Verified all 25 application tables have RLS, direct public-role grants are absent, the Supabase Auth foreign key exists, and `profile-avatars` is private.
 - [x] Verified backend tests, Go static analysis, frontend lint, frontend tests, and the production frontend build.
 
-The Supabase path is not active yet. `SUPABASE_ENABLED` defaults to `false`, and the existing bcrypt authentication remains the runtime implementation. Migrations `000016` and `000017` were verified on an isolated database but have not been applied to a shared development, staging, or production database.
+The Supabase path is not active yet. `SUPABASE_ENABLED` remains `false`, and the existing bcrypt authentication remains the runtime implementation. Migrations `000001` through `000018` are applied to the development Supabase project; staging and production remain untouched.
 
 Next implementation milestone:
 
 1. Create the development Supabase project and configure custom SMTP.
 2. Customize the confirmation email link to point to `AUTH_EMAIL_CONFIRM_URL` with `?token_hash={{ .TokenHash }}&type=email`.
 3. Customize the recovery email link to point to `AUTH_PASSWORD_RESET_URL` with `?token_hash={{ .TokenHash }}&type=recovery`.
-4. Apply migrations 001–017 to the development project.
+4. Apply migrations 001–018 to the development project. (Completed.)
 5. Add the forgot-password and reset-password frontend screens and route.
 6. Exercise the full flow against development Supabase before enabling it in staging.
 
@@ -246,8 +249,8 @@ Add a version prefix to encrypted session material so keys can be rotated withou
 New configuration will likely include:
 
 - `SUPABASE_URL`
-- `SUPABASE_AUTH_KEY` or equivalent server-held Auth key
-- `SUPABASE_SERVICE_ROLE_KEY`
+- `SUPABASE_PUBLISHABLE_KEY` (server-held in Bling even though it is not a secret)
+- `SUPABASE_SECRET_KEY`
 - `SUPABASE_STORAGE_BUCKET`
 - `SESSION_ENCRYPTION_KEYS`
 - `AUTH_EMAIL_CONFIRM_URL`
