@@ -86,10 +86,15 @@ func main() {
 
 	socialService := social.NewService(social.NewStore(postgres), redisClient, logger)
 	go socialService.Run(ctx)
+	router, err := httpapi.NewRouter(logger, postgres, redisClient, cfg, queueService, realtimeHub, callService, signalHub, paymentService, payoutService, financeService, balanceService, socialService)
+	if err != nil {
+		logger.Error("HTTP router setup failed", "error", err)
+		os.Exit(1)
+	}
 
 	server := &http.Server{
 		Addr:              cfg.HTTPAddr,
-		Handler:           httpapi.NewRouter(logger, postgres, redisClient, cfg, queueService, realtimeHub, callService, signalHub, paymentService, payoutService, financeService, balanceService, socialService),
+		Handler:           router,
 		ReadHeaderTimeout: cfg.ReadHeaderTimeout,
 		ReadTimeout:       cfg.ReadTimeout,
 		WriteTimeout:      cfg.WriteTimeout,

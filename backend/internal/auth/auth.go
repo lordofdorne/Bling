@@ -134,14 +134,32 @@ func HashToken(token string) []byte {
 }
 
 func validate(input RegisterInput) error {
-	if !usernamePattern.MatchString(input.Username) {
+	if err := validateUsername(input.Username); err != nil {
+		return err
+	}
+	if err := validateEmail(input.Email); err != nil {
+		return err
+	}
+	return validatePassword(input.Password)
+}
+
+func validateUsername(username string) error {
+	if !usernamePattern.MatchString(username) {
 		return ErrInvalidUsername
 	}
-	address, err := mail.ParseAddress(input.Email)
-	if err != nil || address.Address != input.Email || len(input.Email) > 254 {
+	return nil
+}
+
+func validateEmail(email string) error {
+	address, err := mail.ParseAddress(email)
+	if err != nil || address.Address != email || len(email) > 254 {
 		return ErrInvalidEmail
 	}
-	if len(input.Password) < 12 || len(input.Password) > 72 {
+	return nil
+}
+
+func validatePassword(password string) error {
+	if len(password) < 12 || len(password) > 72 {
 		return ErrInvalidPassword
 	}
 	return nil

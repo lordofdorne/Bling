@@ -60,6 +60,7 @@ type Config struct {
 	SessionEncryptionKeys     string
 	AuthEmailConfirmURL       string
 	AuthPasswordResetURL      string
+	SupabaseHTTPTimeout       time.Duration
 }
 
 type ICEServer struct {
@@ -130,6 +131,9 @@ func Load() (Config, error) {
 		return Config{}, err
 	}
 	if cfg.ReadinessTimeout, err = duration("READINESS_TIMEOUT", 2*time.Second); err != nil {
+		return Config{}, err
+	}
+	if cfg.SupabaseHTTPTimeout, err = duration("SUPABASE_HTTP_TIMEOUT", 10*time.Second); err != nil {
 		return Config{}, err
 	}
 	if cfg.SessionTTL, err = duration("SESSION_TTL", 30*24*time.Hour); err != nil {

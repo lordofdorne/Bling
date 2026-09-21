@@ -314,6 +314,57 @@ describe("App routes", () => {
     );
   });
 
+  it("keeps a pending registration signed out until email confirmation", async () => {
+    const creator = {
+      id: "user-1",
+      username: "alice",
+      email: "alice@example.com",
+      createdAt: "2026-09-20T12:00:00Z",
+    };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        if (String(input) === "/api/v1/me") {
+          return new Response(
+            JSON.stringify({ error: { code: "UNAUTHENTICATED" } }),
+            { status: 401, headers: { "Content-Type": "application/json" } },
+          );
+        }
+        if (
+          String(input) === "/api/v1/auth/register" &&
+          init?.method === "POST"
+        ) {
+          return Response.json(
+            { data: { user: creator, confirmationRequired: true } },
+            { status: 202 },
+          );
+        }
+        return new Response(null, { status: 404 });
+      }),
+    );
+
+    renderAt("/register");
+    fireEvent.change(screen.getByLabelText(/^Username/), {
+      target: { value: "alice" },
+    });
+    fireEvent.change(screen.getByLabelText("Email"), {
+      target: { value: "alice@example.com" },
+    });
+    fireEvent.change(screen.getByLabelText(/^Password/), {
+      target: { value: "long-enough-password" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Create account" }));
+
+    expect(
+      await screen.findByText(
+        /Check alice@example.com for a confirmation link/i,
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", { name: "Welcome, alice." }),
+    ).not.toBeInTheDocument();
+  });
+
   it("logs out and returns the creator to sign in", async () => {
     const creator = {
       id: "user-1",

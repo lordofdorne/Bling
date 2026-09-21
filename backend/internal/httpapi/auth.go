@@ -18,7 +18,10 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-const sessionCookieName = "bling_session"
+const (
+	sessionCookieName  = "bling_session"
+	recoveryCookieName = "bling_recovery"
+)
 
 type authService interface {
 	Register(context.Context, auth.RegisterInput) (auth.User, string, error)
@@ -27,13 +30,23 @@ type authService interface {
 	Logout(context.Context, string) error
 }
 
+type authLifecycleService interface {
+	ConfirmEmail(context.Context, string) (auth.User, string, error)
+	ResendConfirmation(context.Context, string) error
+	ForgotPassword(context.Context, string) error
+	BeginPasswordReset(context.Context, string) (string, error)
+	ResetPassword(context.Context, string, string) error
+}
+
 type authHandler struct {
 	service      authService
+	lifecycle    authLifecycleService
 	limiter      auth.RateLimiter
 	logger       *slog.Logger
 	cookieSecure bool
 	sessionTTL   time.Duration
 	rateWindow   time.Duration
+	frontendURL  string
 }
 
 type authRequest struct {
@@ -47,6 +60,13 @@ func (h authHandler) routes() chi.Router {
 	router.Post("/register", h.register)
 	router.Post("/login", h.login)
 	router.Post("/logout", h.logout)
+	if h.lifecycle != nil {
+		router.Get("/confirm", h.confirmEmail)
+		router.Post("/resend-confirmation", h.resendConfirmation)
+		router.Post("/forgot-password", h.forgotPassword)
+		router.Get("/reset", h.beginPasswordReset)
+		router.Post("/reset-password", h.resetPassword)
+	}
 	return router
 }
 
@@ -70,8 +90,14 @@ func (h authHandler) register(w http.ResponseWriter, r *http.Request) {
 		h.writeAuthError(w, err)
 		return
 	}
+	if token == "" {
+		writeJSON(w, http.StatusAccepted, map[string]any{"data": map[string]any{
+			"user": user, "confirmationRequired": true,
+		}})
+		return
+	}
 	h.setSessionCookie(w, token)
-	writeJSON(w, http.StatusCreated, map[string]any{"data": map[string]any{"user": user}})
+	writeJSON(w, http.StatusCreated, map[string]any{"data": map[string]any{"user": user, "confirmationRequired": false}})
 }
 
 func (h authHandler) login(w http.ResponseWriter, r *http.Request) {
@@ -121,6 +147,108 @@ func (h authHandler) me(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"data": map[string]any{"user": user}})
 }
 
+func (h authHandler) confirmEmail(w http.ResponseWriter, r *http.Request) {
+	preventCaching(w)
+	tokenHash := r.URL.Query().Get("token_hash")
+	if tokenHash == "" || len(tokenHash) > 2048 {
+		h.writeAuthError(w, auth.ErrInvalidIdentityToken)
+		return
+	}
+	if !h.allow(w, r, "confirm", tokenHash, 10) {
+		return
+	}
+	_, session, err := h.lifecycle.ConfirmEmail(r.Context(), tokenHash)
+	if err != nil {
+		h.writeAuthError(w, err)
+		return
+	}
+	h.setSessionCookie(w, session)
+	h.redirectToFrontend(w, r, "/dashboard?emailConfirmed=1")
+}
+
+func (h authHandler) resendConfirmation(w http.ResponseWriter, r *http.Request) {
+	preventCaching(w)
+	var request struct {
+		Email string `json:"email"`
+	}
+	if decodeJSON(r, &request) != nil {
+		writeError(w, http.StatusBadRequest, "INVALID_REQUEST", "Provide a valid email address.")
+		return
+	}
+	if !h.allow(w, r, "resend-confirmation", request.Email, 3) {
+		return
+	}
+	if err := h.lifecycle.ResendConfirmation(r.Context(), request.Email); err != nil {
+		h.writeAuthError(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusAccepted)
+}
+
+func (h authHandler) forgotPassword(w http.ResponseWriter, r *http.Request) {
+	preventCaching(w)
+	var request struct {
+		Email string `json:"email"`
+	}
+	if decodeJSON(r, &request) != nil {
+		writeError(w, http.StatusBadRequest, "INVALID_REQUEST", "Provide a valid email address.")
+		return
+	}
+	if !h.allow(w, r, "forgot-password", request.Email, 3) {
+		return
+	}
+	if err := h.lifecycle.ForgotPassword(r.Context(), request.Email); err != nil {
+		if errors.Is(err, auth.ErrInvalidEmail) {
+			// Preserve the non-enumerating response for malformed and unknown emails.
+			w.WriteHeader(http.StatusAccepted)
+			return
+		}
+		h.writeAuthError(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusAccepted)
+}
+
+func (h authHandler) beginPasswordReset(w http.ResponseWriter, r *http.Request) {
+	preventCaching(w)
+	tokenHash := r.URL.Query().Get("token_hash")
+	if tokenHash == "" || len(tokenHash) > 2048 {
+		h.writeAuthError(w, auth.ErrInvalidIdentityToken)
+		return
+	}
+	if !h.allow(w, r, "begin-password-reset", tokenHash, 10) {
+		return
+	}
+	grant, err := h.lifecycle.BeginPasswordReset(r.Context(), tokenHash)
+	if err != nil {
+		h.writeAuthError(w, err)
+		return
+	}
+	h.setRecoveryCookie(w, grant)
+	h.redirectToFrontend(w, r, "/reset-password")
+}
+
+func (h authHandler) resetPassword(w http.ResponseWriter, r *http.Request) {
+	preventCaching(w)
+	var request struct {
+		Password string `json:"password"`
+	}
+	if decodeJSON(r, &request) != nil {
+		writeError(w, http.StatusBadRequest, "INVALID_REQUEST", "Provide a valid new password.")
+		return
+	}
+	grant := recoveryToken(r)
+	if !h.allow(w, r, "reset-password", grant, 5) {
+		return
+	}
+	if err := h.lifecycle.ResetPassword(r.Context(), grant, request.Password); err != nil {
+		h.writeAuthError(w, err)
+		return
+	}
+	h.clearRecoveryCookie(w)
+	w.WriteHeader(http.StatusNoContent)
+}
+
 func preventCaching(w http.ResponseWriter) {
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("Pragma", "no-cache")
@@ -153,6 +281,14 @@ func (h authHandler) writeAuthError(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, auth.ErrInvalidCredentials):
 		writeError(w, http.StatusUnauthorized, "INVALID_CREDENTIALS", "Email or password is incorrect.")
+	case errors.Is(err, auth.ErrEmailUnconfirmed):
+		writeError(w, http.StatusForbidden, "EMAIL_UNCONFIRMED", "Confirm your email address to continue.")
+	case errors.Is(err, auth.ErrInvalidIdentityToken):
+		writeError(w, http.StatusBadRequest, "INVALID_OR_EXPIRED_TOKEN", "This link is invalid or has expired.")
+	case errors.Is(err, auth.ErrProviderRateLimited):
+		writeError(w, http.StatusTooManyRequests, "RATE_LIMITED", "Too many attempts. Please try again shortly.")
+	case errors.Is(err, auth.ErrIdentityProvider):
+		writeError(w, http.StatusServiceUnavailable, "SERVICE_UNAVAILABLE", "Authentication is temporarily unavailable.")
 	case errors.Is(err, auth.ErrUsernameTaken):
 		writeError(w, http.StatusConflict, "USERNAME_TAKEN", "That username is unavailable.")
 	case errors.Is(err, auth.ErrEmailTaken):
@@ -179,8 +315,38 @@ func (h authHandler) clearSessionCookie(w http.ResponseWriter) {
 	})
 }
 
+func (h authHandler) setRecoveryCookie(w http.ResponseWriter, token string) {
+	http.SetCookie(w, &http.Cookie{
+		Name: recoveryCookieName, Value: token, Path: "/api/v1/auth", HttpOnly: true, Secure: h.cookieSecure,
+		SameSite: http.SameSiteStrictMode, MaxAge: 15 * 60, Expires: time.Now().Add(15 * time.Minute),
+	})
+}
+
+func (h authHandler) clearRecoveryCookie(w http.ResponseWriter) {
+	http.SetCookie(w, &http.Cookie{
+		Name: recoveryCookieName, Value: "", Path: "/api/v1/auth", HttpOnly: true, Secure: h.cookieSecure,
+		SameSite: http.SameSiteStrictMode, MaxAge: -1, Expires: time.Unix(1, 0),
+	})
+}
+
+func (h authHandler) redirectToFrontend(w http.ResponseWriter, r *http.Request, path string) {
+	destination := strings.TrimRight(h.frontendURL, "/") + path
+	if h.frontendURL == "" {
+		destination = path
+	}
+	http.Redirect(w, r, destination, http.StatusSeeOther)
+}
+
 func sessionToken(r *http.Request) string {
 	cookie, err := r.Cookie(sessionCookieName)
+	if err != nil {
+		return ""
+	}
+	return cookie.Value
+}
+
+func recoveryToken(r *http.Request) string {
+	cookie, err := r.Cookie(recoveryCookieName)
 	if err != nil {
 		return ""
 	}

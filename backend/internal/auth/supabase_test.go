@@ -59,6 +59,31 @@ func TestSupabaseSignInReturnsIdentityAndTokens(t *testing.T) {
 	}
 }
 
+func TestSupabaseSignUpAcceptsTopLevelPendingUser(t *testing.T) {
+	provider := newTestSupabaseProvider(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/auth/v1/signup" || r.URL.Query().Get("redirect_to") != "https://api.test/confirm" {
+			t.Errorf("unexpected request URL %s", r.URL.String())
+		}
+		_, _ = io.WriteString(w, `{"id":"user-1","email":"alice@example.com","identities":[{}]}`)
+	})
+
+	identity, tokens, err := provider.SignUp(context.Background(), "alice@example.com", "password", "https://api.test/confirm")
+	if err != nil || identity.ID != "user-1" || !tokens.Empty() {
+		t.Fatalf("SignUp() identity=%+v tokens=%+v err=%v", identity, tokens, err)
+	}
+}
+
+func TestSupabaseSignUpDetectsObfuscatedDuplicate(t *testing.T) {
+	provider := newTestSupabaseProvider(t, func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = io.WriteString(w, `{"id":"fake-user","email":"alice@example.com","identities":[]}`)
+	})
+
+	_, _, err := provider.SignUp(context.Background(), "alice@example.com", "password", "")
+	if !errors.Is(err, ErrEmailTaken) {
+		t.Fatalf("SignUp() error = %v", err)
+	}
+}
+
 func TestSupabaseErrorsAreMappedWithoutLeakingResponse(t *testing.T) {
 	const sensitive = "provider-debug-password-and-token"
 	provider := newTestSupabaseProvider(t, func(w http.ResponseWriter, _ *http.Request) {
@@ -91,8 +116,8 @@ func TestSupabaseDeleteUserUsesAdministrativeCredential(t *testing.T) {
 		if r.Method != http.MethodDelete || r.URL.Path != "/auth/v1/admin/users/user-1" {
 			t.Errorf("unexpected request %s %s", r.Method, r.URL.Path)
 		}
-		if r.Header.Get("Authorization") != "Bearer service-key" {
-			t.Error("administrative request did not use service-role authorization")
+		if r.Header.Get("Authorization") != "Bearer service-key" || r.Header.Get("apikey") != "service-key" {
+			t.Error("administrative request did not use service-role credentials")
 		}
 		w.WriteHeader(http.StatusNoContent)
 	})

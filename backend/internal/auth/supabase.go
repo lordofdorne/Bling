@@ -27,6 +27,7 @@ type supabaseUser struct {
 	ID               string     `json:"id"`
 	Email            string     `json:"email"`
 	EmailConfirmedAt *time.Time `json:"email_confirmed_at"`
+	Identities       []any      `json:"identities"`
 }
 
 type supabaseSessionResponse struct {
@@ -35,6 +36,12 @@ type supabaseSessionResponse struct {
 	ExpiresIn    int64         `json:"expires_in"`
 	ExpiresAt    int64         `json:"expires_at"`
 	User         *supabaseUser `json:"user"`
+	// With email confirmation enabled, GoTrue returns the newly created user
+	// directly instead of wrapping it in an access-token response.
+	ID               string     `json:"id"`
+	Email            string     `json:"email"`
+	EmailConfirmedAt *time.Time `json:"email_confirmed_at"`
+	Identities       []any      `json:"identities"`
 }
 
 type supabaseErrorResponse struct {
@@ -72,7 +79,12 @@ func (p *SupabaseIdentityProvider) SignUp(ctx context.Context, email, password, 
 	err := p.request(ctx, http.MethodPost, path, p.authKey, map[string]string{
 		"email": email, "password": password,
 	}, &response)
-	return p.identityResponse(response, err)
+	identity, tokens, err := p.identityResponse(response, err)
+	user := response.identityUser()
+	if err == nil && user != nil && user.Identities != nil && len(user.Identities) == 0 {
+		return Identity{}, IdentityTokens{}, ErrEmailTaken
+	}
+	return identity, tokens, err
 }
 
 func (p *SupabaseIdentityProvider) SignInWithPassword(ctx context.Context, email, password string) (Identity, IdentityTokens, error) {
@@ -92,11 +104,27 @@ func (p *SupabaseIdentityProvider) Refresh(ctx context.Context, refreshToken str
 }
 
 func (p *SupabaseIdentityProvider) VerifyEmailOTP(ctx context.Context, tokenHash string) (Identity, IdentityTokens, error) {
+	return p.verifyOTP(ctx, tokenHash, "email")
+}
+
+func (p *SupabaseIdentityProvider) VerifyRecoveryOTP(ctx context.Context, tokenHash string) (Identity, IdentityTokens, error) {
+	return p.verifyOTP(ctx, tokenHash, "recovery")
+}
+
+func (p *SupabaseIdentityProvider) verifyOTP(ctx context.Context, tokenHash, tokenType string) (Identity, IdentityTokens, error) {
 	var response supabaseSessionResponse
 	err := p.request(ctx, http.MethodPost, "/auth/v1/verify", p.authKey, map[string]string{
-		"token_hash": tokenHash, "type": "email",
+		"token_hash": tokenHash, "type": tokenType,
 	}, &response)
 	return p.identityResponse(response, err)
+}
+
+func (p *SupabaseIdentityProvider) ResendEmailConfirmation(ctx context.Context, email, redirectURL string) error {
+	payload := map[string]any{"type": "signup", "email": email}
+	if redirectURL != "" {
+		payload["options"] = map[string]string{"email_redirect_to": redirectURL}
+	}
+	return p.request(ctx, http.MethodPost, "/auth/v1/resend", p.authKey, payload, nil)
 }
 
 func (p *SupabaseIdentityProvider) SendPasswordReset(ctx context.Context, email, redirectURL string) error {
@@ -126,7 +154,8 @@ func (p *SupabaseIdentityProvider) identityResponse(response supabaseSessionResp
 	if err != nil {
 		return Identity{}, IdentityTokens{}, err
 	}
-	if response.User == nil || response.User.ID == "" {
+	user := response.identityUser()
+	if user == nil || user.ID == "" {
 		return Identity{}, IdentityTokens{}, ErrIdentityProvider
 	}
 	expiresAt := time.Time{}
@@ -136,10 +165,22 @@ func (p *SupabaseIdentityProvider) identityResponse(response supabaseSessionResp
 		expiresAt = p.now().Add(time.Duration(response.ExpiresIn) * time.Second).UTC()
 	}
 	return Identity{
-			ID: response.User.ID, Email: response.User.Email, EmailConfirmedAt: response.User.EmailConfirmedAt,
+			ID: user.ID, Email: user.Email, EmailConfirmedAt: user.EmailConfirmedAt,
 		}, IdentityTokens{
 			AccessToken: response.AccessToken, RefreshToken: response.RefreshToken, ExpiresAt: expiresAt,
 		}, nil
+}
+
+func (r supabaseSessionResponse) identityUser() *supabaseUser {
+	if r.User != nil {
+		return r.User
+	}
+	if r.ID == "" {
+		return nil
+	}
+	return &supabaseUser{
+		ID: r.ID, Email: r.Email, EmailConfirmedAt: r.EmailConfirmedAt, Identities: r.Identities,
+	}
 }
 
 func (p *SupabaseIdentityProvider) request(ctx context.Context, method, path, bearer string, payload any, destination any) error {
@@ -156,7 +197,11 @@ func (p *SupabaseIdentityProvider) request(ctx context.Context, method, path, be
 		return fmt.Errorf("create identity request: %w", err)
 	}
 	request.Header.Set("Accept", "application/json")
-	request.Header.Set("apikey", p.authKey)
+	apiKey := p.authKey
+	if bearer != "" && bearer == p.serviceRoleKey {
+		apiKey = p.serviceRoleKey
+	}
+	request.Header.Set("apikey", apiKey)
 	if payload != nil {
 		request.Header.Set("Content-Type", "application/json")
 	}

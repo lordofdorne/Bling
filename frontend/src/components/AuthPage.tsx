@@ -31,6 +31,7 @@ export function AuthPage({ mode }: AuthPageProps) {
   const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmationEmail, setConfirmationEmail] = useState("");
 
   if (me.data) {
     return <Navigate to={destination} replace />;
@@ -40,7 +41,15 @@ export function AuthPage({ mode }: AuthPageProps) {
     event.preventDefault();
     try {
       if (mode === "register") {
-        await register.mutateAsync({ username, email, password });
+        const result = await register.mutateAsync({
+          username,
+          email,
+          password,
+        });
+        if (result.data.confirmationRequired) {
+          setConfirmationEmail(email.trim().toLowerCase());
+          return;
+        }
       } else {
         await login.mutateAsync({ email, password });
       }
@@ -125,77 +134,86 @@ export function AuthPage({ mode }: AuthPageProps) {
               </p>
             </div>
 
-            <form className="flex flex-col gap-4" onSubmit={submit}>
-              {mode === "register" && (
+            {confirmationEmail ? (
+              <Alert>
+                <AlertDescription>
+                  Check {confirmationEmail} for a confirmation link. You can
+                  sign in after confirming your email address.
+                </AlertDescription>
+              </Alert>
+            ) : (
+              <form className="flex flex-col gap-4" onSubmit={submit}>
+                {mode === "register" && (
+                  <div className="grid gap-2">
+                    <Label htmlFor="auth-username">Username</Label>
+                    <Input
+                      id="auth-username"
+                      name="username"
+                      value={username}
+                      onChange={(event) => setUsername(event.target.value)}
+                      autoComplete="username"
+                      minLength={3}
+                      maxLength={30}
+                      pattern="[a-z0-9_]+"
+                      required
+                    />
+                    <p className="text-muted-foreground text-xs">
+                      3–30 lowercase letters, numbers, or underscores.
+                    </p>
+                  </div>
+                )}
                 <div className="grid gap-2">
-                  <Label htmlFor="auth-username">Username</Label>
+                  <Label htmlFor="auth-email">Email</Label>
                   <Input
-                    id="auth-username"
-                    name="username"
-                    value={username}
-                    onChange={(event) => setUsername(event.target.value)}
-                    autoComplete="username"
-                    minLength={3}
-                    maxLength={30}
-                    pattern="[a-z0-9_]+"
+                    id="auth-email"
+                    name="email"
+                    type="email"
+                    value={email}
+                    onChange={(event) => setEmail(event.target.value)}
+                    autoComplete="email"
+                    maxLength={254}
                     required
                   />
-                  <p className="text-muted-foreground text-xs">
-                    3–30 lowercase letters, numbers, or underscores.
-                  </p>
                 </div>
-              )}
-              <div className="grid gap-2">
-                <Label htmlFor="auth-email">Email</Label>
-                <Input
-                  id="auth-email"
-                  name="email"
-                  type="email"
-                  value={email}
-                  onChange={(event) => setEmail(event.target.value)}
-                  autoComplete="email"
-                  maxLength={254}
-                  required
-                />
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="auth-password">Password</Label>
-                <Input
-                  id="auth-password"
-                  name="password"
-                  type="password"
-                  value={password}
-                  onChange={(event) => setPassword(event.target.value)}
-                  autoComplete={
-                    mode === "login" ? "current-password" : "new-password"
-                  }
-                  minLength={mode === "register" ? 12 : undefined}
-                  maxLength={72}
-                  required
-                />
-                {mode === "register" && (
-                  <p className="text-muted-foreground text-xs">
-                    Use at least 12 characters.
-                  </p>
+                <div className="grid gap-2">
+                  <Label htmlFor="auth-password">Password</Label>
+                  <Input
+                    id="auth-password"
+                    name="password"
+                    type="password"
+                    value={password}
+                    onChange={(event) => setPassword(event.target.value)}
+                    autoComplete={
+                      mode === "login" ? "current-password" : "new-password"
+                    }
+                    minLength={mode === "register" ? 12 : undefined}
+                    maxLength={72}
+                    required
+                  />
+                  {mode === "register" && (
+                    <p className="text-muted-foreground text-xs">
+                      Use at least 12 characters.
+                    </p>
+                  )}
+                </div>
+                {error && (
+                  <Alert variant="destructive">
+                    <AlertDescription>{error}</AlertDescription>
+                  </Alert>
                 )}
-              </div>
-              {error && (
-                <Alert variant="destructive">
-                  <AlertDescription>{error}</AlertDescription>
-                </Alert>
-              )}
-              <Button
-                type="submit"
-                size="lg"
-                disabled={activeMutation.isPending}
-              >
-                {activeMutation.isPending
-                  ? "Please wait…"
-                  : mode === "login"
-                    ? "Sign in"
-                    : "Create account"}
-              </Button>
-            </form>
+                <Button
+                  type="submit"
+                  size="lg"
+                  disabled={activeMutation.isPending}
+                >
+                  {activeMutation.isPending
+                    ? "Please wait…"
+                    : mode === "login"
+                      ? "Sign in"
+                      : "Create account"}
+                </Button>
+              </form>
+            )}
 
             <p className="text-muted-foreground text-sm">
               {mode === "login" ? "New to Bling?" : "Already have an account?"}{" "}

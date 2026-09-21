@@ -8,7 +8,9 @@ export type Creator = {
   createdAt: string;
 };
 
-type AuthResponse = { data: { user: Creator } };
+type AuthResponse = {
+  data: { user: Creator; confirmationRequired?: boolean };
+};
 
 export type LoginInput = { email: string; password: string };
 export type RegisterInput = LoginInput & { username: string };
@@ -50,7 +52,11 @@ export function useRegister() {
         method: "POST",
         body: JSON.stringify(input),
       }),
-    onSuccess: ({ data }) => queryClient.setQueryData(meKey, data.user),
+    onSuccess: ({ data }) => {
+      if (!data.confirmationRequired) {
+        queryClient.setQueryData(meKey, data.user);
+      }
+    },
   });
 }
 

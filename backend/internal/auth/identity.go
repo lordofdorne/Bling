@@ -36,6 +36,8 @@ type IdentityProvider interface {
 	SignInWithPassword(context.Context, string, string) (Identity, IdentityTokens, error)
 	Refresh(context.Context, string) (Identity, IdentityTokens, error)
 	VerifyEmailOTP(context.Context, string) (Identity, IdentityTokens, error)
+	VerifyRecoveryOTP(context.Context, string) (Identity, IdentityTokens, error)
+	ResendEmailConfirmation(context.Context, string, string) error
 	SendPasswordReset(context.Context, string, string) error
 	UpdatePassword(context.Context, string, string) error
 	SignOut(context.Context, string) error

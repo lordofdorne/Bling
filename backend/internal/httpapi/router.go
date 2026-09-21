@@ -31,14 +31,39 @@ type redisDependency struct{ client *redis.Client }
 
 func (d redisDependency) Ping(ctx context.Context) error { return d.client.Ping(ctx).Err() }
 
-func NewRouter(logger *slog.Logger, postgres *pgxpool.Pool, redisClient *redis.Client, cfg config.Config, queueService *queuedomain.Service, realtimeHub *realtime.Hub, callService *calldomain.Service, signalHub *realtime.SignalHub, paymentService *paymentdomain.Service, payoutService *payoutdomain.Service, financeService *financedomain.Service, balanceService *balancedomain.Service, socialService *social.Service) http.Handler {
+func NewRouter(logger *slog.Logger, postgres *pgxpool.Pool, redisClient *redis.Client, cfg config.Config, queueService *queuedomain.Service, realtimeHub *realtime.Hub, callService *calldomain.Service, signalHub *realtime.SignalHub, paymentService *paymentdomain.Service, payoutService *payoutdomain.Service, financeService *financedomain.Service, balanceService *balancedomain.Service, socialService *social.Service) (http.Handler, error) {
+	var applicationAuth authService = auth.NewService(auth.NewPostgresStore(postgres), cfg.BcryptCost, cfg.SessionTTL)
+	var lifecycle authLifecycleService
+	if cfg.SupabaseEnabled {
+		provider, err := auth.NewSupabaseIdentityProvider(
+			cfg.SupabaseURL, cfg.SupabaseAuthKey, cfg.SupabaseServiceRoleKey, cfg.SupabaseHTTPTimeout,
+		)
+		if err != nil {
+			return nil, err
+		}
+		cipher, err := auth.NewTokenCipher(cfg.SessionEncryptionKeys)
+		if err != nil {
+			return nil, err
+		}
+		providerService, err := auth.NewProviderService(
+			auth.NewPostgresProviderSessionStore(postgres), provider, cipher, cfg.SessionTTL,
+			cfg.AuthEmailConfirmURL, cfg.AuthPasswordResetURL,
+		)
+		if err != nil {
+			return nil, err
+		}
+		applicationAuth = providerService
+		lifecycle = providerService
+	}
 	authHandler := authHandler{
-		service:      auth.NewService(auth.NewPostgresStore(postgres), cfg.BcryptCost, cfg.SessionTTL),
+		service:      applicationAuth,
+		lifecycle:    lifecycle,
 		limiter:      auth.NewRedisRateLimiter(redisClient),
 		logger:       logger,
 		cookieSecure: cfg.CookieSecure,
 		sessionTTL:   cfg.SessionTTL,
 		rateWindow:   cfg.AuthRateLimitWindow,
+		frontendURL:  cfg.FrontendURL,
 	}
 	showHandler := showHandler{service: showdomain.NewService(showdomain.NewPostgresStore(postgres)).WithPayouts(payoutService), logger: logger}
 	queueHandler := queueHandler{service: queueService, payments: paymentService, logger: logger, cookieSecure: cfg.CookieSecure, cookieTTL: cfg.SessionTTL}
@@ -58,7 +83,7 @@ func NewRouter(logger *slog.Logger, postgres *pgxpool.Pool, redisClient *redis.C
 		postgres: postgresDependency{pool: postgres},
 		redis:    redisDependency{client: redisClient},
 		timeout:  cfg.ReadinessTimeout,
-	}, &authHandler, &showHandler, &queueHandler, &queueRealtimeHandler, &callHandler, &signalHandler, &paymentHandler, &payoutHandler, metrics, cfg.AllowedOrigins, socialAPI)
+	}, &authHandler, &showHandler, &queueHandler, &queueRealtimeHandler, &callHandler, &signalHandler, &paymentHandler, &payoutHandler, metrics, cfg.AllowedOrigins, socialAPI), nil
 }
 
 func newRouter(logger *slog.Logger, health healthHandler, authentication *authHandler, shows *showHandler, queues *queueHandler, realtimeUpdates *realtimeHandler, allowedOrigins []string) http.Handler {

@@ -17,15 +17,31 @@ Foundation milestone completed on 2026-09-20:
 - [x] Added unit tests for configuration, provider calls, error redaction, response limits, encryption, tamper detection, and key rotation.
 - [x] Verified the full Go test suite and `go vet ./...`.
 
-The Supabase path is not active yet. `SUPABASE_ENABLED` defaults to `false`, and the existing bcrypt authentication remains the runtime implementation. Migration `000016` has been added but was not applied to a live database during this milestone.
+Provider-auth milestone completed on 2026-09-20:
+
+- [x] Added the PostgreSQL provider-session repository.
+- [x] Added compare-and-swap refresh-token rotation to reject stale concurrent updates.
+- [x] Added session and account-wide revocation.
+- [x] Added one-time, server-stored password-recovery grants.
+- [x] Added the Supabase-backed registration, login, confirmation, refresh, logout, resend, recovery, and password-update service.
+- [x] Added compensating Supabase identity deletion when the application-user insert fails.
+- [x] Added confirmation, resend-confirmation, forgot-password, recovery callback, and reset-password HTTP routes.
+- [x] Wired the Supabase service behind `SUPABASE_ENABLED`; legacy bcrypt auth remains the default.
+- [x] Added fake-Supabase HTTP integration tests for registration, confirmation, and password recovery.
+- [x] Added handler tests and a frontend guard for pending email confirmation.
+- [x] Applied migrations 001–017 to an isolated PostgreSQL 16 instance and ran the provider repository integration test.
+- [x] Verified backend tests, Go static analysis, frontend lint, frontend tests, and the production frontend build.
+
+The Supabase path is not active yet. `SUPABASE_ENABLED` defaults to `false`, and the existing bcrypt authentication remains the runtime implementation. Migrations `000016` and `000017` were verified on an isolated database but have not been applied to a shared development, staging, or production database.
 
 Next implementation milestone:
 
-1. Add the Supabase-backed application-session repository with atomic refresh-token rotation.
-2. Add a provider-backed auth service alongside the existing bcrypt service.
-3. Implement registration compensation and email-confirmation state without switching the router.
-4. Add confirmation, resend, forgot-password, and reset-password HTTP handlers and tests.
-5. Switch `httpapi.NewRouter` between legacy and Supabase services using `SUPABASE_ENABLED` only after staging migration verification.
+1. Create the development Supabase project and configure custom SMTP.
+2. Customize the confirmation email link to point to `AUTH_EMAIL_CONFIRM_URL` with `?token_hash={{ .TokenHash }}&type=email`.
+3. Customize the recovery email link to point to `AUTH_PASSWORD_RESET_URL` with `?token_hash={{ .TokenHash }}&type=recovery`.
+4. Apply migrations 001–017 to the development project.
+5. Add the forgot-password and reset-password frontend screens and route.
+6. Exercise the full flow against development Supabase before enabling it in staging.
 
 ## Objective
 
