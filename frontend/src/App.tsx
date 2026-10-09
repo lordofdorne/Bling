@@ -4,6 +4,7 @@ import { Dashboard } from "./components/Dashboard";
 import { ProtectedRoute } from "./components/ProtectedRoute";
 import { PublicHotline } from "./components/PublicHotline";
 import { DiscoverPage, LegacyCreatorRedirect } from "./components/DiscoverPage";
+import { PasswordRecoveryPage } from "./components/PasswordRecoveryPage";
 import { ScreenSizeProvider } from "./lib/ScreenSizeProvider";
 import { ThemeProvider } from "./lib/ThemeProvider";
 import { Button } from "@/components/ui/button";
@@ -43,6 +44,14 @@ export function App() {
           />
           <Route path="/login" element={<AuthPage mode="login" />} />
           <Route path="/register" element={<AuthPage mode="register" />} />
+          <Route
+            path="/forgot-password"
+            element={<PasswordRecoveryPage mode="forgot" />}
+          />
+          <Route
+            path="/reset-password"
+            element={<PasswordRecoveryPage mode="reset" />}
+          />
           <Route
             path="/dashboard/*"
             element={

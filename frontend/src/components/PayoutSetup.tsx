@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import { loadConnectAndInitialize } from "@stripe/connect-js";
 import {
   ConnectAccountOnboarding,
@@ -8,7 +8,10 @@ import {
   fetchPayoutAccountSession,
   PayoutAccountSession,
 } from "../lib/payouts";
-import { cssToken } from "../lib/theme";
+import {
+  stripeConnectAppearance,
+  useStripeAppearance,
+} from "../lib/stripe-appearance";
 
 export function PayoutSetup({
   session,
@@ -17,28 +20,25 @@ export function PayoutSetup({
   session: PayoutAccountSession;
   onExit: () => void;
 }) {
+  const appearance = useStripeAppearance().connect;
+  // The instance is created once per key with the current tokens; later theme
+  // changes go through update() so the onboarding flow keeps its progress.
   const instance = useMemo(
     () =>
       loadConnectAndInitialize({
         publishableKey: session.publishableKey,
         fetchClientSecret: async () =>
           (await fetchPayoutAccountSession()).clientSecret,
-        appearance: {
-          variables: {
-            colorPrimary: cssToken("--green"),
-            colorBackground: cssToken("--stripe-embed-bg"),
-            colorText: cssToken("--mauve"),
-            colorDanger: cssToken("--accent"),
-            borderRadius: "14px",
-            spacingUnit: "12px",
-            fontFamily: "Inter, ui-sans-serif, system-ui",
-          },
-        },
+        appearance: stripeConnectAppearance(),
       }),
     [session.publishableKey],
   );
+  useEffect(() => {
+    instance.update({ appearance });
+  }, [instance, appearance]);
+
   return (
-    <div className="[&_iframe]:w-full rounded-xl bg-[var(--stripe-embed-bg)] p-4">
+    <div className="[&_iframe]:w-full">
       <ConnectComponentsProvider connectInstance={instance}>
         <ConnectAccountOnboarding onExit={onExit} />
       </ConnectComponentsProvider>

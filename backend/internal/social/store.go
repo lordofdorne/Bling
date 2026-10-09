@@ -12,7 +12,15 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-type Store struct{ Pool *pgxpool.Pool }
+type AvatarObjectStore interface {
+	Put(context.Context, string, string, []byte) error
+	Get(context.Context, string) (Avatar, error)
+}
+
+type Store struct {
+	Pool          *pgxpool.Pool
+	AvatarObjects AvatarObjectStore
+}
 
 type Avatar struct {
 	ContentType string
@@ -20,6 +28,11 @@ type Avatar struct {
 }
 
 func NewStore(pool *pgxpool.Pool) *Store { return &Store{Pool: pool} }
+
+func (s *Store) WithAvatarObjects(objects AvatarObjectStore) *Store {
+	s.AvatarObjects = objects
+	return s
+}
 
 const profileColumns = `p.user_id,p.username,p.display_name,p.bio,p.avatar_url,p.cover_url,p.category,p.published,p.follower_count,p.is_live,p.live_show_id,p.live_started_at`
 
@@ -41,12 +54,28 @@ func (s *Store) SaveProfile(ctx context.Context, id string, input ProfileInput) 
 	return scanProfile(s.Pool.QueryRow(ctx, `UPDATE creator_profiles p SET display_name=$2,bio=$3,avatar_url=$4,cover_url=$5,category=$6,published=$7 OR is_live,updated_at=clock_timestamp() WHERE user_id=$1 RETURNING `+profileColumns, id, input.DisplayName, input.Bio, input.AvatarURL, input.CoverURL, input.Category, input.Published))
 }
 func (s *Store) SaveAvatar(ctx context.Context, id, contentType string, data []byte) error {
+	if s.AvatarObjects != nil {
+		return s.AvatarObjects.Put(ctx, id, contentType, data)
+	}
 	_, err := s.Pool.Exec(ctx, `INSERT INTO creator_profile_avatars(user_id,content_type,image_data)
 VALUES($1,$2,$3) ON CONFLICT(user_id) DO UPDATE SET content_type=EXCLUDED.content_type,
 image_data=EXCLUDED.image_data,updated_at=clock_timestamp()`, id, contentType, data)
 	return err
 }
 func (s *Store) Avatar(ctx context.Context, username, ownerID string) (Avatar, error) {
+	if s.AvatarObjects != nil {
+		var userID string
+		err := s.Pool.QueryRow(ctx, `SELECT p.user_id FROM creator_profiles p
+WHERE p.username=$1 AND p.avatar_url='/api/v1/creators/'||p.username||'/avatar'
+AND (p.published OR p.user_id=NULLIF($2,'')::uuid)`, username, ownerID).Scan(&userID)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return Avatar{}, ErrNotFound
+		}
+		if err != nil {
+			return Avatar{}, err
+		}
+		return s.AvatarObjects.Get(ctx, userID)
+	}
 	var avatar Avatar
 	err := s.Pool.QueryRow(ctx, `SELECT a.content_type,a.image_data FROM creator_profile_avatars a
 JOIN creator_profiles p ON p.user_id=a.user_id

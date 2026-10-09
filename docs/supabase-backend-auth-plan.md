@@ -30,20 +30,25 @@ Provider-auth milestone completed on 2026-09-20:
 - [x] Added fake-Supabase HTTP integration tests for registration, confirmation, and password recovery.
 - [x] Added handler tests and a frontend guard for pending email confirmation.
 - [x] Applied migrations 001–017 to an isolated PostgreSQL 16 instance and ran the provider repository integration test.
-- [x] Connected the development Supabase project and applied migrations 001–018.
+- [x] Connected the development Supabase project and applied migrations 001–019.
 - [x] Added migration 018 to revoke direct `anon`/`authenticated` table, sequence, and function access and remove those defaults from the Bling migration owner.
 - [x] Verified all 25 application tables have RLS, direct public-role grants are absent, the Supabase Auth foreign key exists, and `profile-avatars` is private.
+- [x] Added migration 019 with a non-login `bling_backend` DML role and explicit backend-only RLS policies.
+- [x] Created and verified the development `bling_runtime` login with no admin, DDL, migration-history, or RLS-bypass access.
+- [x] Split local runtime and migration credentials into `DATABASE_URL` and `MIGRATION_DATABASE_URL`.
+- [x] Added the private Supabase Storage avatar adapter with bounded upload/download behavior and safe provider errors.
+- [x] Added forgot-password and reset-password frontend routes, forms, and tests.
 - [x] Verified backend tests, Go static analysis, frontend lint, frontend tests, and the production frontend build.
 
-The Supabase path is not active yet. `SUPABASE_ENABLED` remains `false`, and the existing bcrypt authentication remains the runtime implementation. Migrations `000001` through `000018` are applied to the development Supabase project; staging and production remain untouched.
+The Supabase path is not active yet. `SUPABASE_ENABLED` remains `false`, and the existing bcrypt authentication remains the runtime implementation. Migrations `000001` through `000019` are applied to the development Supabase project; staging and production remain untouched.
 
 Next implementation milestone:
 
 1. Create the development Supabase project and configure custom SMTP.
 2. Customize the confirmation email link to point to `AUTH_EMAIL_CONFIRM_URL` with `?token_hash={{ .TokenHash }}&type=email`.
 3. Customize the recovery email link to point to `AUTH_PASSWORD_RESET_URL` with `?token_hash={{ .TokenHash }}&type=recovery`.
-4. Apply migrations 001–018 to the development project. (Completed.)
-5. Add the forgot-password and reset-password frontend screens and route.
+4. Apply migrations 001–019 to the development project. (Completed.)
+5. Add the forgot-password and reset-password frontend screens and route. (Completed.)
 6. Exercise the full flow against development Supabase before enabling it in staging.
 
 ## Objective
@@ -252,6 +257,7 @@ New configuration will likely include:
 - `SUPABASE_PUBLISHABLE_KEY` (server-held in Bling even though it is not a secret)
 - `SUPABASE_SECRET_KEY`
 - `SUPABASE_STORAGE_BUCKET`
+- `SUPABASE_STORAGE_SERVICE_KEY` (backend-only legacy service-role JWT required by the current Storage authorization endpoint)
 - `SESSION_ENCRYPTION_KEYS`
 - `AUTH_EMAIL_CONFIRM_URL`
 - `AUTH_PASSWORD_RESET_URL`
@@ -420,7 +426,7 @@ The current login, registration, `useMe`, logout, protected-route, and profile-i
 2. Add database/security migrations and verify them on a disposable database.
 3. Implement the Auth provider behind interfaces and retain existing handler contracts.
 4. Implement encrypted server-owned sessions and new account lifecycle endpoints.
-5. Implement private Storage avatars.
+5. Implement private Storage avatars. (Adapter complete; live verification requires `SUPABASE_STORAGE_SERVICE_KEY`.)
 6. Run the full backend and frontend test suites.
 7. Create staging, load representative data, and complete the security tests.
 8. Complete a backup-and-restore drill.

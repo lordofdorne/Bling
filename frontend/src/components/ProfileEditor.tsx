@@ -1,4 +1,6 @@
-import { useState, type ChangeEvent, type FormEvent } from "react";
+import { useState, type ChangeEvent } from "react";
+import { useForm, useWatch } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
 import { Camera, Check, Upload, X } from "lucide-react";
 import {
   categories,
@@ -6,23 +8,22 @@ import {
   useSaveProfile,
   useUploadAvatar,
   type CreatorProfile,
-  type ProfileInput,
 } from "../lib/social";
+import { profileSchema, type ProfileValues } from "../lib/schemas";
+import {
+  FormError,
+  SelectField,
+  SwitchField,
+  TextField,
+  TextareaField,
+} from "./form-fields";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Switch } from "@/components/ui/switch";
-import { Textarea } from "@/components/ui/textarea";
+import { Form } from "@/components/ui/form";
 
 export function ProfileEditor() {
   const profile = useOwnProfile();
@@ -65,46 +66,47 @@ export function ProfileEditor() {
 }
 
 function ProfileForm({ profile }: { profile: CreatorProfile }) {
-  const [draft, setDraft] = useState<ProfileInput>({
-    displayName: profile.displayName,
-    bio: profile.bio,
-    avatarUrl: profile.avatarUrl,
-    coverUrl: profile.coverUrl,
-    category: profile.category,
-    published: profile.published,
+  const form = useForm<ProfileValues>({
+    resolver: zodResolver(profileSchema),
+    defaultValues: {
+      displayName: profile.displayName,
+      bio: profile.bio,
+      avatarUrl: profile.avatarUrl,
+      coverUrl: profile.coverUrl,
+      category: categories.find((c) => c === profile.category) ?? categories[0],
+      published: profile.published,
+    },
   });
   const save = useSaveProfile();
   const uploadAvatar = useUploadAvatar();
   const [saved, setSaved] = useState(false);
+  // The chosen file is uploaded on save, so it stays outside the form values
+  // until it becomes a URL.
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
   const [avatarPreview, setAvatarPreview] = useState(profile.avatarUrl);
   const [avatarError, setAvatarError] = useState("");
   const [avatarInputKey, setAvatarInputKey] = useState(0);
+  const [displayName, avatarUrl] = useWatch({
+    control: form.control,
+    name: ["displayName", "avatarUrl"],
+  });
 
-  function update<K extends keyof ProfileInput>(
-    key: K,
-    value: ProfileInput[K],
-  ) {
-    setDraft((old) => ({ ...old, [key]: value }));
-    setSaved(false);
-  }
-
-  async function submit(event: FormEvent) {
-    event.preventDefault();
+  const submit = form.handleSubmit(async (values) => {
     try {
-      const avatarUrl = avatarFile
+      const nextAvatarUrl = avatarFile
         ? await uploadAvatar.mutateAsync(avatarFile)
-        : draft.avatarUrl;
-      await save.mutateAsync({ ...draft, avatarUrl });
-      setDraft((old) => ({ ...old, avatarUrl }));
+        : values.avatarUrl;
+      const next = { ...values, avatarUrl: nextAvatarUrl };
+      await save.mutateAsync(next);
+      form.reset(next);
       setAvatarFile(null);
-      setAvatarPreview(avatarUrl);
+      setAvatarPreview(nextAvatarUrl);
       setAvatarInputKey((key) => key + 1);
       setSaved(true);
     } catch {
       /* Error state shown below. */
     }
-  }
+  });
 
   function chooseAvatar(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0] ?? null;
@@ -135,170 +137,152 @@ function ProfileForm({ profile }: { profile: CreatorProfile }) {
   return (
     <Card>
       <CardContent>
-        <form className="grid gap-5 md:grid-cols-2" onSubmit={submit}>
-          <div className="grid gap-2">
-            <Label htmlFor="profile-name">Display name</Label>
-            <Input
-              id="profile-name"
-              required
-              maxLength={60}
-              value={draft.displayName}
-              onChange={(e) => update("displayName", e.target.value)}
+        <Form {...form}>
+          <form
+            className="grid gap-5 md:grid-cols-2"
+            onSubmit={submit}
+            noValidate
+          >
+            <TextField
+              control={form.control}
+              name="displayName"
+              label="Display name"
             />
-          </div>
 
-          <div className="grid gap-2">
-            <Label htmlFor="profile-category">Category</Label>
-            <Select
-              value={draft.category}
-              onValueChange={(value) => update("category", value)}
-            >
-              <SelectTrigger id="profile-category" aria-label="Category">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {categories.map((c) => (
-                  <SelectItem key={c} value={c}>
-                    {c}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+            <SelectField
+              control={form.control}
+              name="category"
+              label="Category"
+              aria-label="Category"
+              options={categories.map((c) => ({ value: c, label: c }))}
+            />
 
-          <div className="grid gap-2 md:col-span-2">
-            <Label htmlFor="profile-bio">About your channel</Label>
-            <Textarea
-              id="profile-bio"
-              maxLength={500}
+            <TextareaField
+              control={form.control}
+              name="bio"
+              label="About your channel"
+              className="md:col-span-2"
               rows={4}
-              value={draft.bio}
-              onChange={(e) => update("bio", e.target.value)}
               placeholder="What do you love talking about?"
             />
-          </div>
 
-          <div className="grid gap-3">
-            <Label htmlFor="profile-avatar">Profile picture</Label>
-            <div className="flex items-center gap-4">
-              <Avatar className="border-border bg-muted size-(--profile-avatar-size) border">
-                {avatarPreview && (
-                  <AvatarImage
-                    src={avatarPreview}
-                    alt="Profile picture preview"
-                  />
-                )}
-                <AvatarFallback>
-                  {draft.displayName.slice(0, 2).toUpperCase()}
-                </AvatarFallback>
-              </Avatar>
-              <Input
-                key={avatarInputKey}
-                id="profile-avatar"
-                type="file"
-                accept="image/jpeg,image/png,image/webp"
-                className="sr-only"
-                onChange={chooseAvatar}
-              />
-              <div className="flex flex-col items-start gap-2">
-                <div className="flex flex-wrap gap-2">
-                  <Button asChild variant="outline" className="cursor-pointer">
-                    <label htmlFor="profile-avatar">
-                      <Camera className="size-4" />
-                      {draft.avatarUrl || avatarFile
-                        ? "Change photo"
-                        : "Choose photo"}
-                    </label>
-                  </Button>
-                  {(draft.avatarUrl || avatarFile) && (
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      onClick={() => {
-                        setAvatarFile(null);
-                        setAvatarPreview("");
-                        setAvatarInputKey((key) => key + 1);
-                        update("avatarUrl", "");
-                      }}
-                    >
-                      <X className="size-4" />
-                      Remove
-                    </Button>
+            <div className="grid gap-3">
+              <Label htmlFor="profile-avatar">Profile picture</Label>
+              <div className="flex items-center gap-4">
+                <Avatar className="border-border bg-muted size-(--profile-avatar-size) border">
+                  {avatarPreview && (
+                    <AvatarImage
+                      src={avatarPreview}
+                      alt="Profile picture preview"
+                    />
                   )}
+                  <AvatarFallback>
+                    {displayName.slice(0, 2).toUpperCase()}
+                  </AvatarFallback>
+                </Avatar>
+                <Input
+                  key={avatarInputKey}
+                  id="profile-avatar"
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  className="sr-only"
+                  onChange={chooseAvatar}
+                />
+                <div className="flex flex-col items-start gap-2">
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      asChild
+                      variant="outline"
+                      className="cursor-pointer"
+                    >
+                      <label htmlFor="profile-avatar">
+                        <Camera className="size-4" />
+                        {avatarUrl || avatarFile
+                          ? "Change photo"
+                          : "Choose photo"}
+                      </label>
+                    </Button>
+                    {(avatarUrl || avatarFile) && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        onClick={() => {
+                          setAvatarFile(null);
+                          setAvatarPreview("");
+                          setAvatarInputKey((key) => key + 1);
+                          form.setValue("avatarUrl", "", { shouldDirty: true });
+                        }}
+                      >
+                        <X className="size-4" />
+                        Remove
+                      </Button>
+                    )}
+                  </div>
+                  <p className="text-muted-foreground text-xs">
+                    {avatarFile?.name ?? "JPG, PNG, or WebP · 768 KB max"}
+                  </p>
                 </div>
-                <p className="text-muted-foreground text-xs">
-                  {avatarFile?.name ?? "JPG, PNG, or WebP · 768 KB max"}
-                </p>
               </div>
-            </div>
-            {avatarError && (
-              <p role="alert" className="text-destructive text-xs">
-                {avatarError}
-              </p>
-            )}
-          </div>
-
-          <div className="grid gap-2">
-            <Label htmlFor="profile-cover">Cover image URL</Label>
-            <Input
-              id="profile-cover"
-              type="url"
-              maxLength={2048}
-              pattern="https://.*"
-              placeholder="https://…"
-              value={draft.coverUrl}
-              onChange={(e) => update("coverUrl", e.target.value)}
-            />
-            <p className="text-muted-foreground text-xs">
-              Landscape images work best. Leave blank for your channel initials.
-            </p>
-          </div>
-
-          <div className="md:col-span-2">
-            <Label className="gap-3" htmlFor="profile-published">
-              <Switch
-                id="profile-published"
-                checked={draft.published}
-                disabled={profile.isLive}
-                onCheckedChange={(checked) => update("published", checked)}
-              />
-              Show my profile in discovery
-            </Label>
-            {profile.isLive && (
-              <p className="text-muted-foreground mt-2 text-xs">
-                Your profile stays published while your Hotline is live.
-              </p>
-            )}
-          </div>
-
-          <div className="flex flex-wrap items-center gap-3 md:col-span-2">
-            <Button disabled={save.isPending || uploadAvatar.isPending}>
-              {uploadAvatar.isPending ? (
-                <Upload className="size-4" />
-              ) : (
-                <Check className="size-4" />
+              {avatarError && (
+                <p role="alert" className="text-destructive text-xs">
+                  {avatarError}
+                </p>
               )}
-              {uploadAvatar.isPending
-                ? "Uploading…"
-                : save.isPending
-                  ? "Saving…"
-                  : "Save profile"}
-            </Button>
-            {saved && (
-              <span role="status" className="text-muted-foreground text-sm">
-                Profile saved.
-              </span>
-            )}
-          </div>
+            </div>
 
-          {(save.isError || uploadAvatar.isError) && (
-            <Alert variant="destructive" className="md:col-span-2">
-              <AlertDescription>
-                {(save.error ?? uploadAvatar.error)?.message}
-              </AlertDescription>
-            </Alert>
-          )}
-        </form>
+            <TextField
+              control={form.control}
+              name="coverUrl"
+              label="Cover image URL"
+              type="url"
+              inputMode="url"
+              placeholder="https://…"
+              description="Landscape images work best. Leave blank for your channel initials."
+            />
+
+            <SwitchField
+              control={form.control}
+              name="published"
+              label="Show my profile in discovery"
+              className="md:col-span-2"
+              disabled={profile.isLive}
+              description={
+                profile.isLive
+                  ? "Your profile stays published while your Hotline is live."
+                  : undefined
+              }
+            />
+
+            <div className="flex flex-wrap items-center gap-3 md:col-span-2">
+              <Button
+                type="submit"
+                disabled={save.isPending || uploadAvatar.isPending}
+              >
+                {uploadAvatar.isPending ? (
+                  <Upload className="size-4" />
+                ) : (
+                  <Check className="size-4" />
+                )}
+                {uploadAvatar.isPending
+                  ? "Uploading…"
+                  : save.isPending
+                    ? "Saving…"
+                    : "Save profile"}
+              </Button>
+              {saved && !form.formState.isDirty && (
+                <span role="status" className="text-muted-foreground text-sm">
+                  Profile saved.
+                </span>
+              )}
+            </div>
+
+            <FormError
+              error={save.error ?? uploadAvatar.error}
+              fallback="Unable to save your profile. Please try again."
+              className="md:col-span-2"
+            />
+          </form>
+        </Form>
       </CardContent>
     </Card>
   );

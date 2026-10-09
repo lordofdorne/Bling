@@ -55,6 +55,16 @@ Read the system from hooks in `frontend/src/lib/design.ts`. Do not copy token va
 
 Breakpoints: phone ≤720, tablet ≤980, laptop ≤1180, desktop ≤1699, wide ≥1700. `data-screen` on `<html>` matches `useScreenSize().name`. The same boundaries exist as Tailwind variants — `tablet:`, `laptop:`, `desktop:`, `wide:` — so chrome written in utilities switches where the hooks say it should. Tailwind's own `sm:`/`md:`/`lg:` still exist; prefer the named ones for layout decisions.
 
+### Forms
+
+Forms use react-hook-form with zod through shadcn's `Form` (`components/ui/form.tsx`). Do not hold field values in `useState` or validate by hand.
+
+- Schemas live in `frontend/src/lib/schemas.ts`. Reuse the shared field rules (`emailField`, `newPasswordField`, `displayNameField`, …) so a value is checked the same way everywhere, and keep them in step with the API.
+- Build fields from `frontend/src/components/form-fields.tsx` — `TextField`, `TextareaField`, `SelectField`, `SwitchField` — which wire label, help text and error message. Drop to `FormField`/`FormItem` only for custom layouts (masked inputs, radio cards). Show request failures with `<FormError error={mutation.error} />`.
+- Lists of rows use `useFieldArray` (see `TierConfiguration`). Add `noValidate` to the `<form>` so zod, not the browser, reports errors.
+
+Stripe Elements and Connect embeds take their appearance from `useStripeAppearance()` in `frontend/src/lib/stripe-appearance.ts`, which reads tokens at runtime and follows the theme.
+
 ### Adaptive grid
 
 Use `<Grid>` and `<GridItem>` from `frontend/src/components/Grid.tsx` for content that should reflow. Chrome shells (sidebar + main) stay in CSS.

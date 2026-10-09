@@ -57,6 +57,7 @@ type Config struct {
 	SupabasePublishableKey    string
 	SupabaseSecretKey         string
 	SupabaseStorageBucket     string
+	SupabaseStorageServiceKey string
 	SessionEncryptionKeys     string
 	AuthEmailConfirmURL       string
 	AuthPasswordResetURL      string
@@ -93,9 +94,12 @@ func Load() (Config, error) {
 		SupabasePublishableKey: firstNonEmptyEnv("SUPABASE_PUBLISHABLE_KEY", "SUPABASE_AUTH_KEY"),
 		SupabaseSecretKey:      firstNonEmptyEnv("SUPABASE_SECRET_KEY", "SUPABASE_SERVICE_ROLE_KEY"),
 		SupabaseStorageBucket:  strings.TrimSpace(os.Getenv("SUPABASE_STORAGE_BUCKET")),
-		SessionEncryptionKeys:  strings.TrimSpace(os.Getenv("SESSION_ENCRYPTION_KEYS")),
-		AuthEmailConfirmURL:    strings.TrimSpace(os.Getenv("AUTH_EMAIL_CONFIRM_URL")),
-		AuthPasswordResetURL:   strings.TrimSpace(os.Getenv("AUTH_PASSWORD_RESET_URL")),
+		SupabaseStorageServiceKey: strings.TrimSpace(
+			os.Getenv("SUPABASE_STORAGE_SERVICE_KEY"),
+		),
+		SessionEncryptionKeys: strings.TrimSpace(os.Getenv("SESSION_ENCRYPTION_KEYS")),
+		AuthEmailConfirmURL:   strings.TrimSpace(os.Getenv("AUTH_EMAIL_CONFIRM_URL")),
+		AuthPasswordResetURL:  strings.TrimSpace(os.Getenv("AUTH_PASSWORD_RESET_URL")),
 	}
 	for _, raw := range splitCSV(os.Getenv("SOCIAL_TRUSTED_PROXY_CIDRS")) {
 		prefix, err := netip.ParsePrefix(raw)
@@ -225,13 +229,14 @@ func Load() (Config, error) {
 
 func validateSupabase(cfg Config) error {
 	required := map[string]string{
-		"SUPABASE_URL":             cfg.SupabaseURL,
-		"SUPABASE_PUBLISHABLE_KEY": cfg.SupabasePublishableKey,
-		"SUPABASE_SECRET_KEY":      cfg.SupabaseSecretKey,
-		"SUPABASE_STORAGE_BUCKET":  cfg.SupabaseStorageBucket,
-		"SESSION_ENCRYPTION_KEYS":  cfg.SessionEncryptionKeys,
-		"AUTH_EMAIL_CONFIRM_URL":   cfg.AuthEmailConfirmURL,
-		"AUTH_PASSWORD_RESET_URL":  cfg.AuthPasswordResetURL,
+		"SUPABASE_URL":                 cfg.SupabaseURL,
+		"SUPABASE_PUBLISHABLE_KEY":     cfg.SupabasePublishableKey,
+		"SUPABASE_SECRET_KEY":          cfg.SupabaseSecretKey,
+		"SUPABASE_STORAGE_BUCKET":      cfg.SupabaseStorageBucket,
+		"SUPABASE_STORAGE_SERVICE_KEY": cfg.SupabaseStorageServiceKey,
+		"SESSION_ENCRYPTION_KEYS":      cfg.SessionEncryptionKeys,
+		"AUTH_EMAIL_CONFIRM_URL":       cfg.AuthEmailConfirmURL,
+		"AUTH_PASSWORD_RESET_URL":      cfg.AuthPasswordResetURL,
 	}
 	for key, value := range required {
 		if value == "" {

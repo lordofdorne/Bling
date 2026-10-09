@@ -43,9 +43,6 @@
   --overlay: #141614;
   --shadow: #000000;
 
-  /* Stripe Connect onboarding is a light hosted form. */
-  --stripe-embed-bg: #ffffff;
-
   /* Derived tints. */
   --accent-tint: color-mix(in srgb, var(--accent) 7%, transparent);
 
@@ -82,7 +79,6 @@
   --overlay: #141614;
   --shadow: #1f211c;
 
-  --stripe-embed-bg: #ffffff;
   --accent-tint: color-mix(in srgb, var(--accent) 10%, transparent);
 }
 

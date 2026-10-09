@@ -365,6 +365,73 @@ describe("App routes", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("requests a password reset without revealing account existence", async () => {
+    const fetchMock = vi.fn(
+      async (input: RequestInfo | URL, init?: RequestInit) => {
+        if (
+          String(input) === "/api/v1/auth/forgot-password" &&
+          init?.method === "POST"
+        ) {
+          return new Response(null, { status: 202 });
+        }
+        return new Response(null, { status: 404 });
+      },
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderAt("/forgot-password");
+    fireEvent.change(screen.getByLabelText("Email"), {
+      target: { value: "alice@example.com" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Send reset link" }));
+
+    expect(
+      await screen.findByText(/If an account exists for that email/i),
+    ).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/v1/auth/forgot-password",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ email: "alice@example.com" }),
+      }),
+    );
+  });
+
+  it("submits a new password from the recovery route", async () => {
+    const fetchMock = vi.fn(
+      async (input: RequestInfo | URL, init?: RequestInit) => {
+        if (
+          String(input) === "/api/v1/auth/reset-password" &&
+          init?.method === "POST"
+        ) {
+          return new Response(null, { status: 204 });
+        }
+        return new Response(null, { status: 404 });
+      },
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderAt("/reset-password");
+    fireEvent.change(screen.getByLabelText("New password"), {
+      target: { value: "a-new-long-password" },
+    });
+    fireEvent.change(screen.getByLabelText("Confirm new password"), {
+      target: { value: "a-new-long-password" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Update password" }));
+
+    expect(
+      await screen.findByText(/Your password has been updated/i),
+    ).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/v1/auth/reset-password",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ password: "a-new-long-password" }),
+      }),
+    );
+  });
+
   it("logs out and returns the creator to sign in", async () => {
     const creator = {
       id: "user-1",
@@ -804,6 +871,104 @@ describe("App routes", () => {
     expect(screen.getByText("Pending clearance")).toBeInTheDocument();
     expect(screen.getByText("$25.00")).toBeInTheDocument();
     expect(screen.getByText("Action required")).toBeInTheDocument();
+    // No bank account on file, so there is nothing to set up yet.
+    expect(
+      screen.queryByRole("button", { name: "Set up Hotline" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("sets up a Hotline from payouts once bank details are added", async () => {
+    const creator = {
+      id: "user-1",
+      username: "alice",
+      email: "alice@example.com",
+      createdAt: "2026-08-24T12:00:00Z",
+    };
+    const draft = {
+      id: "show-1",
+      creatorId: "user-1",
+      status: "CREATED",
+      createdAt: "2026-08-24T12:00:00Z",
+    };
+    let created = false;
+    const fetchMock = vi.fn(
+      async (input: RequestInfo | URL, init?: RequestInit) => {
+        const path = String(input);
+        if (path === "/api/v1/me")
+          return Response.json({ data: { user: creator } });
+        if (path === "/api/v1/shows" && init?.method === "POST") {
+          created = true;
+          return Response.json({ data: { show: draft } }, { status: 201 });
+        }
+        if (path === "/api/v1/shows/current")
+          return created
+            ? Response.json({ data: { show: draft } })
+            : new Response(
+                JSON.stringify({ error: { code: "SHOW_NOT_FOUND" } }),
+                {
+                  status: 404,
+                  headers: { "Content-Type": "application/json" },
+                },
+              );
+        if (path === "/api/v1/shows/show-1/tier-config")
+          return Response.json({
+            data: {
+              tiers: [
+                {
+                  id: "tier-1",
+                  name: "Standard",
+                  priorityRank: 100,
+                  callDurationSeconds: 300,
+                  priceCents: 0,
+                  enabled: true,
+                  createdAt: "2026-08-24T12:00:00Z",
+                  updatedAt: "2026-08-24T12:00:00Z",
+                },
+              ],
+            },
+          });
+        if (path === "/api/v1/payouts/account")
+          return Response.json({
+            data: {
+              payouts: {
+                connected: true,
+                transfersStatus: "active",
+                bankPayoutsStatus: "active",
+                externalAccountPresent: true,
+                externalAccountBankName: "Test Bank",
+                externalAccountLast4: "6789",
+                externalAccountCurrency: "usd",
+                chargesEnabled: true,
+                payoutsEnabled: true,
+                detailsSubmitted: true,
+                ready: true,
+                requirementsDue: [],
+                platformFeePercent: 20,
+                creatorProcessingFeePercent: 50,
+              },
+            },
+          });
+        if (path === "/api/v1/payments/activity")
+          return Response.json({ data: { activity: [], payoutFailure: null } });
+        return new Response(null, { status: 404 });
+      },
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderAt("/dashboard/settings/payouts");
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Set up Hotline" }),
+    );
+    expect(
+      await screen.findByRole("button", { name: "Start Hotline" }),
+    ).toBeInTheDocument();
+    expect(
+      fetchMock.mock.calls.some(
+        ([path, init]) =>
+          String(path) === "/api/v1/shows" && init?.method === "POST",
+      ),
+    ).toBe(true);
   });
 
   it("ends the active Hotline", async () => {

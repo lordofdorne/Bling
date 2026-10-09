@@ -84,7 +84,21 @@ func main() {
 	)
 	go queueService.RunOutbox(ctx)
 
-	socialService := social.NewService(social.NewStore(postgres), redisClient, logger)
+	socialStore := social.NewStore(postgres)
+	if cfg.SupabaseEnabled {
+		avatarObjects, err := social.NewSupabaseAvatarStore(
+			cfg.SupabaseURL,
+			cfg.SupabaseStorageServiceKey,
+			cfg.SupabaseStorageBucket,
+			cfg.SupabaseHTTPTimeout,
+		)
+		if err != nil {
+			logger.Error("avatar storage setup failed", "error", err)
+			os.Exit(1)
+		}
+		socialStore.WithAvatarObjects(avatarObjects)
+	}
+	socialService := social.NewService(socialStore, redisClient, logger)
 	go socialService.Run(ctx)
 	router, err := httpapi.NewRouter(logger, postgres, redisClient, cfg, queueService, realtimeHub, callService, signalHub, paymentService, payoutService, financeService, balanceService, socialService)
 	if err != nil {

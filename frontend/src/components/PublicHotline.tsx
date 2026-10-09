@@ -1,4 +1,6 @@
-import { FormEvent, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useForm, useWatch, type UseFormReturn } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
 import {
   Elements,
   PaymentElement,
@@ -6,6 +8,7 @@ import {
   useStripe,
 } from "@stripe/react-stripe-js";
 import { loadStripe } from "@stripe/stripe-js";
+import { useStripeAppearance } from "../lib/stripe-appearance";
 import { Link, useParams } from "react-router-dom";
 import {
   QueueTier,
@@ -27,9 +30,18 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
+import {
+  Form,
+  FormControl,
+  FormDescription,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { FormError, TextField, TextareaField } from "./form-fields";
+import { callRequestSchema, type CallRequestValues } from "../lib/schemas";
 import { cn } from "@/lib/utils";
 import { FollowButton } from "./FollowButton";
 import {
@@ -54,23 +66,19 @@ function CallerQueue({ showID }: { showID: string }) {
   const join = useJoinQueue(showID);
   const leave = useLeaveQueue(showID);
   const call = useViewerCall(showID);
-  const [displayName, setDisplayName] = useState("");
-  const [topic, setTopic] = useState("");
-  const [selectedTierID, setSelectedTierID] = useState("");
-  const [authorization, setAuthorization] = useState<
-    (PaymentAuthorization & { storageKey: string }) | null
-  >(null);
+  // The request lives here, not in the form, so name and topic survive the
+  // round trip to the card step and back.
+  const form = useForm<CallRequestValues>({
+    resolver: zodResolver(callRequestSchema),
+    defaultValues: { displayName: "", topic: "", tierId: "" },
+  });
+  const [pending, setPending] = useState<{
+    authorization: PaymentAuthorization & { storageKey: string };
+    request: CallRequestValues;
+  } | null>(null);
   const authorize = useAuthorizePayment(showID);
   useQueueEvents(showID, "viewer", viewer.data?.entry.status === "WAITING");
   const availableTiers = tiers.data ?? emptyTiers;
-  const effectiveSelectedTierID = availableTiers.some(
-    (tier) => tier.id === selectedTierID,
-  )
-    ? selectedTierID
-    : (availableTiers[0]?.id ?? "");
-  const selectedTier = availableTiers.find(
-    (tier) => tier.id === effectiveSelectedTierID,
-  );
 
   if (tiers.isPending || viewer.isPending || call.isPending)
     return (
@@ -165,36 +173,75 @@ function CallerQueue({ showID }: { showID: string }) {
     );
   }
 
-  async function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const tier = availableTiers.find(
-      (value) => value.id === effectiveSelectedTierID,
-    );
-    if (!tier) return;
-    if (tier.priceCents === 0) {
-      join.mutate({ displayName, topic, tierId: tier.id });
-      return;
-    }
-    try {
-      setAuthorization(await authorize.mutateAsync(tier.id));
-    } catch {
-      /* rendered below */
-    }
-  }
-
-  if (authorization) {
+  if (pending) {
     return (
       <StripeAuthorizationForm
-        authorization={authorization}
-        displayName={displayName}
-        topic={topic}
-        tierID={effectiveSelectedTierID}
+        authorization={pending.authorization}
+        displayName={pending.request.displayName}
+        topic={pending.request.topic}
+        tierID={pending.request.tierId}
         join={join}
-        onBack={() => setAuthorization(null)}
+        onBack={() => setPending(null)}
         email={me.data?.email}
       />
     );
   }
+
+  return (
+    <CallRequestForm
+      form={form}
+      tiers={availableTiers}
+      join={join}
+      authorize={authorize}
+      onAuthorized={setPending}
+    />
+  );
+}
+
+function CallRequestForm({
+  form,
+  tiers,
+  join,
+  authorize,
+  onAuthorized,
+}: {
+  form: UseFormReturn<CallRequestValues>;
+  tiers: QueueTier[];
+  join: ReturnType<typeof useJoinQueue>;
+  authorize: ReturnType<typeof useAuthorizePayment>;
+  onAuthorized: (pending: {
+    authorization: PaymentAuthorization & { storageKey: string };
+    request: CallRequestValues;
+  }) => void;
+}) {
+  const chosenTierID = useWatch({ control: form.control, name: "tierId" });
+  // Default to the first open tier, and fall back to it if the host removes
+  // the one the caller picked.
+  const selectedTier =
+    tiers.find((tier) => tier.id === chosenTierID) ?? tiers[0];
+  const selectedTierID = selectedTier?.id ?? "";
+  useEffect(() => {
+    if (selectedTierID && chosenTierID !== selectedTierID) {
+      form.setValue("tierId", selectedTierID);
+    }
+  }, [form, chosenTierID, selectedTierID]);
+
+  const submit = form.handleSubmit(async (request) => {
+    const tier = tiers.find((value) => value.id === request.tierId);
+    if (!tier) return;
+    if (tier.priceCents === 0) {
+      join.mutate(request);
+      return;
+    }
+    try {
+      onAuthorized({
+        authorization: await authorize.mutateAsync(tier.id),
+        request,
+      });
+    } catch {
+      /* rendered below */
+    }
+  });
 
   return (
     <Card>
@@ -205,92 +252,85 @@ function CallerQueue({ showID }: { showID: string }) {
             Tell the host who you are and what you want to talk about.
           </p>
         </div>
-        <form className="flex flex-col gap-4" onSubmit={submit}>
-          <div className="grid gap-2">
-            <Label htmlFor="caller-name">Name</Label>
-            <Input
-              id="caller-name"
-              value={displayName}
-              onChange={(event) => setDisplayName(event.target.value)}
-              maxLength={60}
-              required
+        <Form {...form}>
+          <form className="flex flex-col gap-4" onSubmit={submit} noValidate>
+            <TextField
+              control={form.control}
+              name="displayName"
+              label="Name"
+              autoComplete="nickname"
             />
-          </div>
-          <div className="grid gap-2">
-            <Label htmlFor="caller-topic">
-              What do you want to talk about?
-            </Label>
-            <Textarea
-              id="caller-topic"
-              value={topic}
-              onChange={(event) => setTopic(event.target.value)}
-              maxLength={280}
-              required
+            <TextareaField
+              control={form.control}
+              name="topic"
+              label="What do you want to talk about?"
             />
-          </div>
-          {availableTiers.length > 0 && (
-            <fieldset className="grid gap-2">
-              <legend className="mb-2 text-sm font-medium">
-                Choose your tier
-              </legend>
-              {availableTiers.map((tier) => (
-                <label
-                  className={cn(
-                    "flex cursor-pointer items-center gap-3 rounded-lg border p-3 transition-colors",
-                    effectiveSelectedTierID === tier.id
-                      ? "border-primary bg-primary/5"
-                      : "hover:bg-accent",
-                  )}
-                  key={tier.id}
-                >
-                  <input
-                    type="radio"
-                    name="caller-tier"
-                    className="accent-[var(--accent)]"
-                    value={tier.id}
-                    checked={effectiveSelectedTierID === tier.id}
-                    onChange={() => setSelectedTierID(tier.id)}
-                  />
-                  <span className="flex-1">
-                    <strong className="block text-sm font-semibold">
-                      {tier.name}
-                    </strong>
-                    <small className="text-muted-foreground text-xs">
-                      {formatCallLength(tier.callDurationSeconds)} ·{" "}
-                      {formatPrice(tier.priceCents)}
-                    </small>
-                  </span>
-                </label>
-              ))}
-              <p className="text-muted-foreground text-xs">
-                Your card is authorized now and charged only if the host selects
-                you.
-              </p>
-            </fieldset>
-          )}
-          <Button
-            type="submit"
-            size="lg"
-            disabled={
-              join.isPending ||
-              authorize.isPending ||
-              availableTiers.length === 0
-            }
-          >
-            {join.isPending || authorize.isPending
-              ? "Preparing…"
-              : (selectedTier?.priceCents ?? 0) > 0
-                ? "Continue to payment"
-                : "Send call request"}
-          </Button>
-          {(join.isError || authorize.isError) && (
-            <Alert variant="destructive">
-              <AlertDescription>
-                {join.error?.message ?? authorize.error?.message}
-              </AlertDescription>
-            </Alert>
-          )}
-        </form>
+            {tiers.length > 0 && (
+              <FormField
+                control={form.control}
+                name="tierId"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Choose your tier</FormLabel>
+                    <FormControl>
+                      <RadioGroup
+                        value={field.value}
+                        onValueChange={field.onChange}
+                        aria-label="Choose your tier"
+                        className="gap-2"
+                      >
+                        {tiers.map((tier) => (
+                          <label
+                            className={cn(
+                              "flex cursor-pointer items-center gap-3 rounded-lg border p-3 transition-colors",
+                              field.value === tier.id
+                                ? "border-primary bg-primary/5"
+                                : "hover:bg-accent",
+                            )}
+                            key={tier.id}
+                          >
+                            <RadioGroupItem value={tier.id} />
+                            <span className="flex-1">
+                              <strong className="block text-sm font-semibold">
+                                {tier.name}
+                              </strong>
+                              <small className="text-muted-foreground text-xs">
+                                {formatCallLength(tier.callDurationSeconds)} ·{" "}
+                                {formatPrice(tier.priceCents)}
+                              </small>
+                            </span>
+                          </label>
+                        ))}
+                      </RadioGroup>
+                    </FormControl>
+                    <FormDescription>
+                      Your card is authorized now and charged only if the host
+                      selects you.
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            )}
+            <Button
+              type="submit"
+              size="lg"
+              disabled={
+                join.isPending || authorize.isPending || tiers.length === 0
+              }
+            >
+              {join.isPending || authorize.isPending
+                ? "Preparing…"
+                : (selectedTier?.priceCents ?? 0) > 0
+                  ? "Continue to payment"
+                  : "Send call request"}
+            </Button>
+            <FormError
+              error={join.error ?? authorize.error}
+              fallback="Unable to send your request. Please try again."
+            />
+          </form>
+        </Form>
       </CardContent>
     </Card>
   );
@@ -317,6 +357,7 @@ function StripeAuthorizationForm({
     () => loadStripe(authorization.publishableKey),
     [authorization.publishableKey],
   );
+  const appearance = useStripeAppearance().elements;
   return (
     <Card>
       <CardContent className="flex flex-col gap-4">
@@ -338,7 +379,7 @@ function StripeAuthorizationForm({
             clientSecret: authorization.clientSecret,
             customerSessionClientSecret:
               authorization.customerSessionClientSecret,
-            appearance: { theme: "stripe" },
+            appearance,
           }}
         >
           <ConfirmAuthorization

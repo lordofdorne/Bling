@@ -1,4 +1,5 @@
-import { Landmark, Settings } from "lucide-react";
+import { Link, useNavigate } from "react-router-dom";
+import { ArrowRight, Landmark, Phone, Plus, Settings } from "lucide-react";
 import {
   useCreatorBalance,
   usePayoutAccountSession,
@@ -19,6 +20,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { usePaymentActivity } from "../../lib/finance";
+import { useCreateShow, useCurrentShow } from "../../lib/shows";
 import { formatDate, formatPrice } from "./format";
 import { cn } from "@/lib/utils";
 
@@ -61,6 +63,73 @@ function SectionTitle({
       </div>
       {aside}
     </div>
+  );
+}
+
+// Once a bank account is on file the creator can get paid, so the next step
+// is opening a Hotline. Drafts and live shows link back to the studio.
+function HotlineSetupCard() {
+  const navigate = useNavigate();
+  const currentShow = useCurrentShow();
+  const createShow = useCreateShow();
+  const show = currentShow.data;
+  const studioLink = "/dashboard";
+
+  return (
+    <Card aria-label="Hotline setup">
+      <CardContent className="flex flex-wrap items-center justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <span className="border-border-strong bg-background grid size-10 shrink-0 place-items-center rounded-lg border text-[var(--sand-text)]">
+            <Phone className="size-5" />
+          </span>
+          <div>
+            <p className="text-[var(--sand-text)] text-[11px] font-bold tracking-[0.12em] uppercase">
+              Next step
+            </p>
+            <h2 className="mt-1 text-base font-bold">
+              {show?.status === "LIVE"
+                ? "Your Hotline is live"
+                : show?.status === "CREATED"
+                  ? "Finish setting up your Hotline"
+                  : "Set up your Hotline"}
+            </h2>
+            <p className="text-muted-foreground text-sm">
+              {show?.status === "LIVE"
+                ? "Callers can join from your public page."
+                : "Your bank account is connected. Configure tiers and pricing, then go live."}
+            </p>
+          </div>
+        </div>
+        {currentShow.isPending ? null : show ? (
+          <Button asChild variant="secondary">
+            <Link to={studioLink}>
+              {show.status === "LIVE" ? "Open studio" : "Continue setup"}
+              <ArrowRight className="size-4" />
+            </Link>
+          </Button>
+        ) : (
+          <Button
+            type="button"
+            onClick={() =>
+              createShow.mutate(undefined, {
+                onSuccess: () => navigate(studioLink),
+              })
+            }
+            disabled={createShow.isPending || currentShow.isError}
+          >
+            <Plus className="size-4" />
+            {createShow.isPending ? "Creating…" : "Set up Hotline"}
+          </Button>
+        )}
+        {createShow.isError && (
+          <Alert variant="destructive" className="basis-full">
+            <AlertDescription>
+              Unable to create your Hotline. Please try again.
+            </AlertDescription>
+          </Alert>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 
@@ -124,6 +193,8 @@ export function PayoutSettings() {
           )}
         </CardContent>
       </Card>
+
+      {payouts.data?.externalAccountPresent && <HotlineSetupCard />}
 
       {paymentActivity.data?.payoutFailure && (
         <Alert variant="destructive">

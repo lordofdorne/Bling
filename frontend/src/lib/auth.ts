@@ -60,6 +60,26 @@ export function useRegister() {
   });
 }
 
+export function useForgotPassword() {
+  return useMutation({
+    mutationFn: (email: string) =>
+      apiRequest<void>("/api/v1/auth/forgot-password", {
+        method: "POST",
+        body: JSON.stringify({ email }),
+      }),
+  });
+}
+
+export function useResetPassword() {
+  return useMutation({
+    mutationFn: (password: string) =>
+      apiRequest<void>("/api/v1/auth/reset-password", {
+        method: "POST",
+        body: JSON.stringify({ password }),
+      }),
+  });
+}
+
 export function useLogout() {
   const queryClient = useQueryClient();
   return useMutation({

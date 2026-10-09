@@ -1,14 +1,21 @@
-import { type FormEvent, useState } from "react";
+import { useState } from "react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
 import { Link, Navigate, useNavigate, useSearchParams } from "react-router-dom";
 import { ArrowRight, Phone, Sparkles } from "lucide-react";
-import { ApiError } from "../lib/api";
 import { useLogin, useMe, useRegister } from "../lib/auth";
+import {
+  loginSchema,
+  registerSchema,
+  type LoginValues,
+  type RegisterValues,
+} from "../lib/schemas";
 import { Brand } from "./ViewerShell";
+import { FormError, TextField } from "./form-fields";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { Form } from "@/components/ui/form";
 
 type AuthPageProps = { mode: "login" | "register" };
 
@@ -25,46 +32,11 @@ export function AuthPage({ mode }: AuthPageProps) {
       : "/dashboard";
   const viewerIntent = destination !== "/dashboard";
   const me = useMe();
-  const login = useLogin();
-  const register = useRegister();
-  const activeMutation = mode === "login" ? login : register;
-  const [username, setUsername] = useState("");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
   const [confirmationEmail, setConfirmationEmail] = useState("");
 
   if (me.data) {
     return <Navigate to={destination} replace />;
   }
-
-  async function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    try {
-      if (mode === "register") {
-        const result = await register.mutateAsync({
-          username,
-          email,
-          password,
-        });
-        if (result.data.confirmationRequired) {
-          setConfirmationEmail(email.trim().toLowerCase());
-          return;
-        }
-      } else {
-        await login.mutateAsync({ email, password });
-      }
-      navigate(destination, { replace: true });
-    } catch {
-      // Mutation state renders the server's safe error message.
-    }
-  }
-
-  const error =
-    activeMutation.error instanceof ApiError
-      ? activeMutation.error.message
-      : activeMutation.error
-        ? "Unable to connect. Please try again."
-        : null;
 
   return (
     <main className="min-h-screen">
@@ -141,78 +113,15 @@ export function AuthPage({ mode }: AuthPageProps) {
                   sign in after confirming your email address.
                 </AlertDescription>
               </Alert>
+            ) : mode === "login" ? (
+              <LoginForm
+                onDone={() => navigate(destination, { replace: true })}
+              />
             ) : (
-              <form className="flex flex-col gap-4" onSubmit={submit}>
-                {mode === "register" && (
-                  <div className="grid gap-2">
-                    <Label htmlFor="auth-username">Username</Label>
-                    <Input
-                      id="auth-username"
-                      name="username"
-                      value={username}
-                      onChange={(event) => setUsername(event.target.value)}
-                      autoComplete="username"
-                      minLength={3}
-                      maxLength={30}
-                      pattern="[a-z0-9_]+"
-                      required
-                    />
-                    <p className="text-muted-foreground text-xs">
-                      3–30 lowercase letters, numbers, or underscores.
-                    </p>
-                  </div>
-                )}
-                <div className="grid gap-2">
-                  <Label htmlFor="auth-email">Email</Label>
-                  <Input
-                    id="auth-email"
-                    name="email"
-                    type="email"
-                    value={email}
-                    onChange={(event) => setEmail(event.target.value)}
-                    autoComplete="email"
-                    maxLength={254}
-                    required
-                  />
-                </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="auth-password">Password</Label>
-                  <Input
-                    id="auth-password"
-                    name="password"
-                    type="password"
-                    value={password}
-                    onChange={(event) => setPassword(event.target.value)}
-                    autoComplete={
-                      mode === "login" ? "current-password" : "new-password"
-                    }
-                    minLength={mode === "register" ? 12 : undefined}
-                    maxLength={72}
-                    required
-                  />
-                  {mode === "register" && (
-                    <p className="text-muted-foreground text-xs">
-                      Use at least 12 characters.
-                    </p>
-                  )}
-                </div>
-                {error && (
-                  <Alert variant="destructive">
-                    <AlertDescription>{error}</AlertDescription>
-                  </Alert>
-                )}
-                <Button
-                  type="submit"
-                  size="lg"
-                  disabled={activeMutation.isPending}
-                >
-                  {activeMutation.isPending
-                    ? "Please wait…"
-                    : mode === "login"
-                      ? "Sign in"
-                      : "Create account"}
-                </Button>
-              </form>
+              <RegisterForm
+                onDone={() => navigate(destination, { replace: true })}
+                onConfirmationRequired={setConfirmationEmail}
+              />
             )}
 
             <p className="text-muted-foreground text-sm">
@@ -228,5 +137,116 @@ export function AuthPage({ mode }: AuthPageProps) {
         </Card>
       </div>
     </main>
+  );
+}
+
+function LoginForm({ onDone }: { onDone: () => void }) {
+  const login = useLogin();
+  const form = useForm<LoginValues>({
+    resolver: zodResolver(loginSchema),
+    defaultValues: { email: "", password: "" },
+  });
+
+  const submit = form.handleSubmit(async (values) => {
+    try {
+      await login.mutateAsync(values);
+      onDone();
+    } catch {
+      // Mutation state renders the server's safe error message.
+    }
+  });
+
+  return (
+    <Form {...form}>
+      <form className="flex flex-col gap-4" onSubmit={submit} noValidate>
+        <TextField
+          control={form.control}
+          name="email"
+          label="Email"
+          type="email"
+          autoComplete="email"
+        />
+        <TextField
+          control={form.control}
+          name="password"
+          label="Password"
+          type="password"
+          autoComplete="current-password"
+          labelAside={
+            <Link
+              className="text-muted-foreground text-xs font-semibold underline underline-offset-4"
+              to="/forgot-password"
+            >
+              Forgot password?
+            </Link>
+          }
+        />
+        <FormError error={login.error} />
+        <Button type="submit" size="lg" disabled={login.isPending}>
+          {login.isPending ? "Please wait…" : "Sign in"}
+        </Button>
+      </form>
+    </Form>
+  );
+}
+
+function RegisterForm({
+  onDone,
+  onConfirmationRequired,
+}: {
+  onDone: () => void;
+  onConfirmationRequired: (email: string) => void;
+}) {
+  const register = useRegister();
+  const form = useForm<RegisterValues>({
+    resolver: zodResolver(registerSchema),
+    defaultValues: { username: "", email: "", password: "" },
+  });
+
+  const submit = form.handleSubmit(async (values) => {
+    try {
+      const result = await register.mutateAsync(values);
+      if (result.data.confirmationRequired) {
+        onConfirmationRequired(values.email.toLowerCase());
+        return;
+      }
+      onDone();
+    } catch {
+      // Mutation state renders the server's safe error message.
+    }
+  });
+
+  return (
+    <Form {...form}>
+      <form className="flex flex-col gap-4" onSubmit={submit} noValidate>
+        <TextField
+          control={form.control}
+          name="username"
+          label="Username"
+          autoComplete="username"
+          autoCapitalize="none"
+          description="3–30 lowercase letters, numbers, or underscores."
+        />
+        <TextField
+          control={form.control}
+          name="email"
+          label="Email"
+          type="email"
+          autoComplete="email"
+        />
+        <TextField
+          control={form.control}
+          name="password"
+          label="Password"
+          type="password"
+          autoComplete="new-password"
+          description="Use at least 12 characters."
+        />
+        <FormError error={register.error} />
+        <Button type="submit" size="lg" disabled={register.isPending}>
+          {register.isPending ? "Please wait…" : "Create account"}
+        </Button>
+      </form>
+    </Form>
   );
 }

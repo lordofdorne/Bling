@@ -6,6 +6,7 @@ import {
   useStripe,
 } from "@stripe/react-stripe-js";
 import { loadStripe } from "@stripe/stripe-js";
+import { useStripeAppearance } from "../../lib/stripe-appearance";
 import { CreditCard, Plus } from "lucide-react";
 import {
   PaymentMethodSetup,
@@ -99,13 +100,14 @@ function PaymentMethodSetupPanel({
     () => loadStripe(setup.publishableKey),
     [setup.publishableKey],
   );
+  const appearance = useStripeAppearance().elements;
   return (
     <Elements
       stripe={stripePromise}
       options={{
         clientSecret: setup.clientSecret,
         customerSessionClientSecret: setup.customerSessionClientSecret,
-        appearance: { theme: "stripe" },
+        appearance,
       }}
     >
       <SavePaymentMethodForm onSaved={onSaved} onCancel={onCancel} />
