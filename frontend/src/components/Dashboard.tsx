@@ -1,5 +1,5 @@
-import { Link, useLocation } from "react-router-dom";
-import { ArrowRight, Phone, Plus, Settings } from "lucide-react";
+import { useLocation } from "react-router-dom";
+import { Phone, Plus } from "lucide-react";
 import { ApiError } from "../lib/api";
 import { useMe } from "../lib/auth";
 import { useControlSize } from "../lib/design";
@@ -26,6 +26,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
+import { PageHeader, SectionHeader } from "./page";
 
 function StudioOverview({ username }: { username: string }) {
   const currentShow = useCurrentShow();
@@ -37,86 +38,75 @@ function StudioOverview({ username }: { username: string }) {
 
   return (
     <>
-      <h1 className="mb-6 text-3xl font-extrabold tracking-tight">
-        {activeShow?.status === "LIVE"
-          ? "You’re live."
-          : `Welcome, ${username}.`}
-      </h1>
+      <PageHeader
+        title={
+          activeShow?.status === "LIVE"
+            ? "You’re live."
+            : `Welcome, ${username}.`
+        }
+      >
+        <p
+          className="text-muted-foreground flex items-center gap-2 text-(length:--text-body)"
+          aria-label="Channel status"
+        >
+          <span
+            className={cn(
+              "size-2 shrink-0 rounded-full",
+              activeShow?.status === "LIVE"
+                ? "bg-primary ring-primary/20 ring-4"
+                : "bg-muted-foreground",
+            )}
+          />
+          <strong className="text-foreground font-semibold">
+            {currentShow.isPending
+              ? "Checking status"
+              : currentShow.isError
+                ? "Status unavailable"
+                : activeShow?.status === "LIVE"
+                  ? "Hotline live"
+                  : activeShow?.status === "CREATED"
+                    ? "Draft ready"
+                    : "Hotline offline"}
+          </strong>
+          ·{" "}
+          {activeShow?.status === "LIVE"
+            ? "Your public line is open"
+            : "Your public line is closed"}
+        </p>
+      </PageHeader>
 
-      <Card className="mb-6 py-3" aria-label="Channel status">
-        <CardContent className="flex flex-wrap items-center justify-between gap-4 px-4">
-          <div className="flex items-center gap-3">
-            <span
-              className={cn(
-                "size-2 shrink-0 rounded-full",
-                activeShow?.status === "LIVE"
-                  ? "bg-primary ring-primary/20 ring-4"
-                  : "bg-muted-foreground",
-              )}
-            />
-            <span className="flex flex-wrap items-baseline gap-2">
-              <strong className="text-sm">
-                {currentShow.isPending
-                  ? "Checking status"
-                  : currentShow.isError
-                    ? "Status unavailable"
-                    : activeShow?.status === "LIVE"
-                      ? "Hotline live"
-                      : activeShow?.status === "CREATED"
-                        ? "Draft ready"
-                        : "Hotline offline"}
-              </strong>
-              <small className="text-muted-foreground text-xs">
-                {activeShow?.status === "LIVE"
-                  ? "Your public line is open"
-                  : "Your public line is closed"}
-              </small>
-            </span>
-          </div>
-          <div className="flex items-center gap-2">
-            <Button asChild variant="ghost" size="sm">
-              <Link to="/dashboard/settings">
-                <Settings className="size-4" />
-                Settings
-              </Link>
-            </Button>
-            <Button asChild variant="secondary" size={controlSize}>
-              <Link to={`/u/${username}`}>
-                View channel <ArrowRight className="size-4" />
-              </Link>
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card id="hotline-controls" aria-label="Hotline controls">
-        <CardContent className="flex flex-col gap-4">
-          {currentShow.isPending ? (
-            <p className="text-muted-foreground text-sm">
-              Loading show status…
-            </p>
-          ) : currentShow.isError ? (
-            <Alert variant="destructive">
-              <AlertDescription>
-                Unable to load your Hotline status.
-              </AlertDescription>
-            </Alert>
-          ) : activeShow?.status === "LIVE" ? (
-            <>
+      <section
+        id="hotline-controls"
+        aria-label="Hotline controls"
+        className="flex flex-col gap-(--stack-gap)"
+      >
+        {currentShow.isPending ? (
+          <p className="text-muted-foreground text-sm">Loading show status…</p>
+        ) : currentShow.isError ? (
+          <Alert variant="destructive">
+            <AlertDescription>
+              Unable to load your Hotline status.
+            </AlertDescription>
+          </Alert>
+        ) : activeShow?.status === "LIVE" ? (
+          <Card>
+            <CardContent className="flex flex-col gap-(--stack-gap)">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
                   <Badge className="gap-1.5">
                     <span className="bg-primary-foreground size-1.5 animate-pulse rounded-full" />
                     Hotline live
                   </Badge>
-                  <h2 className="mt-2 text-xl font-bold">
-                    Your audience can join.
-                  </h2>
+                  <SectionHeader
+                    className="mt-2"
+                    title="Your audience can join."
+                  />
                 </div>
                 <Button
                   variant="destructive"
                   size={controlSize}
                   type="button"
+                  className="w-full tablet:w-auto"
                   onClick={() => endShow.mutate(activeShow.id)}
                   disabled={endShow.isPending}
                 >
@@ -128,20 +118,22 @@ function StudioOverview({ username }: { username: string }) {
                 <strong className="text-foreground">/u/{username}</strong>
               </p>
               <CallerList showID={activeShow.id} />
-            </>
-          ) : activeShow?.status === "CREATED" ? (
-            <TierConfiguration
-              showID={activeShow.id}
-              starting={startShow.isPending}
-              onStart={() => startShow.mutate(activeShow.id)}
-            />
-          ) : (
-            <div className="flex flex-col items-center gap-3 px-6 py-10 text-center">
+            </CardContent>
+          </Card>
+        ) : activeShow?.status === "CREATED" ? (
+          <TierConfiguration
+            showID={activeShow.id}
+            starting={startShow.isPending}
+            onStart={() => startShow.mutate(activeShow.id)}
+          />
+        ) : (
+          <Card>
+            <CardContent className="flex flex-col items-center gap-3 py-(--space-6) text-center">
               <span className="border-border-strong bg-background grid size-14 place-items-center rounded-2xl border text-[var(--sand-text)]">
                 <Phone className="size-7" />
               </span>
               <Badge variant="secondary">Off air</Badge>
-              <h2 className="text-xl font-bold">No active Hotline</h2>
+              <SectionHeader title="No active Hotline" />
               <p className="text-muted-foreground max-w-sm text-sm">
                 Create a draft to configure caller priority, duration, and
                 pricing before opening your public page.
@@ -149,27 +141,28 @@ function StudioOverview({ username }: { username: string }) {
               <Button
                 type="button"
                 size={controlSize}
+                className="w-full tablet:w-auto"
                 onClick={() => createShow.mutate()}
                 disabled={createShow.isPending}
               >
                 <Plus className="size-4" />
                 {createShow.isPending ? "Creating…" : "Set up Hotline"}
               </Button>
-            </div>
-          )}
+            </CardContent>
+          </Card>
+        )}
 
-          {(createShow.isError || startShow.isError || endShow.isError) && (
-            <Alert variant="destructive">
-              <AlertDescription>
-                {startShow.error instanceof ApiError &&
-                startShow.error.code === "PAYOUT_SETUP_REQUIRED"
-                  ? startShow.error.message
-                  : "Unable to update your Hotline. Please try again."}
-              </AlertDescription>
-            </Alert>
-          )}
-        </CardContent>
-      </Card>
+        {(createShow.isError || startShow.isError || endShow.isError) && (
+          <Alert variant="destructive">
+            <AlertDescription>
+              {startShow.error instanceof ApiError &&
+              startShow.error.code === "PAYOUT_SETUP_REQUIRED"
+                ? startShow.error.message
+                : "Unable to update your Hotline. Please try again."}
+            </AlertDescription>
+          </Alert>
+        )}
+      </section>
     </>
   );
 }
@@ -185,22 +178,12 @@ function CreatorSettings({
   const active = SETTINGS_SECTIONS.find((item) => item.id === section);
 
   return (
-    <div className="flex flex-col gap-8">
-      <header>
-        <p className="text-muted-foreground mb-4 flex items-center gap-2 text-xs">
-          <Link to="/dashboard/settings" className="hover:text-foreground">
-            Settings
-          </Link>
-          <span>/</span>
-          {active?.label}
-        </p>
-        <h1 className="text-3xl font-extrabold tracking-tight">
-          {active?.label}
-        </h1>
-        <p className="text-muted-foreground mt-2 text-sm">
-          {active?.description}
-        </p>
-      </header>
+    <div className="flex flex-col gap-(--section-gap)">
+      <PageHeader
+        back={{ to: "/dashboard/settings", label: "Settings" }}
+        title={active?.label}
+        description={active?.description}
+      />
 
       {section === "profile" && <ProfileEditor />}
       {section === "payments" && <PaymentSettings />}

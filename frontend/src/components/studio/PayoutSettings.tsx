@@ -11,18 +11,12 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import { usePaymentActivity } from "../../lib/finance";
 import { useCreateShow, useCurrentShow } from "../../lib/shows";
 import { formatDate, formatPrice } from "./format";
 import { cn } from "@/lib/utils";
+import { SectionHeader } from "../page";
+import { useControlSize } from "../../lib/design";
 
 // The creator-facing name for each ledger kind: money moving, not an enum.
 function ledgerEntryLabel(kind: string) {
@@ -44,24 +38,33 @@ function ledgerEntryLabel(kind: string) {
   }
 }
 
-function SectionTitle({
-  eyebrow,
-  title,
-  aside,
+function BalanceFigure({
+  label,
+  value,
+  note,
+  emphasis,
 }: {
-  eyebrow: string;
-  title: string;
-  aside?: React.ReactNode;
+  label: string;
+  value: string;
+  note: string;
+  emphasis?: boolean;
 }) {
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3">
-      <div>
-        <p className="text-[var(--sand-text)] text-[11px] font-bold tracking-[0.12em] uppercase">
-          {eyebrow}
-        </p>
-        <h2 className="mt-1 text-base font-bold">{title}</h2>
-      </div>
-      {aside}
+    <div className="flex min-w-0 flex-col gap-1">
+      <span className="text-muted-foreground text-(length:--text-meta)">
+        {label}
+      </span>
+      <strong
+        className={cn(
+          "font-semibold tracking-tight tabular-nums",
+          emphasis ? "text-3xl" : "text-xl",
+        )}
+      >
+        {value}
+      </strong>
+      <small className="text-muted-foreground text-(length:--text-meta)">
+        {note}
+      </small>
     </div>
   );
 }
@@ -72,36 +75,40 @@ function HotlineSetupCard() {
   const navigate = useNavigate();
   const currentShow = useCurrentShow();
   const createShow = useCreateShow();
+  const controlSize = useControlSize();
   const show = currentShow.data;
   const studioLink = "/dashboard";
 
   return (
     <Card aria-label="Hotline setup">
-      <CardContent className="flex flex-wrap items-center justify-between gap-4">
-        <div className="flex items-center gap-3">
+      <CardContent className="flex flex-col gap-(--card-gap) tablet:flex-row tablet:items-center tablet:justify-between">
+        <div className="flex items-start gap-3">
           <span className="border-border-strong bg-background grid size-10 shrink-0 place-items-center rounded-lg border text-[var(--sand-text)]">
             <Phone className="size-5" />
           </span>
-          <div>
-            <p className="text-[var(--sand-text)] text-[11px] font-bold tracking-[0.12em] uppercase">
-              Next step
-            </p>
-            <h2 className="mt-1 text-base font-bold">
-              {show?.status === "LIVE"
+          <SectionHeader
+            eyebrow="Next step"
+            title={
+              show?.status === "LIVE"
                 ? "Your Hotline is live"
                 : show?.status === "CREATED"
                   ? "Finish setting up your Hotline"
-                  : "Set up your Hotline"}
-            </h2>
-            <p className="text-muted-foreground text-sm">
-              {show?.status === "LIVE"
+                  : "Set up your Hotline"
+            }
+            description={
+              show?.status === "LIVE"
                 ? "Callers can join from your public page."
-                : "Your bank account is connected. Configure tiers and pricing, then go live."}
-            </p>
-          </div>
+                : "Your bank account is connected. Configure tiers and pricing, then go live."
+            }
+          />
         </div>
         {currentShow.isPending ? null : show ? (
-          <Button asChild variant="secondary">
+          <Button
+            asChild
+            variant="secondary"
+            size={controlSize}
+            className="w-full tablet:w-auto"
+          >
             <Link to={studioLink}>
               {show.status === "LIVE" ? "Open studio" : "Continue setup"}
               <ArrowRight className="size-4" />
@@ -110,6 +117,8 @@ function HotlineSetupCard() {
         ) : (
           <Button
             type="button"
+            size={controlSize}
+            className="w-full tablet:w-auto"
             onClick={() =>
               createShow.mutate(undefined, {
                 onSuccess: () => navigate(studioLink),
@@ -122,7 +131,7 @@ function HotlineSetupCard() {
           </Button>
         )}
         {createShow.isError && (
-          <Alert variant="destructive" className="basis-full">
+          <Alert variant="destructive">
             <AlertDescription>
               Unable to create your Hotline. Please try again.
             </AlertDescription>
@@ -138,6 +147,7 @@ export function PayoutSettings() {
   const payoutSession = usePayoutAccountSession();
   const creatorBalance = useCreatorBalance();
   const paymentActivity = usePaymentActivity();
+  const controlSize = useControlSize();
   const balance = creatorBalance.data?.balance;
   const ledger = creatorBalance.data?.activity ?? [];
   const ready = payouts.data?.ready === true;
@@ -148,22 +158,27 @@ export function PayoutSettings() {
       ? "Manage bank account"
       : "Continue payout setup"
     : "Set up payouts";
+  const money = (cents: number | undefined) =>
+    creatorBalance.isPending ? "—" : formatPrice(cents ?? 0);
 
   return (
-    <div className="flex flex-col gap-6" aria-label="Creator payouts">
-      <Card className="py-4">
-        <CardContent className="flex flex-wrap items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
+    <div
+      className="flex flex-col gap-(--stack-gap)"
+      aria-label="Creator payouts"
+    >
+      <Card>
+        <CardContent className="flex flex-col gap-(--card-gap)">
+          <div className="flex items-start gap-3">
             <span
               className={cn(
-                "size-2 shrink-0 rounded-full",
+                "mt-1.5 size-2 shrink-0 rounded-full",
                 ready
                   ? "bg-[var(--green-light)] ring-4 ring-[var(--green)]/20"
                   : "bg-muted-foreground",
               )}
             />
-            <span className="flex flex-wrap items-baseline gap-2">
-              <strong className="text-sm">
+            <div className="min-w-0">
+              <strong className="text-(length:--text-body) block">
                 {payouts.isPending
                   ? "Checking payout account"
                   : payouts.isError
@@ -172,18 +187,48 @@ export function PayoutSettings() {
                       ? "Payouts enabled"
                       : "Action required"}
               </strong>
-              <small className="text-muted-foreground text-xs">
+              <small className="text-muted-foreground text-(length:--text-meta)">
                 {ready
                   ? "Your eligible balance is paid monthly"
                   : "Finish setup before your first bank deposit"}
               </small>
-            </span>
+            </div>
           </div>
+
+          <div
+            aria-label="Creator balance"
+            className="grid grid-cols-2 gap-x-4 gap-y-(--card-gap) border-t pt-(--card-gap) laptop:grid-cols-3"
+          >
+            <div className="col-span-2 laptop:col-span-1">
+              <BalanceFigure
+                emphasis
+                label="Available for next payout"
+                value={money(balance?.availableCents)}
+                note={`Next payout: ${
+                  balance?.nextPayoutAt
+                    ? formatDate(balance.nextPayoutAt)
+                    : "Paid monthly"
+                }`}
+              />
+            </div>
+            <BalanceFigure
+              label="Pending clearance"
+              value={money(balance?.pendingCents)}
+              note="Calls still inside the earnings hold"
+            />
+            <BalanceFigure
+              label="Total balance"
+              value={money(balance?.totalCents)}
+              note="Available and pending earnings"
+            />
+          </div>
+
           {!payoutSession.data && (
             <Button
-              variant="secondary"
-              size="sm"
+              variant={ready ? "secondary" : "default"}
+              size={controlSize}
               type="button"
+              className="w-full tablet:w-fit"
               onClick={() => payoutSession.mutate()}
               disabled={payoutSession.isPending || payouts.isPending}
             >
@@ -206,76 +251,15 @@ export function PayoutSettings() {
         </Alert>
       )}
 
-      <Grid aria-label="Creator balance">
-        <GridItem span={4} tablet={8} phone={4}>
-          <Card className="border-primary/40 relative h-full overflow-hidden">
-            <span
-              className="bg-primary absolute inset-x-0 top-0 h-1"
-              aria-hidden="true"
-            />
-            <CardContent>
-              <span className="text-muted-foreground text-xs">
-                Available for next payout
-              </span>
-              <strong className="mt-2 block text-3xl font-semibold tracking-tight">
-                {creatorBalance.isPending
-                  ? "—"
-                  : formatPrice(balance?.availableCents ?? 0)}
-              </strong>
-              <small className="text-muted-foreground mt-1 block text-xs">
-                Next payout:{" "}
-                {balance?.nextPayoutAt
-                  ? formatDate(balance.nextPayoutAt)
-                  : "Paid monthly"}
-              </small>
-            </CardContent>
-          </Card>
-        </GridItem>
-        <GridItem span={4} tablet={4} phone={4}>
-          <Card className="h-full">
-            <CardContent>
-              <span className="text-muted-foreground text-xs">
-                Pending clearance
-              </span>
-              <strong className="mt-2 block text-3xl font-semibold tracking-tight">
-                {creatorBalance.isPending
-                  ? "—"
-                  : formatPrice(balance?.pendingCents ?? 0)}
-              </strong>
-              <small className="text-muted-foreground mt-1 block text-xs">
-                Calls still inside the earnings hold
-              </small>
-            </CardContent>
-          </Card>
-        </GridItem>
-        <GridItem span={4} tablet={4} phone={4}>
-          <Card className="h-full">
-            <CardContent>
-              <span className="text-muted-foreground text-xs">
-                Total balance
-              </span>
-              <strong className="mt-2 block text-3xl font-semibold tracking-tight">
-                {creatorBalance.isPending
-                  ? "—"
-                  : formatPrice(balance?.totalCents ?? 0)}
-              </strong>
-              <small className="text-muted-foreground mt-1 block text-xs">
-                Available and pending earnings
-              </small>
-            </CardContent>
-          </Card>
-        </GridItem>
-      </Grid>
-
       {payoutSession.data ? (
         <Card aria-label="Secure payout setup">
-          <CardContent className="flex flex-col gap-4">
-            <SectionTitle
+          <CardContent className="flex flex-col gap-(--card-gap)">
+            <SectionHeader
               eyebrow="Secure setup"
               title="Connect your payout account"
-              aside={
+              action={
                 <Button
-                  variant="link"
+                  variant="ghost"
                   type="button"
                   onClick={() => payoutSession.reset()}
                 >
@@ -296,23 +280,23 @@ export function PayoutSettings() {
         <Grid>
           <GridItem span={6} tablet={8} phone={4}>
             <Card className="h-full" aria-label="Payout destination">
-              <CardContent className="flex flex-col gap-4">
-                <SectionTitle
+              <CardContent className="flex h-full flex-col gap-(--card-gap)">
+                <SectionHeader
                   eyebrow="Payout destination"
                   title="Bank account"
-                  aside={
+                  action={
                     <Badge variant={ready ? "success" : "outline"}>
                       {ready ? "Verified" : "Setup needed"}
                     </Badge>
                   }
                 />
                 {payouts.data?.externalAccountPresent ? (
-                  <div className="bg-muted flex items-center gap-3 rounded-lg p-3">
-                    <span className="bg-background grid size-10 place-items-center rounded-lg">
+                  <div className="bg-muted flex items-center gap-3 rounded-lg p-(--inset-pad)">
+                    <span className="bg-background grid size-10 shrink-0 place-items-center rounded-lg">
                       <Landmark className="size-5" />
                     </span>
-                    <div>
-                      <strong className="block text-sm">
+                    <div className="min-w-0">
+                      <strong className="block truncate text-sm">
                         {payouts.data.externalAccountBankName || "Bank account"}
                       </strong>
                       <small className="text-muted-foreground text-xs">
@@ -324,35 +308,24 @@ export function PayoutSettings() {
                     </div>
                   </div>
                 ) : (
-                  <div>
-                    <strong className="block text-sm">
+                  <p className="text-muted-foreground text-sm">
+                    <strong className="text-foreground block">
                       No payout account ready
                     </strong>
-                    <span className="text-muted-foreground text-sm">
-                      Add your identity and bank details through Stripe.
-                    </span>
-                  </div>
+                    Add your identity and bank details through Stripe.
+                  </p>
                 )}
-                <Button
-                  variant="link"
-                  className="mt-auto h-auto justify-start px-0"
-                  type="button"
-                  onClick={() => payoutSession.mutate()}
-                  disabled={payoutSession.isPending}
-                >
-                  {setupLabel}
-                </Button>
               </CardContent>
             </Card>
           </GridItem>
 
           <GridItem span={6} tablet={8} phone={4}>
             <Card className="h-full" aria-label="Earnings split">
-              <CardContent className="flex flex-col gap-4">
-                <SectionTitle
+              <CardContent className="flex flex-col gap-(--card-gap)">
+                <SectionHeader
                   eyebrow="Every paid call"
                   title="Your earnings split"
-                  aside={
+                  action={
                     <span className="text-2xl font-semibold tracking-tight">
                       {creatorPercent}%
                     </span>
@@ -391,11 +364,11 @@ export function PayoutSettings() {
       )}
 
       <Card aria-label="Balance activity">
-        <CardContent className="flex flex-col gap-4">
-          <SectionTitle
+        <CardContent className="flex flex-col gap-(--card-gap)">
+          <SectionHeader
             eyebrow="Balance activity"
             title="Recent transactions"
-            aside={
+            action={
               <span className="text-muted-foreground text-xs">
                 {ledger.length} {ledger.length === 1 ? "entry" : "entries"}
               </span>
@@ -408,54 +381,49 @@ export function PayoutSettings() {
               </AlertDescription>
             </Alert>
           ) : ledger.length === 0 ? (
-            <div className="text-muted-foreground py-6 text-sm">
+            <p className="text-muted-foreground text-sm">
               <strong className="text-foreground block">
                 No balance activity yet
               </strong>
               Completed paid calls and monthly payouts will appear here.
-            </div>
+            </p>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Transaction</TableHead>
-                  <TableHead>Date</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="text-right">Amount</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {ledger.map((entry) => {
-                  const pending = new Date(entry.effectiveAt) > new Date();
-                  return (
-                    <TableRow key={entry.id}>
-                      <TableCell>
-                        <strong className="text-sm font-semibold">
-                          {ledgerEntryLabel(entry.kind)}
-                        </strong>
-                      </TableCell>
-                      <TableCell className="text-muted-foreground">
+            // A list, not a table: rows stay readable at phone width without
+            // horizontal scrolling.
+            <ul className="-mx-(--card-pad) divide-y border-t">
+              {ledger.map((entry) => {
+                const pending = new Date(entry.effectiveAt) > new Date();
+                return (
+                  <li
+                    key={entry.id}
+                    className="flex items-center gap-3 px-(--card-pad) py-3"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <strong className="block truncate text-sm font-semibold">
+                        {ledgerEntryLabel(entry.kind)}
+                      </strong>
+                      <small className="text-muted-foreground text-xs">
                         {formatDate(entry.createdAt)}
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant={pending ? "outline" : "success"}>
-                          {pending ? "Pending" : "Posted"}
-                        </Badge>
-                      </TableCell>
-                      <TableCell
+                      </small>
+                    </div>
+                    <div className="flex flex-col items-end gap-1">
+                      <span
                         className={cn(
-                          "text-right font-semibold tabular-nums",
+                          "text-sm font-semibold tabular-nums",
                           entry.amountCents < 0 && "text-muted-foreground",
                         )}
                       >
                         {entry.amountCents > 0 ? "+" : ""}
                         {formatPrice(entry.amountCents)}
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
+                      </span>
+                      <Badge variant={pending ? "outline" : "success"}>
+                        {pending ? "Pending" : "Posted"}
+                      </Badge>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
           )}
         </CardContent>
       </Card>

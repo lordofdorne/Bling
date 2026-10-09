@@ -22,6 +22,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Form } from "@/components/ui/form";
+import { useControlSize } from "../lib/design";
 
 export function ProfileEditor() {
   const profile = useOwnProfile();
@@ -29,16 +30,8 @@ export function ProfileEditor() {
     <section
       id="profile"
       aria-label="Public profile"
-      className="flex flex-col gap-6"
+      className="flex flex-col gap-(--stack-gap)"
     >
-      <header>
-        <h2 className="text-xl font-bold tracking-tight">
-          Edit your public profile
-        </h2>
-        <p className="text-muted-foreground mt-1 text-sm">
-          Help people find you and get to know your corner of Bling.
-        </p>
-      </header>
       {profile.isPending ? (
         <p role="status" className="text-muted-foreground text-sm">
           Loading profile…
@@ -75,6 +68,7 @@ function ProfileForm({ profile }: { profile: CreatorProfile }) {
     },
   });
   const save = useSaveProfile();
+  const controlSize = useControlSize();
   const uploadAvatar = useUploadAvatar();
   const [saved, setSaved] = useState(false);
   // The chosen file is uploaded on save, so it stays outside the form values
@@ -136,7 +130,7 @@ function ProfileForm({ profile }: { profile: CreatorProfile }) {
       <CardContent>
         <Form {...form}>
           <form
-            className="grid gap-5 md:grid-cols-2"
+            className="grid gap-(--card-gap) tablet:grid-cols-2"
             onSubmit={submit}
             noValidate
           >
@@ -144,14 +138,14 @@ function ProfileForm({ profile }: { profile: CreatorProfile }) {
               control={form.control}
               name="displayName"
               label="Display name"
-              className="md:col-span-2"
+              className="tablet:col-span-2"
             />
 
             <TextareaField
               control={form.control}
               name="bio"
               label="About your channel"
-              className="md:col-span-2"
+              className="tablet:col-span-2"
               rows={4}
               placeholder="What do you love talking about?"
             />
@@ -234,7 +228,7 @@ function ProfileForm({ profile }: { profile: CreatorProfile }) {
               control={form.control}
               name="published"
               label="Show my profile in discovery"
-              className="md:col-span-2"
+              className="tablet:col-span-2"
               disabled={profile.isLive}
               description={
                 profile.isLive
@@ -243,9 +237,11 @@ function ProfileForm({ profile }: { profile: CreatorProfile }) {
               }
             />
 
-            <div className="flex flex-wrap items-center gap-3 md:col-span-2">
+            <div className="flex flex-wrap items-center gap-3 tablet:col-span-2">
               <Button
                 type="submit"
+                size={controlSize}
+                className="w-full tablet:w-auto"
                 disabled={save.isPending || uploadAvatar.isPending}
               >
                 {uploadAvatar.isPending ? (
@@ -269,7 +265,7 @@ function ProfileForm({ profile }: { profile: CreatorProfile }) {
             <FormError
               error={save.error ?? uploadAvatar.error}
               fallback="Unable to save your profile. Please try again."
-              className="md:col-span-2"
+              className="tablet:col-span-2"
             />
           </form>
         </Form>

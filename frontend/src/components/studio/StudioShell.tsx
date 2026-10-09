@@ -1,10 +1,10 @@
-import { useState, type ReactNode } from "react";
+import type { ReactNode } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import {
   ArrowRight,
   ChevronLeft,
+  Compass,
   LogOut,
-  Menu,
   Radio,
   Settings,
   UserRound,
@@ -12,10 +12,13 @@ import {
 import { useLogout } from "../../lib/auth";
 import { Brand } from "../ViewerShell";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
-import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
+import {
+  BottomNav,
+  BOTTOM_NAV_CLEARANCE,
+  type BottomNavItem,
+} from "../BottomNav";
 import {
   SETTINGS_GROUPS,
   settingsSectionsIn,
@@ -34,33 +37,23 @@ const linkClass = (active?: boolean) =>
   );
 
 const groupLabelClass =
-  "text-muted-foreground px-3 pb-2 text-[11px] font-bold tracking-[0.12em] uppercase";
+  "text-muted-foreground px-3 pb-2 text-(length:--text-eyebrow) font-bold tracking-[0.12em] uppercase";
 
-function StudioNav({
-  username,
-  onNavigate,
-}: {
-  username: string;
-  onNavigate: () => void;
-}) {
+function StudioNav({ username }: { username: string }) {
   return (
     <nav className="flex flex-col gap-1">
       <p className={groupLabelClass}>Workspace</p>
-      <Link to="/dashboard" onClick={onNavigate} className={linkClass(true)}>
+      <Link to="/dashboard" className={linkClass(true)}>
         <Radio className="size-[18px]" />
         Studio
       </Link>
-      <Link
-        to="/dashboard/settings"
-        onClick={onNavigate}
-        className={linkClass()}
-      >
+      <Link to="/dashboard/settings" className={linkClass()}>
         <Settings className="size-[18px]" />
         Settings
       </Link>
       <Separator className="my-4" />
       <p className={groupLabelClass}>Channel</p>
-      <Link to={`/u/${username}`} onClick={onNavigate} className={linkClass()}>
+      <Link to={`/u/${username}`} className={linkClass()}>
         <UserRound className="size-[18px]" />
         View public page
         <ArrowRight className="ml-auto size-3.5" />
@@ -69,28 +62,17 @@ function StudioNav({
   );
 }
 
-function SettingsNav({
-  section,
-  onNavigate,
-}: {
-  section: SettingsSection | null;
-  onNavigate: () => void;
-}) {
+function SettingsNav({ section }: { section: SettingsSection | null }) {
   return (
     <nav className="flex flex-col gap-1">
       <Link
         to="/dashboard"
-        onClick={onNavigate}
         className="text-muted-foreground hover:text-foreground mb-2 flex items-center gap-2 px-3 py-2 text-sm font-semibold"
       >
         <ChevronLeft className="size-4" />
         Back to studio
       </Link>
-      <Link
-        to="/dashboard/settings"
-        onClick={onNavigate}
-        className={linkClass(section === null)}
-      >
+      <Link to="/dashboard/settings" className={linkClass(section === null)}>
         <Settings className="size-[18px]" />
         Settings
       </Link>
@@ -101,7 +83,6 @@ function SettingsNav({
             <Link
               key={item.id}
               to={`/dashboard/settings/${item.id}`}
-              onClick={onNavigate}
               className={linkClass(section === item.id)}
             >
               <item.Icon className="size-[18px]" />
@@ -125,43 +106,14 @@ export function StudioShell({
   settingsSection: SettingsSection | null;
   children: ReactNode;
 }) {
-  const logout = useLogout();
-  const navigate = useNavigate();
-  const [menuOpen, setMenuOpen] = useState(false);
+  const signOut = useSignOut();
 
-  async function signOut() {
-    try {
-      await logout.mutateAsync();
-      navigate("/login", { replace: true });
-    } catch {
-      // The inline status below keeps the creator in a recoverable state.
-    }
-  }
-
-  const nav = (
-    <div className="flex h-full flex-col justify-between gap-8 p-4">
-      {isSettings ? (
-        <SettingsNav
-          section={settingsSection}
-          onNavigate={() => setMenuOpen(false)}
-        />
-      ) : (
-        <StudioNav username={username} onNavigate={() => setMenuOpen(false)} />
-      )}
-      <div className="flex flex-col gap-4">
-        <Button
-          variant="ghost"
-          className="justify-start"
-          type="button"
-          onClick={() => void signOut()}
-          disabled={logout.isPending}
-        >
-          <LogOut className="size-4" />
-          {logout.isPending ? "Signing out…" : "Sign out"}
-        </Button>
-      </div>
-    </div>
-  );
+  const navItems: BottomNavItem[] = [
+    { to: "/dashboard", label: "Studio", Icon: Radio, end: true },
+    { to: `/u/${username}`, label: "Channel", Icon: UserRound },
+    { to: "/dashboard/settings", label: "Settings", Icon: Settings },
+    { to: "/", label: "Discover", Icon: Compass, end: true },
+  ];
 
   return (
     <div className="min-h-screen">
@@ -172,57 +124,56 @@ export function StudioShell({
         Skip to studio
       </a>
 
-      <header className="bg-background/90 sticky top-0 z-40 flex h-[var(--header-height)] items-center gap-3 border-b px-4 backdrop-blur md:px-6">
-        <Button
-          variant="ghost"
-          size="icon"
-          className="laptop:hidden"
-          aria-label="Toggle studio navigation"
-          aria-expanded={menuOpen}
-          onClick={() => setMenuOpen(!menuOpen)}
-        >
-          <Menu />
-        </Button>
-        <Brand />
-        <span className="text-muted-foreground hidden border-l pl-3 text-[11px] font-bold tracking-[0.14em] uppercase sm:inline">
-          Creator studio
-        </span>
-        <div className="ml-auto flex items-center gap-3">
-          <Button asChild variant="link">
+      <header className="bg-background/95 sticky top-0 z-40 border-b pt-(--safe-top) backdrop-blur">
+        <div className="flex h-(--header-height) items-center gap-3 px-(--page-pad)">
+          <Brand />
+          <span className="text-muted-foreground border-l pl-3 text-(length:--text-eyebrow) font-bold tracking-[0.14em] uppercase">
+            Studio
+          </span>
+          <Button
+            asChild
+            variant="ghost"
+            className="laptop:inline-flex ml-auto hidden"
+          >
             <Link to="/">
               Explore Bling <ArrowRight className="size-4" />
             </Link>
           </Button>
-          <Avatar>
-            <AvatarFallback className="bg-[var(--mauve-surface)] text-[var(--mauve-muted)]">
-              {username.slice(0, 2).toUpperCase()}
-            </AvatarFallback>
-          </Avatar>
         </div>
       </header>
 
       <div className="flex">
         <aside
-          className="bg-card laptop:block sticky top-[var(--header-height)] hidden h-[calc(100vh-var(--header-height))] w-[260px] shrink-0 overflow-y-auto border-r"
+          className="bg-card laptop:flex sticky top-[calc(var(--safe-top)+var(--header-height))] hidden h-[calc(100vh-var(--header-height)-var(--safe-top))] w-(--sidebar-width) shrink-0 flex-col justify-between gap-8 overflow-y-auto border-r p-4"
           aria-label={isSettings ? "Settings navigation" : "Creator navigation"}
         >
-          {nav}
+          {isSettings ? (
+            <SettingsNav section={settingsSection} />
+          ) : (
+            <StudioNav username={username} />
+          )}
+          <Button
+            variant="ghost"
+            className="justify-start"
+            type="button"
+            onClick={() => void signOut.run()}
+            disabled={signOut.isPending}
+          >
+            <LogOut className="size-4" />
+            {signOut.isPending ? "Signing out…" : "Sign out"}
+          </Button>
         </aside>
 
-        <Sheet open={menuOpen} onOpenChange={setMenuOpen}>
-          <SheetContent side="left" className="w-[280px] overflow-y-auto p-0">
-            <SheetTitle className="sr-only">
-              {isSettings ? "Settings navigation" : "Creator navigation"}
-            </SheetTitle>
-            {nav}
-          </SheetContent>
-        </Sheet>
-
         <main id="studio-main" className="min-w-0 flex-1">
-          <div className="mx-auto w-full max-w-5xl px-4 py-6 md:px-8 md:py-10">
+          <div
+            className={cn(
+              "mx-auto flex w-full max-w-(--content-max) flex-col gap-(--section-gap) px-(--page-pad) pt-(--section-gap)",
+              BOTTOM_NAV_CLEARANCE,
+            )}
+          >
             {children}
-            {logout.isError && (
-              <Alert variant="destructive" className="mt-6">
+            {signOut.isError && (
+              <Alert variant="destructive">
                 <AlertDescription>
                   Unable to sign out. Please try again.
                 </AlertDescription>
@@ -231,6 +182,27 @@ export function StudioShell({
           </div>
         </main>
       </div>
+
+      <BottomNav label="Studio navigation" items={navItems} />
     </div>
   );
+}
+
+// Sign out, shared by the sidebar (laptop+) and Account settings (phone).
+// eslint-disable-next-line react-refresh/only-export-components
+export function useSignOut() {
+  const logout = useLogout();
+  const navigate = useNavigate();
+  return {
+    isPending: logout.isPending,
+    isError: logout.isError,
+    async run() {
+      try {
+        await logout.mutateAsync();
+        navigate("/login", { replace: true });
+      } catch {
+        // The inline status keeps the creator in a recoverable state.
+      }
+    },
+  };
 }

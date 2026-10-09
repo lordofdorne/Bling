@@ -29,7 +29,9 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   const [preference, setPreferenceState] = useState<ThemePreference>(() =>
     getThemePreference(),
   );
-  const [systemIsLight, setSystemIsLight] = useState(() => prefersLightScheme());
+  const [systemIsLight, setSystemIsLight] = useState(() =>
+    prefersLightScheme(),
+  );
   const resolved = useMemo(
     () => resolveTheme(preference, systemIsLight),
     [preference, systemIsLight],

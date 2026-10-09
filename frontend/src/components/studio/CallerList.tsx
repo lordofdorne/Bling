@@ -13,12 +13,15 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { formatCallLength, formatPrice } from "./format";
+import { SectionHeader } from "../page";
+import { useControlSize } from "../../lib/design";
 
 export function CallerList({ showID }: { showID: string }) {
   const queue = useCreatorQueue(showID);
   const activeCall = useActiveCall(showID);
   const selectCaller = useSelectCaller(showID);
   const selectRandom = useSelectRandomCaller(showID);
+  const controlSize = useControlSize();
   const [search, setSearch] = useState("");
   useQueueEvents(showID, "creator", true);
   const entries = useMemo(() => queue.data ?? [], [queue.data]);
@@ -57,18 +60,20 @@ export function CallerList({ showID }: { showID: string }) {
 
   const call = activeCall.data;
   return (
-    <section className="flex flex-col gap-4" aria-label="Caller requests">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-baseline gap-2">
-          <h2 className="text-lg font-bold">Caller requests</h2>
-          <span className="text-muted-foreground text-sm">
-            {entries.length} waiting
-          </span>
-        </div>
+    <section
+      className="flex flex-col gap-(--stack-gap)"
+      aria-label="Caller requests"
+    >
+      <div className="flex flex-col gap-3 tablet:flex-row tablet:items-center tablet:justify-between">
+        <SectionHeader
+          title="Caller requests"
+          description={`${entries.length} waiting`}
+        />
         {!call && entries.length > 0 && (
           <Button
             variant="secondary"
-            size="sm"
+            size={controlSize}
+            className="w-full tablet:w-auto"
             type="button"
             onClick={() => selectRandom.mutate(undefined)}
             disabled={selectRandom.isPending}
@@ -110,7 +115,7 @@ export function CallerList({ showID }: { showID: string }) {
       ) : (
         <>
           <div className="flex flex-wrap items-center gap-3">
-            <div className="relative min-w-[220px] flex-1">
+            <div className="relative min-w-0 basis-48 flex-1">
               <span className="sr-only">Search caller requests</span>
               <Search className="text-muted-foreground pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2" />
               <Input
@@ -131,7 +136,7 @@ export function CallerList({ showID }: { showID: string }) {
           </div>
 
           {visibleEntries.length === 0 ? (
-            <div className="text-muted-foreground flex flex-col items-center gap-2 py-10 text-center">
+            <div className="text-muted-foreground flex flex-col items-center gap-2 py-(--space-9) text-center">
               <Search className="size-5" />
               <strong className="text-foreground">No matching callers</strong>
               <span className="text-sm">Try another name, topic, or tier.</span>
@@ -141,9 +146,9 @@ export function CallerList({ showID }: { showID: string }) {
               {visibleEntries.map((entry) => (
                 <li
                   key={entry.id}
-                  className="hover:bg-accent/50 flex flex-wrap items-center gap-3 rounded-xl border p-4 transition-colors"
+                  className="hover:bg-accent/50 flex flex-wrap items-center gap-3 rounded-xl border p-(--inset-pad) transition-colors"
                 >
-                  <div className="min-w-[200px] flex-1">
+                  <div className="min-w-0 basis-48 flex-1">
                     <strong className="text-sm font-semibold">
                       {entry.displayName}
                     </strong>
@@ -161,6 +166,7 @@ export function CallerList({ showID }: { showID: string }) {
                   <Button
                     variant="secondary"
                     size="sm"
+                    className="w-full tablet:w-auto"
                     type="button"
                     onClick={() => selectCaller.mutate(entry.id)}
                     disabled={Boolean(call) || selectCaller.isPending}

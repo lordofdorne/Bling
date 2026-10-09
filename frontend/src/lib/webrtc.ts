@@ -12,7 +12,10 @@ export type WebRTCCallPhase =
   | "ended";
 
 type SignalType =
-  "signal.ready" | "signal.offer" | "signal.answer" | "signal.ice";
+  | "signal.ready"
+  | "signal.offer"
+  | "signal.answer"
+  | "signal.ice";
 
 type SignalEnvelope = {
   type: SignalType;
@@ -289,32 +292,32 @@ export class WebRTCCallManager {
       return;
     }
     if (state === "failed") {
-	  this.beginRecovery();
+      this.beginRecovery();
       return;
     }
     if (state === "disconnected" && this.disconnectTimer === null) {
-	  this.beginRecovery();
+      this.beginRecovery();
     }
   }
 
   private beginRecovery() {
     if (this.disconnectTimer !== null || this.closing) return;
     this.setPhase("reconnecting");
-	if (this.options.role === "creator") {
-	  this.peer?.restartIce();
-	  this.signalChain = this.signalChain
-	    .then(() => this.offer())
-	    .catch((cause) => this.fail(asError(cause)));
-	}
-      this.disconnectTimer = this.dependencies.setTimer(() => {
-        this.disconnectTimer = null;
-        if (
-          this.peer?.connectionState === "disconnected" ||
-          this.peer?.connectionState === "failed"
-        ) {
-          void this.fail(new Error("The audio connection was lost."));
-        }
-      }, 20_000);
+    if (this.options.role === "creator") {
+      this.peer?.restartIce();
+      this.signalChain = this.signalChain
+        .then(() => this.offer())
+        .catch((cause) => this.fail(asError(cause)));
+    }
+    this.disconnectTimer = this.dependencies.setTimer(() => {
+      this.disconnectTimer = null;
+      if (
+        this.peer?.connectionState === "disconnected" ||
+        this.peer?.connectionState === "failed"
+      ) {
+        void this.fail(new Error("The audio connection was lost."));
+      }
+    }, 20_000);
   }
 
   private send(type: SignalType, payload: unknown) {

@@ -39,8 +39,8 @@ export function AuthPage({ mode }: AuthPageProps) {
   }
 
   return (
-    <main className="min-h-screen">
-      <header className="flex items-center justify-between px-6 py-5">
+    <main className="min-h-screen pt-(--safe-top) pb-(--safe-bottom)">
+      <header className="flex h-(--header-height) items-center justify-between px-(--page-pad)">
         <Brand />
         <Button asChild variant="link">
           <Link to="/">
@@ -49,8 +49,8 @@ export function AuthPage({ mode }: AuthPageProps) {
         </Button>
       </header>
 
-      <div className="mx-auto grid w-full max-w-5xl gap-10 px-6 pb-16 lg:min-h-[calc(100vh-160px)] lg:grid-cols-2 lg:items-center">
-        <section className="hidden lg:block">
+      <div className="mx-auto grid w-full max-w-5xl gap-10 px-(--page-pad) pt-(--stack-gap) pb-(--section-gap) laptop:min-h-[calc(100vh-var(--header-height)*2)] laptop:grid-cols-2 laptop:items-center">
+        <section className="laptop:block hidden">
           <p className="text-[var(--sand-text)] text-xs font-bold tracking-[0.14em] uppercase">
             Closer to your community
           </p>
@@ -84,8 +84,8 @@ export function AuthPage({ mode }: AuthPageProps) {
           </p>
         </section>
 
-        <Card className="w-full">
-          <CardContent className="flex flex-col gap-5">
+        <Card className="max-tablet:border-0 max-tablet:bg-transparent max-tablet:py-0 w-full">
+          <CardContent className="max-tablet:px-0 flex flex-col gap-(--card-gap)">
             <div>
               <p className="text-[var(--sand-text)] text-xs font-bold tracking-[0.14em] uppercase">
                 {viewerIntent ? "Your Bling account" : "Creator access"}

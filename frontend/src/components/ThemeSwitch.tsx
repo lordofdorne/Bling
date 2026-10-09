@@ -24,14 +24,14 @@ export function ThemeSwitch() {
   return (
     <fieldset>
       <legend className="sr-only">Color theme</legend>
-      <div className="grid gap-3 sm:grid-cols-3">
+      <div className="grid grid-cols-3 gap-2 tablet:gap-3">
         {OPTIONS.map((option) => {
           const selected = preference === option.value;
           return (
             <label
               key={option.value}
               className={cn(
-                "relative flex cursor-pointer flex-col gap-1 rounded-xl border p-4 transition-colors",
+                "relative flex min-h-(--touch-min) cursor-pointer flex-col gap-1 rounded-xl border p-(--inset-pad) transition-colors",
                 selected ? "border-primary bg-primary/5" : "hover:bg-accent",
               )}
             >
@@ -45,11 +45,11 @@ export function ThemeSwitch() {
               />
               <option.Icon className="text-muted-foreground size-4" />
               <strong className="text-sm font-semibold">{option.label}</strong>
-              <span className="text-muted-foreground text-xs">
+              <span className="text-muted-foreground hidden text-xs tablet:block">
                 {option.hint}
               </span>
               {selected && (
-                <Check className="text-primary absolute top-4 right-4 size-4" />
+                <Check className="text-primary absolute top-(--inset-pad) right-(--inset-pad) size-4" />
               )}
             </label>
           );

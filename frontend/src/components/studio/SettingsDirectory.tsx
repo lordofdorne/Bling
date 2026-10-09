@@ -1,23 +1,22 @@
 import { Link } from "react-router-dom";
 import { ChevronRight } from "lucide-react";
 import { Card } from "@/components/ui/card";
+import { PageHeader } from "../page";
 import { SETTINGS_GROUPS, settingsSectionsIn } from "./settings-sections";
 
 export function SettingsDirectory() {
   return (
-    <div className="flex flex-col gap-8">
-      <header>
-        <h1 className="text-3xl font-extrabold tracking-tight">Settings</h1>
-        <p className="text-muted-foreground mt-2 text-sm">
-          Manage your channel, money, and account in one place.
-        </p>
-      </header>
+    <div className="flex flex-col gap-(--section-gap)">
+      <PageHeader
+        title="Settings"
+        description="Manage your channel, money, and account in one place."
+      />
 
       {SETTINGS_GROUPS.map((group) => (
         <section key={group} aria-labelledby={`settings-${group}`}>
           <h2
             id={`settings-${group}`}
-            className="text-muted-foreground mb-3 text-[11px] font-bold tracking-[0.1em] uppercase"
+            className="text-muted-foreground mb-3 text-(length:--text-eyebrow) font-bold tracking-[0.1em] uppercase"
           >
             {group}
           </h2>
@@ -26,7 +25,7 @@ export function SettingsDirectory() {
               <Link
                 key={section.id}
                 to={`/dashboard/settings/${section.id}`}
-                className={`hover:bg-accent/60 flex items-center gap-4 p-4 transition-colors ${
+                className={`hover:bg-accent/60 flex min-h-16 items-center gap-4 px-(--card-pad) py-3 transition-colors ${
                   index > 0 ? "border-t" : ""
                 }`}
               >

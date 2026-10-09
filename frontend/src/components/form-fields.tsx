@@ -38,7 +38,11 @@ type FieldBase<T extends FieldValues> = {
 };
 
 type ControlledProps =
-  "name" | "value" | "defaultValue" | "onChange" | "onBlur";
+  | "name"
+  | "value"
+  | "defaultValue"
+  | "onChange"
+  | "onBlur";
 
 function FieldLabel({
   label,

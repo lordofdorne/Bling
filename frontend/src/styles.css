@@ -67,7 +67,7 @@
 @layer base {
   html {
     scroll-behavior: smooth;
-    scroll-padding-top: 94px;
+    scroll-padding-top: calc(var(--header-height) + var(--space-4));
   }
   body {
     min-width: 320px;
@@ -105,13 +105,37 @@
 }
 
 @layer base {
-  /* Coarse pointers get the minimum touch target the design system requires. */
+  /* Touch targets. Buttons, inputs and selects already reach --touch-min
+     through the control tokens on coarse pointers. Small glyph controls
+     (switches, radios, checkboxes) keep their visual size and get an
+     invisible hit area instead of being stretched. */
   @media (pointer: coarse) {
-    button,
-    [role="button"],
-    a[data-slot="button"],
-    [data-slot="select-trigger"] {
-      min-height: var(--touch-min);
+    /* Matched by role, not data-slot: <FormControl> replaces data-slot. */
+    button[role="switch"],
+    button[role="radio"],
+    button[role="checkbox"] {
+      position: relative;
     }
+    button[role="switch"]::after,
+    button[role="radio"]::after,
+    button[role="checkbox"]::after {
+      content: "";
+      position: absolute;
+      inset: 50% auto auto 50%;
+      width: var(--touch-min);
+      height: var(--touch-min);
+      transform: translate(-50%, -50%);
+    }
+  }
+
+  /* No double-tap zoom delay or grey tap flash on touch. */
+  html {
+    -webkit-tap-highlight-color: transparent;
+    -webkit-text-size-adjust: 100%;
+  }
+  button,
+  a,
+  [role="button"] {
+    touch-action: manipulation;
   }
 }

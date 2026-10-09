@@ -9,7 +9,7 @@ import {
 } from "@stripe/react-stripe-js";
 import { loadStripe } from "@stripe/stripe-js";
 import { useStripeAppearance } from "../lib/stripe-appearance";
-import { Link, useParams } from "react-router-dom";
+import { useParams } from "react-router-dom";
 import {
   QueueTier,
   useJoinQueue,
@@ -50,7 +50,7 @@ import {
   formatCount,
 } from "../lib/social";
 import { CreatorAvatar, CreatorCover } from "./CreatorIdentity";
-import { ArrowLeft, Check, Phone, Radio } from "lucide-react";
+import { Check, Phone, Radio } from "lucide-react";
 
 const emptyTiers: QueueTier[] = [];
 
@@ -473,7 +473,8 @@ function ConfirmAuthorization({
         {submitting || join.isPending ? "Authorizing…" : "Authorize and join"}
       </Button>
       <Button
-        variant="secondary"
+        variant="ghost"
+        size="lg"
         type="button"
         onClick={onBack}
         disabled={submitting}
@@ -506,15 +507,8 @@ export function PublicHotline() {
 
   return (
     <ViewerShell>
-      <Button asChild variant="link" className="mb-4 h-auto px-0">
-        <Link to="/">
-          <ArrowLeft className="size-4" />
-          Back to discover
-        </Link>
-      </Button>
-
       {profile.data && (
-        <div className="mb-6 flex items-center gap-3">
+        <div className="flex items-center gap-3">
           <CreatorAvatar profile={profile.data} className="size-12" />
           <div>
             <h2 className="text-lg font-bold">{profile.data.displayName}</h2>
@@ -527,7 +521,7 @@ export function PublicHotline() {
         !(
           profile.error instanceof ApiError && profile.error.status === 404
         ) && (
-          <Alert variant="destructive" className="mb-6">
+          <Alert variant="destructive">
             <AlertDescription>
               Could not load channel details.
               <Button
@@ -542,7 +536,7 @@ export function PublicHotline() {
         )}
 
       {liveShow.isPending ? (
-        <Card className="text-muted-foreground p-10 text-center text-sm">
+        <Card className="text-muted-foreground px-(--card-pad) py-(--space-9) text-center text-sm">
           Checking the Hotline…
         </Card>
       ) : liveShow.isError ? (
@@ -552,14 +546,14 @@ export function PublicHotline() {
           </AlertDescription>
         </Alert>
       ) : !liveShow.data ? (
-        <Card className="items-center gap-3 p-10 text-center">
+        <Card className="items-center gap-3 px-(--card-pad) py-(--space-9) text-center">
           <span className="bg-muted text-muted-foreground grid size-14 place-items-center rounded-xl">
             <Radio className="size-7" />
           </span>
           {!profile.data && (
             <p className="text-muted-foreground text-sm">@{username}</p>
           )}
-          <h1 className="text-2xl font-extrabold tracking-tight">
+          <h1 className="text-(length:--text-page-title) font-extrabold tracking-tight">
             Hotline is currently closed.
           </h1>
           <p className="text-muted-foreground text-sm">
@@ -574,10 +568,10 @@ export function PublicHotline() {
           )}
         </Card>
       ) : (
-        <div className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr] lg:items-start">
+        <div className="grid gap-(--section-gap) laptop:grid-cols-[1.1fr_0.9fr] laptop:items-start">
           <section>
             <div
-              className="relative mb-6 grid h-56 place-items-center overflow-hidden rounded-2xl border border-[var(--mauve-border)] bg-[var(--mauve-surface)]"
+              className="relative mb-(--stack-gap) grid aspect-[2/1] place-items-center overflow-hidden rounded-2xl border border-[var(--mauve-border)] bg-[var(--mauve-surface)] tablet:aspect-auto tablet:h-56"
               aria-hidden="true"
             >
               {profile.data?.coverUrl && (
@@ -592,7 +586,7 @@ export function PublicHotline() {
               <span className="bg-primary-foreground size-1.5 animate-pulse rounded-full" />
               Live now
             </Badge>
-            <h1 className="mt-3 text-3xl font-extrabold tracking-tight">
+            <h1 className="mt-3 text-(length:--text-page-title) font-extrabold tracking-tight">
               The Hotline is open.
             </h1>
             {profile.data?.bio && (

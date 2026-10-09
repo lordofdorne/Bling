@@ -2,6 +2,10 @@
 
 Guidance for agents working in this repo.
 
+## Tooling
+
+Frontend formatting is [Biome](https://biomejs.dev) (`frontend/biome.json`), not Prettier; do not add Prettier or its config back. Run `npm run format` (or `make fmt`) to write and `npm run format:check` to verify. Biome only formats here: ESLint (`npm run lint`) stays the linter because it carries the React Hooks and React Compiler rules. Go uses `gofmt`.
+
 ## Design
 
 The interface is [shadcn/ui](https://ui.shadcn.com) (new-york style) on Tailwind v4 and Radix, wearing the Bling design system. Components live in `frontend/src/components/ui/`; they are the upstream files, written in place because this environment cannot reach the shadcn registry, and can be re-synced with `npx shadcn add <component>` from a machine that can.
@@ -26,21 +30,50 @@ Semantic roles (`--bg`, `--surface`, `--text`, `--muted`, `--border`, `--on-acce
 
 Stripe and other embedded UI should read tokens at runtime (`cssToken(...)`), not copy hex.
 
-### Spacing and sizes
+### Mobile first
 
-Use the 4px scale: `--space-1` (4px) through `--space-9` (48px). Page chrome uses `--page-pad`, `--section-gap`, `--card-pad`, and `--header-height` (these shrink on viewports ≤720px).
+Most people use Bling on a phone. Design and build every screen at 375px wide first, then let it grow; check 375, 768 and 1280 before calling UI work done. Layout adapts by **viewport width** (phone ≤720, tablet ≤980); controls adapt by **input** (`pointer: coarse`). A phone gets both.
 
-Buttons and inputs use three control sizes — do not invent a fourth. `Button`, `Input`, `Textarea` and `SelectTrigger` read these tokens directly, so `size="sm" | "default" | "lg"` is the whole API and a size change happens in `tokens.css`:
+- **Navigation.** Below laptop width, primary navigation is the fixed `<BottomNav>` (`components/BottomNav.tsx`, 3–5 destinations) and the sidebar is hidden; there is no hamburger menu. Page content wraps in `BOTTOM_NAV_CLEARANCE` so the bar never covers it. Account actions such as Sign out live in Settings → Account, never in the tab bar. Search sits in the header (an icon on phones that opens a full-width field).
+- **Safe areas.** The viewport uses `viewport-fit=cover`. Sticky headers pad by `--safe-top`, the tab bar by `--safe-bottom`.
+- **Touch targets.** Every interactive element is at least `--touch-min` (44px) on touch. Buttons, inputs and selects get there through the control tokens; switches, radios and checkboxes keep their glyph size and get an invisible hit area from `styles.css` (matched by ARIA role, because `<FormControl>` replaces `data-slot`). Never fix a target with `min-height` on the control itself, which stretches it.
+- **Inputs.** Field text is `--input-font`, 16px on touch, so iOS Safari never zooms on focus. Set `type`, `inputMode`, `autoComplete` and `enterKeyHint` so the right keyboard appears.
+- **Actions.** On phones, a form's or card's actions go full width and stack (`w-full tablet:w-auto`, `flex-col tablet:flex-row`), with the primary action last, nearest the thumb. Use `useControlSize()` for the size.
+- **Density.** No card inside a card. Lists of people or records are compact rows on phones (see `CreatorRow` in `DiscoverPage`), not one poster per screen. Tables become lists below tablet width. Balance or stat groups share one card.
+- **No horizontal scroll.** Nothing may be wider than the viewport. Use `min-w-0` on flex children that hold text, `truncate` on single-line names, and flexible `basis-*` values instead of fixed `min-w-[…px]`.
+- **Breakpoint variants.** Use the named variants (`tablet:`, `laptop:`, `desktop:`, `wide:` and their `max-*` forms) for layout. Do not use Tailwind's `sm:`/`md:`/`lg:` in screens; they don't match `useScreenSize()`.
 
-| Size   | Tokens           | Use                                                  |
-| ------ | ---------------- | ---------------------------------------------------- |
-| Small  | `--control-sm-*` | Compact icon follows, dense row actions, `size="sm"` |
-| Medium | `--control-md-*` | Default buttons, inputs and selects                  |
-| Large  | `--control-lg-*` | Auth submits, full-width mobile actions, `size="lg"` |
+### Spacing, type and sizes
 
-Touch targets on coarse pointers must be at least `--touch-min` (44px); a base rule in `styles.css` enforces this for buttons and select triggers. Icon-only controls use `--icon-button` (`size="icon"`).
+Every size comes from `frontend/src/tokens.css`. Do not write pixel values (`p-10`, `text-[11px]`, `h-[72px]`, `min-w-[220px]`) in components; use a token, and add one first if none fits.
 
-Phone layout (≤720px): keep navigation scrollable instead of wrapping or clipping; do not leave actions like Sign out in the tab strip; stack studio overview cards to one column.
+Spacing is the 4px scale, `--space-1` (4px) through `--space-9` (48px). Layout reads semantic tokens that tighten on phones:
+
+| Token             | Laptop | Phone | Use                                               |
+| ----------------- | ------ | ----- | ------------------------------------------------- |
+| `--page-pad`      | 32px   | 16px  | Left/right page gutter                            |
+| `--section-gap`   | 32px   | 24px  | Between page sections                             |
+| `--stack-gap`     | 16px   | 12px  | Between items in a section (header → card, cards) |
+| `--card-pad`      | 24px   | 16px  | Card padding (`Card` reads it)                    |
+| `--card-gap`      | 20px   | 16px  | Between fields/blocks inside a card               |
+| `--inset-pad`     | 16px   | 12px  | Inset panels and list rows inside a card          |
+| `--header-height` | 64px   | 56px  | Sticky header                                     |
+
+Type uses `--text-page-title` (30 → 24px on phones), `--text-section-title`, `--text-card-title`, `--text-body`, `--text-meta` and `--text-eyebrow`. Don't size headings by hand: use the components in `frontend/src/components/page.tsx`:
+
+- `PageHeader`: one per page. Title, optional description, eyebrow, `back` link and `actions`.
+- `SectionHeader`: section and card headings, with an optional trailing `action`.
+- `Eyebrow`: the small uppercase label.
+
+Buttons and inputs use three control sizes; do not invent a fourth. `Button`, `Input`, `Textarea` and `SelectTrigger` read these tokens directly, so `size="sm" | "default" | "lg"` is the whole API and a size change happens in `tokens.css`:
+
+| Size   | Mouse | Touch | Use                                                        |
+| ------ | ----- | ----- | ---------------------------------------------------------- |
+| Small  | 32px  | 44px  | Dense row actions (`size="sm"`)                            |
+| Medium | 40px  | 44px  | Default buttons, inputs and selects                        |
+| Large  | 48px  | 48px  | Primary submits and full-width phone actions (`size="lg"`) |
+
+Icon-only controls use `size="icon"` (`--icon-button`, 36px mouse / 44px touch). On touch, small and medium share a height, so controls side by side always line up; they differ only in padding and type.
 
 ### Hooks
 

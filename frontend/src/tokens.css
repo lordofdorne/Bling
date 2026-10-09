@@ -82,8 +82,10 @@
   --accent-tint: color-mix(in srgb, var(--accent) 10%, transparent);
 }
 
-/* Spacing and control sizes — shared across themes. 4px grid.
-   Phone layouts override --page-pad and --header-height. */
+/* Spacing, type and control sizes — shared across themes. 4px grid.
+   Mobile-first rule of thumb: layout adapts by viewport width (phone ≤720,
+   tablet ≤980), controls adapt by input (pointer: coarse = touch). A phone
+   gets both. Components never hard-code these values; see AGENTS.md. */
 :root {
   --space-1: 4px;
   --space-2: 8px;
@@ -95,27 +97,49 @@
   --space-8: 40px;
   --space-9: 48px;
 
+  /* Page chrome. */
   --page-pad: var(--space-7);
-  --section-gap: var(--space-6);
+  --section-gap: var(--space-7);
+  --stack-gap: var(--space-4);
   --card-pad: var(--space-6);
-  --header-height: 72px;
+  --card-gap: var(--space-5);
+  --inset-pad: var(--space-4);
+  --header-height: 64px;
   --header-height-sm: 56px;
-  --sidebar-width: 224px;
+  --sidebar-width: 260px;
+  --content-max: 1080px;
+  --bottom-nav-height: 64px;
+
+  /* Device safe areas (notch, home indicator). Zero on desktop browsers. */
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+
+  /* Type scale. Pages use PageHeader/SectionHeader, which read these. */
+  --text-page-title: 30px;
+  --text-section-title: 18px;
+  --text-card-title: 16px;
+  --text-body: 14px;
+  --text-meta: 12px;
+  --text-eyebrow: 11px;
+  /* Form fields. 16px on touch keeps iOS Safari from zooming on focus. */
+  --input-font: 14px;
 
   --radius-sm: 6px;
   --radius-md: 8px;
   --radius-lg: 10px;
-  --control-radius: 7px;
+  --control-radius: 8px;
 
+  /* The three control sizes. Buttons, inputs, selects and textareas all read
+     these, so every control on a screen lines up. */
   --control-sm-height: 32px;
-  --control-sm-pad-x: 10px;
-  --control-sm-font: 11px;
+  --control-sm-pad-x: 12px;
+  --control-sm-font: 12px;
   --control-md-height: 40px;
   --control-md-pad-x: 16px;
-  --control-md-font: 12px;
-  --control-lg-height: 44px;
-  --control-lg-pad-x: 18px;
-  --control-lg-font: 13px;
+  --control-md-font: 13px;
+  --control-lg-height: 48px;
+  --control-lg-pad-x: 20px;
+  --control-lg-font: 14px;
 
   --icon-button: 36px;
   --touch-min: 44px;
@@ -126,18 +150,41 @@
   --grid-gap: var(--space-5);
 }
 
+/* Touch input: every control reaches the 44px minimum target and fields use
+   16px type. Small controls stay visually smaller in padding and type only. */
+@media (pointer: coarse) {
+  :root {
+    --control-sm-height: 44px;
+    --control-sm-font: 13px;
+    --control-md-height: 44px;
+    --control-md-font: 14px;
+    --control-lg-height: 48px;
+    --control-lg-font: 15px;
+    --icon-button: 44px;
+    --input-font: 16px;
+  }
+}
+
 @media (max-width: 980px) {
   :root {
     --grid-columns: 8;
+    --page-pad: var(--space-6);
   }
 }
 
 @media (max-width: 720px) {
   :root {
     --page-pad: var(--space-4);
-    --card-pad: var(--space-5);
+    --section-gap: var(--space-6);
+    --stack-gap: var(--space-3);
+    --card-pad: var(--space-4);
+    --card-gap: var(--space-4);
+    --inset-pad: var(--space-3);
     --header-height: var(--header-height-sm);
-    --section-gap: var(--space-5);
+    --text-page-title: 24px;
+    --text-section-title: 17px;
+    --profile-avatar-size: 64px;
+    --grid-gap: var(--space-3);
     --grid-columns: 4;
   }
 }

@@ -14,12 +14,15 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Grid, GridItem } from "./Grid";
+import { PageHeader, SectionHeader } from "./page";
+import { useScreenSize } from "../lib/design";
+import { cn } from "@/lib/utils";
 
 function LivePill({ live }: { live: boolean }) {
   return (
     <Badge
       variant={live ? "default" : "secondary"}
-      className="gap-1.5 rounded-full px-2.5 py-1 text-[10px] tracking-[0.1em] uppercase"
+      className="gap-1.5 rounded-full px-2.5 py-1 text-(length:--text-eyebrow) tracking-[0.1em] uppercase"
     >
       {live && <span className="bg-primary-foreground size-1.5 rounded-full" />}
       {live ? "Live" : "Offline"}
@@ -42,7 +45,7 @@ function CreatorCard({ creator }: { creator: CreatorProfile }) {
         </span>
         {creator.isLive && creator.channelVisitors !== null && (
           <span
-            className="text-on-media absolute top-3 right-3 flex items-center gap-1 rounded-full bg-black/50 px-2 py-1 text-[11px] font-semibold text-white"
+            className="text-on-media absolute top-3 right-3 flex items-center gap-1 rounded-full bg-black/50 px-2 py-1 text-(length:--text-eyebrow) font-semibold text-white"
             title="People on this channel page in the last 90 seconds"
           >
             <Users className="size-3" />
@@ -77,6 +80,42 @@ function CreatorCard({ creator }: { creator: CreatorProfile }) {
   );
 }
 
+// Phone layout: one compact row per creator so a screen shows a list, not a
+// single poster. Tablet and up use CreatorCard.
+function CreatorRow({ creator }: { creator: CreatorProfile }) {
+  return (
+    <li className="flex items-center gap-3 px-(--card-pad) py-3">
+      <Link
+        to={`/u/${creator.username}`}
+        aria-label={`Visit ${creator.displayName}`}
+        className="flex min-w-0 flex-1 items-center gap-3"
+      >
+        <CreatorAvatar
+          profile={creator}
+          className={cn(
+            "size-12",
+            creator.isLive &&
+              "ring-primary ring-offset-card ring-2 ring-offset-2",
+          )}
+        />
+        <span className="min-w-0 flex-1">
+          <span className="flex items-center gap-2">
+            <strong className="truncate text-(length:--text-body) font-semibold">
+              {creator.displayName}
+            </strong>
+            {creator.isLive && <LivePill live />}
+          </span>
+          <span className="text-muted-foreground block truncate text-(length:--text-meta)">
+            @{creator.username} · {formatCount(creator.followerCount)}{" "}
+            {creator.followerCount === 1 ? "follower" : "followers"}
+          </span>
+        </span>
+      </Link>
+      <FollowButton profile={creator} compact />
+    </li>
+  );
+}
+
 export function DiscoverPage({
   view = "home",
 }: {
@@ -94,25 +133,26 @@ export function DiscoverPage({
   const items = creatorItems(discovery.data?.pages);
   const feature = items.find((p) => p.isLive);
   const signedOut = view === "following" && !me.isPending && !me.data;
+  const { isPhone } = useScreenSize();
 
   return (
     <ViewerShell>
-      <div className="mb-8">
-        <h1 className="text-3xl font-extrabold tracking-tight md:text-4xl">
-          {view === "following"
+      <PageHeader
+        title={
+          view === "following"
             ? "Your people. Your place."
-            : "Good company. Real connection."}
-        </h1>
-        <p className="text-muted-foreground mt-2 text-sm">
-          {view === "following"
+            : "Good company. Real connection."
+        }
+        description={
+          view === "following"
             ? "The creators you follow, together in one feed."
-            : "Find a conversation you love. Be a part of it."}
-        </p>
-      </div>
+            : "Find a conversation you love. Be a part of it."
+        }
+      />
 
       {view === "home" && !query && feature && (
         <Card
-          className="mb-10 gap-0 overflow-hidden border-[var(--mauve-border)] bg-[var(--mauve-surface)] py-0"
+          className="gap-0 overflow-hidden border-[var(--mauve-border)] bg-[var(--mauve-surface)] py-0"
           aria-label="Featured creator"
         >
           <Grid gap="none">
@@ -120,13 +160,13 @@ export function DiscoverPage({
               span={7}
               tablet={8}
               phone={4}
-              className="flex flex-col gap-5 p-6 md:p-8"
+              className="flex flex-col gap-(--card-gap) p-(--card-pad) laptop:p-(--space-7)"
             >
               <LivePill live />
               <div className="flex items-center gap-4">
                 <CreatorAvatar profile={feature} className="size-14" />
                 <div className="min-w-0">
-                  <h2 className="truncate text-2xl font-extrabold tracking-tight md:text-3xl">
+                  <h2 className="truncate text-(length:--text-page-title) font-extrabold tracking-tight">
                     {feature.displayName}
                   </h2>
                   <p className="text-muted-foreground text-sm">
@@ -141,10 +181,10 @@ export function DiscoverPage({
                 </p>
               )}
               <div className="flex flex-wrap items-center gap-3">
-                <Button asChild size="lg">
+                <Button asChild size="lg" className="flex-1 tablet:flex-none">
                   <Link to={`/u/${feature.username}`}>
                     <Phone className="size-4" />
-                    Drop into the conversation
+                    Join the line
                     <ArrowRight className="size-4" />
                   </Link>
                 </Button>
@@ -155,7 +195,7 @@ export function DiscoverPage({
               span={5}
               tablet={8}
               phone={4}
-              className="relative min-h-[240px]"
+              className="relative aspect-[16/9] tablet:aspect-auto tablet:min-h-[240px]"
             >
               <CreatorCover profile={feature} />
             </GridItem>
@@ -164,23 +204,21 @@ export function DiscoverPage({
       )}
 
       <section aria-label="Creator discovery">
-        <div className="mb-5 flex flex-wrap items-end justify-between gap-4">
-          <div>
-            <h2 className="text-xl font-bold tracking-tight">
-              {query
+        <div className="mb-(--stack-gap) flex items-end justify-between gap-4">
+          <SectionHeader
+            title={
+              query
                 ? `Results for “${query}”`
                 : view === "following"
                   ? "From your following"
-                  : "Popular on Bling"}
-            </h2>
-            <p className="text-muted-foreground mt-1 text-sm">
-              Live creators first, then the most followed.
-            </p>
-          </div>
+                  : "Popular on Bling"
+            }
+            description="Live creators first, then the most followed."
+          />
           <Button
             variant={liveOnly ? "secondary" : "outline"}
             size="sm"
-            className="rounded-full"
+            className="shrink-0 rounded-full"
             aria-pressed={liveOnly}
             onClick={() =>
               setParams((current) => {
@@ -197,7 +235,7 @@ export function DiscoverPage({
         </div>
 
         {signedOut ? (
-          <Card className="items-center gap-3 p-10 text-center">
+          <Card className="items-center gap-3 px-(--card-pad) py-(--space-9) text-center">
             <span className="bg-muted text-primary grid size-12 place-items-center rounded-xl">
               <Heart className="size-6" />
             </span>
@@ -215,7 +253,10 @@ export function DiscoverPage({
             </Button>
           </Card>
         ) : me.isError || (discovery.isError && !discovery.data) ? (
-          <Card className="items-center gap-3 p-10 text-center" role="alert">
+          <Card
+            className="items-center gap-3 px-(--card-pad) py-(--space-9) text-center"
+            role="alert"
+          >
             <h2 className="text-xl font-bold">We couldn’t load creators.</h2>
             <p className="text-muted-foreground text-sm">
               Please try again in a moment.
@@ -231,24 +272,35 @@ export function DiscoverPage({
           </Card>
         ) : discovery.isPending ? (
           <Card
-            className="text-muted-foreground items-center p-10 text-center text-sm"
+            className="text-muted-foreground items-center px-(--card-pad) py-(--space-9) text-center text-sm"
             role="status"
           >
             Finding your next conversation…
           </Card>
         ) : items.length ? (
           <>
-            <Grid>
-              {items.map((creator) => (
-                <GridItem key={creator.id} span={4} tablet={4} phone={4}>
-                  <CreatorCard creator={creator} />
-                </GridItem>
-              ))}
-            </Grid>
+            {isPhone ? (
+              <Card className="gap-0 py-0">
+                <ul className="divide-y">
+                  {items.map((creator) => (
+                    <CreatorRow key={creator.id} creator={creator} />
+                  ))}
+                </ul>
+              </Card>
+            ) : (
+              <Grid>
+                {items.map((creator) => (
+                  <GridItem key={creator.id} span={4} tablet={4} wide={3}>
+                    <CreatorCard creator={creator} />
+                  </GridItem>
+                ))}
+              </Grid>
+            )}
             {discovery.hasNextPage && (
-              <div className="mt-8 flex justify-center">
+              <div className="mt-(--stack-gap) flex justify-center">
                 <Button
                   variant="secondary"
+                  className="w-full tablet:w-auto"
                   disabled={discovery.isFetchingNextPage}
                   onClick={() => void discovery.fetchNextPage()}
                 >
@@ -265,7 +317,7 @@ export function DiscoverPage({
             )}
           </>
         ) : (
-          <Card className="items-center gap-3 p-10 text-center">
+          <Card className="items-center gap-3 px-(--card-pad) py-(--space-9) text-center">
             <span className="bg-muted text-primary grid size-12 place-items-center rounded-xl">
               {view === "following" ? (
                 <Heart className="size-6" />

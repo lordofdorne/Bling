@@ -234,8 +234,8 @@ describe("WebRTCCallManager", () => {
     expect(call.sockets[1].close).toHaveBeenCalledOnce();
   });
 
-	it("allows a failed peer connection to recover during the grace window", async () => {
-	  vi.useFakeTimers();
+  it("allows a failed peer connection to recover during the grace window", async () => {
+    vi.useFakeTimers();
     const stream = new FakeStream();
     const call = setup(
       "creator",
@@ -244,13 +244,13 @@ describe("WebRTCCallManager", () => {
     await call.manager.start();
     call.peers[0].connectionState = "failed";
     call.peers[0].onconnectionstatechange?.();
-	expect(call.manager.currentPhase).toBe("reconnecting");
-	expect(call.peers[0].restartIce).toHaveBeenCalledOnce();
-	call.peers[0].connectionState = "connected";
-	call.peers[0].onconnectionstatechange?.();
-	expect(call.manager.currentPhase).toBe("live");
-	await vi.advanceTimersByTimeAsync(20_000);
-	expect(call.onFailure).not.toHaveBeenCalled();
-	expect(stream.track.stop).not.toHaveBeenCalled();
+    expect(call.manager.currentPhase).toBe("reconnecting");
+    expect(call.peers[0].restartIce).toHaveBeenCalledOnce();
+    call.peers[0].connectionState = "connected";
+    call.peers[0].onconnectionstatechange?.();
+    expect(call.manager.currentPhase).toBe("live");
+    await vi.advanceTimersByTimeAsync(20_000);
+    expect(call.onFailure).not.toHaveBeenCalled();
+    expect(stream.track.stop).not.toHaveBeenCalled();
   });
 });

@@ -31,7 +31,7 @@ test-frontend:
 
 fmt:
 	cd backend && gofmt -w $$(find . -name '*.go' -not -path './vendor/*')
-	cd frontend && npm run format:check
+	cd frontend && npm run format
 
 build:
 	cd backend && mkdir -p bin && go build -o bin/api ./cmd/api

@@ -20,6 +20,8 @@ import { activityLabel, formatPrice } from "./format";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { SectionHeader } from "../page";
+import { useControlSize } from "../../lib/design";
 
 function SavePaymentMethodForm({
   onSaved,
@@ -32,6 +34,7 @@ function SavePaymentMethodForm({
   const elements = useElements();
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
+  const controlSize = useControlSize();
 
   async function save() {
     if (!stripe || !elements) return;
@@ -65,13 +68,19 @@ function SavePaymentMethodForm({
         Stripe securely stores your payment details. Bling never receives your
         full card number or CVC.
       </p>
-      <div className="flex flex-wrap gap-3">
-        <Button type="button" onClick={save} disabled={!stripe || submitting}>
+      <div className="flex flex-col-reverse gap-2 tablet:flex-row">
+        <Button
+          type="button"
+          size={controlSize}
+          onClick={save}
+          disabled={!stripe || submitting}
+        >
           {submitting ? "Saving…" : "Save payment method"}
         </Button>
         <Button
           variant="secondary"
           type="button"
+          size={controlSize}
           onClick={onCancel}
           disabled={submitting}
         >
@@ -118,13 +127,14 @@ function PaymentMethodSetupPanel({
 function CreatorPaymentActivity() {
   const paymentActivity = usePaymentActivity();
   return (
-    <section aria-label="Payment activity" className="flex flex-col gap-4">
-      <header>
-        <h2 className="text-lg font-bold tracking-tight">Payment activity</h2>
-        <p className="text-muted-foreground mt-1 text-sm">
-          Review completed charges, refunds, and your creator share.
-        </p>
-      </header>
+    <section
+      aria-label="Payment activity"
+      className="flex flex-col gap-(--stack-gap)"
+    >
+      <SectionHeader
+        title="Payment activity"
+        description="Review completed charges, refunds, and your creator share."
+      />
       <Card>
         <CardContent>
           {paymentActivity.isPending ? (
@@ -183,6 +193,7 @@ export function PaymentSettings() {
   const setup = usePaymentMethodSetup();
   const remove = useRemovePaymentMethod();
   const refresh = useRefreshPaymentMethods();
+  const controlSize = useControlSize();
 
   async function saved() {
     setup.reset();
@@ -190,17 +201,18 @@ export function PaymentSettings() {
   }
 
   return (
-    <div className="flex flex-col gap-8">
-      <section aria-label="Saved payments" className="flex flex-col gap-4">
-        <header>
-          <h2 className="text-lg font-bold tracking-tight">Payment methods</h2>
-          <p className="text-muted-foreground mt-1 text-sm">
-            Save a card for faster call requests and manage it here.
-          </p>
-        </header>
+    <div className="flex flex-col gap-(--section-gap)">
+      <section
+        aria-label="Saved payments"
+        className="flex flex-col gap-(--stack-gap)"
+      >
+        <SectionHeader
+          title="Payment methods"
+          description="Save a card for faster call requests and manage it here."
+        />
 
         <Card>
-          <CardContent className="flex flex-col gap-4">
+          <CardContent className="flex flex-col gap-(--card-gap)">
             {setup.data ? (
               <PaymentMethodSetupPanel
                 setup={setup.data}
@@ -243,7 +255,7 @@ export function PaymentSettings() {
                         <span className="bg-muted grid size-10 place-items-center rounded-lg text-sm font-bold uppercase">
                           {method.brand.slice(0, 1)}
                         </span>
-                        <div className="flex-1">
+                        <div className="min-w-0 flex-1">
                           <strong className="text-sm capitalize">
                             {method.brand.replaceAll("_", " ")} ••••{" "}
                             {method.last4}
@@ -254,7 +266,7 @@ export function PaymentSettings() {
                           </p>
                         </div>
                         <Button
-                          variant="secondary"
+                          variant="ghost"
                           size="sm"
                           type="button"
                           onClick={() => remove.mutate(method.id)}
@@ -269,7 +281,8 @@ export function PaymentSettings() {
                 )}
                 <Button
                   type="button"
-                  className="w-fit"
+                  size={controlSize}
+                  className="w-full tablet:w-fit"
                   variant={methods.data?.length ? "secondary" : "default"}
                   onClick={() => setup.mutate()}
                   disabled={setup.isPending}

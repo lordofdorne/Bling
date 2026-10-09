@@ -23,8 +23,8 @@ export function PasswordRecoveryPage({ mode }: PasswordRecoveryPageProps) {
   const [submitted, setSubmitted] = useState(false);
 
   return (
-    <main className="min-h-screen">
-      <header className="flex items-center justify-between px-6 py-5">
+    <main className="min-h-screen pt-(--safe-top) pb-(--safe-bottom)">
+      <header className="flex h-(--header-height) items-center justify-between px-(--page-pad)">
         <Brand />
         <Button asChild variant="link">
           <Link to="/login">
@@ -33,9 +33,9 @@ export function PasswordRecoveryPage({ mode }: PasswordRecoveryPageProps) {
         </Button>
       </header>
 
-      <div className="mx-auto flex w-full max-w-md px-6 pt-12 pb-16">
-        <Card className="w-full">
-          <CardContent className="flex flex-col gap-5">
+      <div className="mx-auto flex w-full max-w-md px-(--page-pad) pt-(--stack-gap) pb-(--section-gap) tablet:pt-(--space-9)">
+        <Card className="max-tablet:border-0 max-tablet:bg-transparent max-tablet:py-0 w-full">
+          <CardContent className="max-tablet:px-0 flex flex-col gap-(--card-gap)">
             <div>
               <p className="text-[var(--sand-text)] text-xs font-bold tracking-[0.14em] uppercase">
                 Account recovery

@@ -3,7 +3,12 @@ import { ApiError, apiRequest } from "./api";
 import type { QueueEntry } from "./queue";
 
 export type CallStatus =
-  "PAYMENT_PENDING" | "CREATED" | "CONNECTING" | "LIVE" | "ENDED" | "FAILED";
+  | "PAYMENT_PENDING"
+  | "CREATED"
+  | "CONNECTING"
+  | "LIVE"
+  | "ENDED"
+  | "FAILED";
 
 export type BlingCall = {
   id: string;

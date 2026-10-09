@@ -29,6 +29,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { FormError, SwitchField, TextField } from "../form-fields";
+import { Eyebrow, SectionHeader } from "../page";
+import { useControlSize } from "../../lib/design";
 import {
   MAX_TIERS,
   tierConfigSchema,
@@ -119,6 +121,7 @@ function TierConfigurationForm({
   // Only a confirmed ready account unlocks paid tiers. A pending or failed
   // status is not permission to charge callers.
   const payoutsReady = payouts.data?.ready === true;
+  const controlSize = useControlSize();
   const form = useForm<TierConfigValues>({
     resolver: zodResolver(tierConfigSchema),
     mode: "onTouched",
@@ -146,21 +149,22 @@ function TierConfigurationForm({
 
   return (
     <Form {...form}>
-      <form className="flex flex-col gap-5" onSubmit={submit} noValidate>
-        <div>
-          <h2 className="text-lg font-bold">Configure caller tiers</h2>
-          <p className="text-muted-foreground mt-1 text-sm">
-            Higher rows are selected first. Paid tiers authorize cards at queue
-            entry and capture only when you select a caller.
-          </p>
-        </div>
+      <form
+        className="flex flex-col gap-(--stack-gap)"
+        onSubmit={submit}
+        noValidate
+      >
+        <SectionHeader
+          title="Configure caller tiers"
+          description="Higher tiers are picked first. Paid tiers hold the caller’s card and only charge when you take the call."
+        />
 
         {!payouts.isPending && !payoutsReady && (
-          <div className="bg-muted flex flex-wrap items-center gap-4 rounded-xl p-4">
+          <div className="bg-muted flex flex-wrap items-center gap-3 rounded-xl p-(--inset-pad)">
             <span className="bg-background text-primary grid size-10 shrink-0 place-items-center rounded-lg">
               <Wallet className="size-5" />
             </span>
-            <div className="min-w-[220px] flex-1">
+            <div className="min-w-0 flex-1 basis-48">
               <strong className="text-sm">
                 Set up payouts to charge for calls.
               </strong>
@@ -175,24 +179,25 @@ function TierConfigurationForm({
           </div>
         )}
 
-        <div className="flex flex-col gap-3">
+        <div className="flex flex-col gap-(--stack-gap)">
           {fields.map((field, index) => {
             const tier = tiers[index] ?? field;
             const tierLabel = tier.name || `Tier ${index + 1}`;
             return (
               <fieldset
-                className="grid gap-4 rounded-xl border p-4 sm:grid-cols-2"
+                className="bg-card grid gap-(--card-gap) rounded-xl border p-(--card-pad) tablet:grid-cols-2"
                 key={field.id}
               >
-                <legend className="text-[var(--sand-text)] px-2 text-[11px] font-bold tracking-[0.1em] uppercase">
+                <legend className="sr-only">Priority {index + 1}</legend>
+                <Eyebrow className="tablet:col-span-2" aria-hidden>
                   Priority {index + 1}
-                </legend>
+                </Eyebrow>
 
                 <TextField
                   control={form.control}
                   name={`tiers.${index}.name`}
                   label="Tier name"
-                  className="sm:col-span-2"
+                  className="tablet:col-span-2"
                   maxLength={40}
                 />
 
@@ -333,7 +338,7 @@ function TierConfigurationForm({
                   />
                 )}
 
-                <div className="flex flex-wrap items-center justify-between gap-3 sm:col-span-2">
+                <div className="flex flex-col gap-3 border-t pt-(--card-gap) tablet:col-span-2 tablet:flex-row tablet:items-center tablet:justify-between">
                   <SwitchField
                     control={form.control}
                     name={`tiers.${index}.enabled`}
@@ -361,9 +366,9 @@ function TierConfigurationForm({
                       <ArrowDown className="size-4" />
                     </Button>
                     <Button
-                      variant="outline"
-                      size="sm"
+                      variant="ghost"
                       type="button"
+                      className="text-muted-foreground ml-auto"
                       onClick={() => remove(index)}
                       disabled={fields.length === 1}
                     >
@@ -396,16 +401,18 @@ function TierConfigurationForm({
           </Button>
         )}
 
-        <div className="flex flex-wrap items-center justify-end gap-3 border-t pt-5">
+        <div className="flex flex-col gap-2 tablet:flex-row tablet:justify-end">
           <Button
             variant="secondary"
             type="submit"
+            size={controlSize}
             disabled={!dirty || save.isPending}
           >
             {save.isPending ? "Saving…" : dirty ? "Save tiers" : "Tiers saved"}
           </Button>
           <Button
             type="button"
+            size={controlSize}
             onClick={onStart}
             disabled={
               dirty || starting || fields.length === 0 || paidWithoutPayouts
@@ -416,13 +423,13 @@ function TierConfigurationForm({
         </div>
 
         {paidWithoutPayouts ? (
-          <p className="text-muted-foreground text-right text-sm">
+          <p className="text-muted-foreground text-sm tablet:text-right">
             Finish payout setup, or price these tiers as free, before going
             live.
           </p>
         ) : (
           dirty && (
-            <p className="text-muted-foreground text-right text-sm">
+            <p className="text-muted-foreground text-sm tablet:text-right">
               Save tier changes before going live.
             </p>
           )
