@@ -7,7 +7,6 @@ import {
   Menu,
   Radio,
   Settings,
-  Sparkles,
   UserRound,
 } from "lucide-react";
 import { useLogout } from "../../lib/auth";
@@ -150,17 +149,6 @@ export function StudioShell({
         <StudioNav username={username} onNavigate={() => setMenuOpen(false)} />
       )}
       <div className="flex flex-col gap-4">
-        {!isSettings && (
-          <div className="bg-muted rounded-xl p-4">
-            <Sparkles className="text-[var(--sand-text)] size-5" />
-            <strong className="mt-2 block text-sm leading-snug">
-              Your channel is built one conversation at a time.
-            </strong>
-            <p className="text-muted-foreground mt-1 text-xs">
-              Share your link, open the line, and make someone’s day.
-            </p>
-          </div>
-        )}
         <Button
           variant="ghost"
           className="justify-start"
@@ -240,12 +228,6 @@ export function StudioShell({
                 </AlertDescription>
               </Alert>
             )}
-            <footer className="text-muted-foreground mt-12 flex flex-wrap items-center justify-between gap-2 border-t pt-6 text-xs">
-              <span>Your voice. Your community.</span>
-              <Link to="/" className="inline-flex items-center gap-1">
-                Back to Bling <ArrowRight className="size-3.5" />
-              </Link>
-            </footer>
           </div>
         </main>
       </div>

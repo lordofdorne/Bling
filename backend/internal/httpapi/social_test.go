@@ -38,7 +38,6 @@ func TestSocialSecurityBoundaries(t *testing.T) {
 		{name: "oversized page", method: "GET", path: "/api/v1/creators?limit=5000", status: 422},
 		{name: "invalid cursor", method: "GET", path: "/api/v1/creators?cursor=not-valid", status: 422},
 		{name: "invalid live", method: "GET", path: "/api/v1/creators?live=anything", status: 422},
-		{name: "invalid category", method: "GET", path: "/api/v1/creators?category=invalid", status: 422},
 		{name: "invalid username", method: "GET", path: "/api/v1/creators/x", status: 404},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

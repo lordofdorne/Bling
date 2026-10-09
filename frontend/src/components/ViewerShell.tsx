@@ -3,7 +3,6 @@ import { Link, NavLink, useNavigate, useSearchParams } from "react-router-dom";
 import {
   ArrowRight,
   Bell,
-  Compass,
   Heart,
   Home,
   Menu,
@@ -75,19 +74,12 @@ function SidebarNav({ onNavigate }: { onNavigate: () => void }) {
             </span>
           )}
         </NavLink>
-        <NavLink to="/browse" onClick={onNavigate} className={navLinkClass}>
-          <Compass className="size-[18px]" />
-          Browse categories
-        </NavLink>
 
         <Separator className="my-4" />
 
-        <div className="flex items-center justify-between px-3 pb-2">
-          <p className="text-muted-foreground text-[11px] font-bold tracking-[0.12em] uppercase">
-            Recommended
-          </p>
-          <Radio className="text-muted-foreground size-3.5" />
-        </div>
+        <p className="text-muted-foreground px-3 pb-2 text-[11px] font-bold tracking-[0.12em] uppercase">
+          Recommended
+        </p>
         {creators.map((creator) => (
           <Link
             className="hover:bg-accent flex items-center gap-3 rounded-lg px-3 py-2 transition-colors"
@@ -101,7 +93,7 @@ function SidebarNav({ onNavigate }: { onNavigate: () => void }) {
                 {creator.displayName}
               </strong>
               <small className="text-muted-foreground block truncate text-xs">
-                {creator.category}
+                @{creator.username}
               </small>
             </span>
             <span
@@ -137,11 +129,6 @@ function SidebarNav({ onNavigate }: { onNavigate: () => void }) {
               New voices are on their way.
             </p>
           )}
-        <Button asChild variant="link" className="justify-start px-3">
-          <Link to="/browse" onClick={onNavigate}>
-            Explore more <ArrowRight className="size-3.5" />
-          </Link>
-        </Button>
       </nav>
 
       <div className="flex flex-col gap-4">
@@ -159,10 +146,9 @@ function SidebarNav({ onNavigate }: { onNavigate: () => void }) {
             </Link>
           </Button>
         </div>
-        <div className="text-muted-foreground flex justify-between px-1 text-[11px]">
-          <span>Bling © {new Date().getFullYear()}</span>
-          <span>A little closer.</span>
-        </div>
+        <p className="text-muted-foreground px-1 text-[11px]">
+          Bling © {new Date().getFullYear()}
+        </p>
       </div>
     </div>
   );

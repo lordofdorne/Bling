@@ -430,12 +430,9 @@ export function PayoutSettings() {
                   return (
                     <TableRow key={entry.id}>
                       <TableCell>
-                        <strong className="block text-sm font-semibold">
+                        <strong className="text-sm font-semibold">
                           {ledgerEntryLabel(entry.kind)}
                         </strong>
-                        <small className="text-muted-foreground text-xs capitalize">
-                          {entry.kind.replaceAll("_", " ").toLowerCase()}
-                        </small>
                       </TableCell>
                       <TableCell className="text-muted-foreground">
                         {formatDate(entry.createdAt)}

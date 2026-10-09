@@ -6,13 +6,13 @@ Implemented in migration `000010`, `backend/internal/social`, `backend/internal/
 
 The existing account/session system serves both viewers and creators. A user insert initializes an unlisted profile transactionally. Publishing a profile or creating a show makes the account discoverable; a live profile cannot be unpublished. All pre-migration users are backfilled as published creators because the original registration flow was creator-only. No existing call, queue, tier, Stripe, or payout lifecycle logic was changed.
 
-Public responses contain only the profile ID, username, display name, bio, avatar/cover URLs, category, publication/live state, follower count, follow flag, and visitor count. Email, password hashes, sessions, and payment information are excluded. Usernames retain the existing immutable 3–30-character convention. Cover images may be HTTPS URLs supplied by the creator. Avatars may also be JPG, PNG, or WebP files up to 768 KB stored through the authenticated profile-avatar endpoint. Browser requests omit referrers and render initials when images fail.
+Public responses contain only the profile ID, username, display name, bio, avatar/cover URLs, publication/live state, follower count, follow flag, and visitor count. Email, password hashes, sessions, and payment information are excluded. Usernames retain the existing immutable 3–30-character convention. Cover images may be HTTPS URLs supplied by the creator. Avatars may also be JPG, PNG, or WebP files up to 768 KB stored through the authenticated profile-avatar endpoint. Browser requests omit referrers and render initials when images fail.
 
 ## Database and concurrency
 
 | Relation | Purpose and access path |
 | --- | --- |
-| `creator_profiles` | Public projection; partial live/follower/UUID ranking indexes, category ranking index, GIN full-text search index |
+| `creator_profiles` | Public projection; partial live/follower/UUID ranking indexes, GIN full-text search index |
 | `creator_follows` | Unique `(follower_id, creator_id)` relationship, both-direction indexes, cascading foreign keys, no self-follow |
 | `creator_follower_shards` | 64 transactional counter shards per creator; avoids one counter row receiving every follow write |
 | `social_dirty_creators` | Durable, age-ordered projection work, one row per dirty creator |
@@ -31,10 +31,10 @@ All responses use `{ "data": ... }`; errors use the existing structured error en
 
 | Method and route under `/api/v1` | Access | Result |
 | --- | --- | --- |
-| `GET /creators` | Public | `{items, nextCursor?}`; optional `q`, `category`, `live`, `limit`, `cursor` |
+| `GET /creators` | Public | `{items, nextCursor?}`; optional `q`, `live`, `limit`, `cursor` |
 | `GET /creators/:username` | Public; unlisted visible only to owner | Profile |
 | `GET /profile` | Signed in | Own profile |
-| `POST /profile` | Signed in | Updated profile; body: `displayName`, `bio`, `avatarUrl`, `coverUrl`, `category`, `published` |
+| `POST /profile` | Signed in | Updated profile; body: `displayName`, `bio`, `avatarUrl`, `coverUrl`, `published` |
 | `POST /profile/avatar` | Signed in | Stores a JPG, PNG, or WebP `avatar` multipart field (768 KB max) and returns its internal URL |
 | `GET /creators/:username/avatar` | Public for published profiles; owner for drafts | Stored profile-picture bytes |
 | `POST /creators/:username/follow` | Signed in | `{isFollowing:true}`; body `{}` |
@@ -45,7 +45,7 @@ All responses use `{ "data": ... }`; errors use the existing structured error en
 | `POST /notifications/read` | Signed in | 204; body `{ids:["event-id"]}` with 1–50 string IDs |
 | `POST /creators/:username/presence` | Public, live channel only | `{channelVisitors, expiresInSeconds:90}`; body `{}` |
 
-Directory pages default to 24, maximum 50. Cursors encode `(is_live, follower_count, user_id)` and the filter scope. They are validated and opaque to clients, but not signed capabilities: every query independently reapplies authorization and filters. Full-text search matches complete tokens in username, display name and bio, using PostgreSQL `simple` text search; it is not fuzzy autocomplete. Maximum query length is 80 characters. Supported categories are Just chatting, Music, Gaming, Creative, and Tech.
+Directory pages default to 24, maximum 50. Cursors encode `(is_live, follower_count, user_id)` and the filter scope. They are validated and opaque to clients, but not signed capabilities: every query independently reapplies authorization and filters. Full-text search matches complete tokens in username, display name and bio, using PostgreSQL `simple` text search; it is not fuzzy autocomplete. Maximum query length is 80 characters. Creator categories were removed in migration 000020; unknown query parameters such as `category` are ignored.
 
 Notifications are 24 per page, sorted by event time and ID. A viewer sees events in the last 30 days created since their current follow began, from currently followed published creators. Unfollowing removes these updates from the feed; re-following starts a new window. At most 25 recent indexed events are selected per followed creator before global pagination. Unread counts stop at 100 and expose `unreadCapped`; they are not claimed as exact above that threshold. Read writes verify the same relationship/window and cannot mark another person's inaccessible events. JSON event IDs are strings to preserve 64-bit precision.
 

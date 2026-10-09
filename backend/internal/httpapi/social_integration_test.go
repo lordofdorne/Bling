@@ -108,7 +108,7 @@ func TestSocialHTTPJourney(t *testing.T) {
 	name := prefix + "_host"
 	request(guest, "GET", "/creators/"+name, nil, 404)
 	request(guest, "POST", "/creators/"+name+"/follow", map[string]any{}, 401)
-	raw := request(host, "POST", "/profile", social.ProfileInput{DisplayName: "HTTP Creator", Bio: "Real profile", Category: "Music", Published: true}, 200)
+	raw := request(host, "POST", "/profile", social.ProfileInput{DisplayName: "HTTP Creator", Bio: "Real profile", Published: true}, 200)
 	if bytes.Contains(raw, []byte("email")) || bytes.Contains(raw, []byte("password")) {
 		t.Fatal("private fields in profile")
 	}

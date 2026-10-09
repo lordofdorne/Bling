@@ -6,7 +6,7 @@ import (
 )
 
 func TestProfileValidation(t *testing.T) {
-	valid := ProfileInput{DisplayName: "Creator", Category: "Music", AvatarURL: "https://example.com/avatar.png", Published: true}
+	valid := ProfileInput{DisplayName: "Creator", AvatarURL: "https://example.com/avatar.png", Published: true}
 	if err := valid.Validate(); err != nil {
 		t.Fatal(err)
 	}
@@ -40,14 +40,9 @@ func TestProfileValidation(t *testing.T) {
 	if p.Validate() == nil {
 		t.Fatal("oversize name accepted")
 	}
-	p = valid
-	p.Category = "unknown"
-	if p.Validate() == nil {
-		t.Fatal("unknown category accepted")
-	}
 }
 func TestDirectoryCursorValidation(t *testing.T) {
-	o := ListOptions{Category: "Music", Limit: 2}
+	o := ListOptions{Query: "music", Limit: 2}
 	if err := o.Validate(); err != nil {
 		t.Fatal(err)
 	}
@@ -55,7 +50,7 @@ func TestDirectoryCursorValidation(t *testing.T) {
 	if err := o.Validate(); err != nil {
 		t.Fatal(err)
 	}
-	o.Category = "Tech"
+	o.Live = true
 	if o.Validate() == nil {
 		t.Fatal("cross-filter cursor accepted")
 	}

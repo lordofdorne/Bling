@@ -10,13 +10,6 @@ import {
 import { apiRequest } from "./api";
 import { useMe } from "./auth";
 
-export const categories = [
-  "Just chatting",
-  "Music",
-  "Gaming",
-  "Creative",
-  "Tech",
-] as const;
 export type CreatorProfile = {
   id: string;
   username: string;
@@ -24,7 +17,6 @@ export type CreatorProfile = {
   bio: string;
   avatarUrl: string;
   coverUrl: string;
-  category: string;
   published: boolean;
   followerCount: number;
   isLive: boolean;
@@ -35,7 +27,7 @@ export type CreatorProfile = {
 };
 export type ProfileInput = Pick<
   CreatorProfile,
-  "displayName" | "bio" | "avatarUrl" | "coverUrl" | "category" | "published"
+  "displayName" | "bio" | "avatarUrl" | "coverUrl" | "published"
 >;
 export type CreatorPage = { items: CreatorProfile[]; nextCursor?: string };
 export type LiveNotification = {
@@ -56,15 +48,12 @@ export type NotificationPage = {
 };
 export type DiscoveryFilters = {
   q?: string;
-  category?: string;
   live?: boolean;
   following?: boolean;
 };
 function queryString(filters: DiscoveryFilters, cursor: string) {
   const params = new URLSearchParams();
   if (filters.q) params.set("q", filters.q);
-  if (filters.category && filters.category !== "All")
-    params.set("category", filters.category);
   if (filters.live) params.set("live", "true");
   if (cursor) params.set("cursor", cursor);
   return params.toString();
@@ -77,7 +66,6 @@ export function useCreators(filters: DiscoveryFilters = {}) {
       filters.following ? "following" : "directory",
       {
         q: filters.q?.trim() || "",
-        category: filters.category === "All" ? "" : filters.category || "",
         live: Boolean(filters.live),
       },
       me.data?.id ?? "guest",

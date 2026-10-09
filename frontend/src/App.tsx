@@ -1,4 +1,4 @@
-import { Link, Route, Routes } from "react-router-dom";
+import { Link, Navigate, Route, Routes } from "react-router-dom";
 import { AuthPage } from "./components/AuthPage";
 import { Dashboard } from "./components/Dashboard";
 import { ProtectedRoute } from "./components/ProtectedRoute";
@@ -37,7 +37,7 @@ export function App() {
             path="/following"
             element={<DiscoverPage view="following" />}
           />
-          <Route path="/browse" element={<DiscoverPage view="browse" />} />
+          <Route path="/browse" element={<Navigate to="/" replace />} />
           <Route
             path="/discover/:username"
             element={<LegacyCreatorRedirect />}

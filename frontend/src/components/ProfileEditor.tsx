@@ -3,7 +3,6 @@ import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Camera, Check, Upload, X } from "lucide-react";
 import {
-  categories,
   useOwnProfile,
   useSaveProfile,
   useUploadAvatar,
@@ -12,7 +11,6 @@ import {
 import { profileSchema, type ProfileValues } from "../lib/schemas";
 import {
   FormError,
-  SelectField,
   SwitchField,
   TextField,
   TextareaField,
@@ -73,7 +71,6 @@ function ProfileForm({ profile }: { profile: CreatorProfile }) {
       bio: profile.bio,
       avatarUrl: profile.avatarUrl,
       coverUrl: profile.coverUrl,
-      category: categories.find((c) => c === profile.category) ?? categories[0],
       published: profile.published,
     },
   });
@@ -147,14 +144,7 @@ function ProfileForm({ profile }: { profile: CreatorProfile }) {
               control={form.control}
               name="displayName"
               label="Display name"
-            />
-
-            <SelectField
-              control={form.control}
-              name="category"
-              label="Category"
-              aria-label="Category"
-              options={categories.map((c) => ({ value: c, label: c }))}
+              className="md:col-span-2"
             />
 
             <TextareaField

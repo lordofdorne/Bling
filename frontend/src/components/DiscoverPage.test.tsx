@@ -23,7 +23,6 @@ const alice: CreatorProfile = {
   bio: "Studio conversations",
   avatarUrl: "",
   coverUrl: "",
-  category: "Creative",
   published: true,
   followerCount: 5,
   isLive: false,
@@ -37,7 +36,6 @@ const bob: CreatorProfile = {
   id: "bob-1",
   username: "bob",
   displayName: "Bob Music",
-  category: "Music",
 };
 let profiles: CreatorProfile[],
   signedIn: boolean,
@@ -122,8 +120,6 @@ beforeEach(() => {
         let items = profiles.filter(
           (p) =>
             (path !== "/api/v1/following" || p.isFollowing) &&
-            (!url.searchParams.get("category") ||
-              p.category === url.searchParams.get("category")) &&
             (!url.searchParams.get("q") ||
               p.displayName
                 .toLowerCase()
@@ -208,28 +204,29 @@ describe("API-backed social discovery", () => {
       ).toBeEnabled(),
     );
   });
-  it("sends search/category/live filters to the server", async () => {
+  it("sends search and live filters to the server", async () => {
     profiles[1].isLive = true;
-    renderAt("/?q=bob&category=Music&live=true");
+    renderAt("/?q=bob&live=true");
     expect(
       await within(screen.getByRole("main")).findByRole("link", {
         name: "Visit Bob Music",
       }),
     ).toBeInTheDocument();
     expect(fetch).toHaveBeenCalledWith(
-      "/api/v1/creators?q=bob&category=Music&live=true",
+      "/api/v1/creators?q=bob&live=true",
       expect.anything(),
     );
-    fireEvent.click(screen.getByRole("button", { name: "Tech" }));
-    expect(
-      await screen.findByRole("heading", {
-        name: "A new conversation starts with you.",
-      }),
-    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Live now" }));
+    await waitFor(() =>
+      expect(fetch).toHaveBeenCalledWith(
+        "/api/v1/creators?q=bob",
+        expect.anything(),
+      ),
+    );
   });
   it("loads subsequent pages with a server cursor", async () => {
     paginated = true;
-    renderAt("/browse");
+    renderAt("/");
     fireEvent.click(
       await screen.findByRole("button", { name: "Load more creators" }),
     );
@@ -310,12 +307,7 @@ describe("API-backed social discovery", () => {
       defaultOptions: { queries: { retry: false } },
     });
     client.setQueryData(
-      [
-        "social",
-        "following",
-        { q: "", category: "", live: false },
-        "other-account",
-      ],
+      ["social", "following", { q: "", live: false }, "other-account"],
       { pages: [{ items: [alice] }], pageParams: [""] },
     );
     renderAt("/following", client);

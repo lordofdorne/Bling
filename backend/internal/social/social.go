@@ -18,7 +18,6 @@ var ErrInvalid = errors.New("invalid social request")
 var ErrSelfFollow = errors.New("you cannot follow yourself")
 var ErrFollowLimit = errors.New("you can follow up to 1000 creators")
 var ErrLiveRequired = errors.New("this creator is not live")
-var Categories = []string{"Just chatting", "Music", "Gaming", "Creative", "Tech"}
 var usernamePattern = regexp.MustCompile(`^[a-z0-9_]{3,30}$`)
 var uuidPattern = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
 var internalAvatarPattern = regexp.MustCompile(`^/api/v1/creators/[a-z0-9_]{3,30}/avatar$`)
@@ -32,7 +31,6 @@ type Profile struct {
 	Bio             string     `json:"bio"`
 	AvatarURL       string     `json:"avatarUrl"`
 	CoverURL        string     `json:"coverUrl"`
-	Category        string     `json:"category"`
 	Published       bool       `json:"published"`
 	FollowerCount   int64      `json:"followerCount"`
 	IsLive          bool       `json:"isLive"`
@@ -46,7 +44,6 @@ type ProfileInput struct {
 	Bio         string `json:"bio"`
 	AvatarURL   string `json:"avatarUrl"`
 	CoverURL    string `json:"coverUrl"`
-	Category    string `json:"category"`
 	Published   bool   `json:"published"`
 }
 
@@ -55,7 +52,7 @@ func (p *ProfileInput) Validate() error {
 	p.Bio = strings.TrimSpace(p.Bio)
 	p.AvatarURL = strings.TrimSpace(p.AvatarURL)
 	p.CoverURL = strings.TrimSpace(p.CoverURL)
-	if utf8.RuneCountInString(p.DisplayName) < 1 || utf8.RuneCountInString(p.DisplayName) > 60 || utf8.RuneCountInString(p.Bio) > 500 || !validCategory(p.Category) {
+	if utf8.RuneCountInString(p.DisplayName) < 1 || utf8.RuneCountInString(p.DisplayName) > 60 || utf8.RuneCountInString(p.Bio) > 500 {
 		return ErrInvalid
 	}
 	for index, raw := range []string{p.AvatarURL, p.CoverURL} {
@@ -72,19 +69,11 @@ func (p *ProfileInput) Validate() error {
 	}
 	return nil
 }
-func validCategory(s string) bool {
-	for _, c := range Categories {
-		if s == c {
-			return true
-		}
-	}
-	return false
-}
 
 type ListOptions struct {
-	Query, Category, Cursor string
-	Live, Following         bool
-	Limit                   int
+	Query, Cursor   string
+	Live, Following bool
+	Limit           int
 }
 type Page struct {
 	Items      []Profile `json:"items"`
@@ -98,7 +87,7 @@ type directoryCursor struct {
 }
 
 func (o ListOptions) scope() string {
-	b, _ := json.Marshal([]any{o.Query, o.Category, o.Live, o.Following})
+	b, _ := json.Marshal([]any{o.Query, o.Live, o.Following})
 	h := sha256.Sum256(b)
 	return hex.EncodeToString(h[:8])
 }
@@ -107,7 +96,7 @@ func (o *ListOptions) Validate() error {
 	if o.Limit == 0 {
 		o.Limit = 24
 	}
-	if o.Limit < 1 || o.Limit > 50 || utf8.RuneCountInString(o.Query) > 80 || len(o.Cursor) > 512 || (o.Category != "" && !validCategory(o.Category)) {
+	if o.Limit < 1 || o.Limit > 50 || utf8.RuneCountInString(o.Query) > 80 || len(o.Cursor) > 512 {
 		return ErrInvalid
 	}
 	_, err := o.decodeCursor()

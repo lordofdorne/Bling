@@ -1,5 +1,4 @@
 import { z } from "zod";
-import { categories } from "./social";
 import {
   MINIMUM_PAID_TIER_CENTS,
   centsFromPriceInput,
@@ -81,7 +80,6 @@ export const profileSchema = z.object({
     .refine((value) => value === "" || /^https:\/\/\S+$/.test(value), {
       message: "Use an https:// image URL.",
     }),
-  category: z.enum(categories),
   published: z.boolean(),
 });
 export type ProfileValues = z.infer<typeof profileSchema>;

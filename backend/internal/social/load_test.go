@@ -59,7 +59,7 @@ func TestSocialLoad(t *testing.T) {
 			t.Error(err)
 		}
 	})
-	if _, err = s.Pool.Exec(ctx, `UPDATE creator_profiles SET published=true,category=CASE WHEN substring(username from '[0-9]+$')::int%2=0 THEN 'Music' ELSE 'Creative' END WHERE user_id=ANY($1::uuid[])`, ids); err != nil {
+	if _, err = s.Pool.Exec(ctx, `UPDATE creator_profiles SET published=true WHERE user_id=ANY($1::uuid[])`, ids); err != nil {
 		t.Fatal(err)
 	}
 	viewer := testUser(t, s, false)
@@ -144,7 +144,6 @@ func TestSocialLoad(t *testing.T) {
 	})
 	for _, query := range []string{
 		`SELECT user_id FROM creator_profiles WHERE published ORDER BY is_live DESC,follower_count DESC,user_id DESC LIMIT 25`,
-		`SELECT user_id FROM creator_profiles WHERE published AND category='Music' ORDER BY is_live DESC,follower_count DESC,user_id DESC LIMIT 25`,
 		`SELECT user_id FROM creator_profiles WHERE published AND search_document @@ plainto_tsquery('simple','nonexistent') ORDER BY is_live DESC,follower_count DESC,user_id DESC LIMIT 25`,
 	} {
 		rows, err := s.Pool.Query(ctx, "EXPLAIN (ANALYZE,BUFFERS) "+query)

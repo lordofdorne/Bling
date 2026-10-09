@@ -34,11 +34,11 @@ func (s *Store) WithAvatarObjects(objects AvatarObjectStore) *Store {
 	return s
 }
 
-const profileColumns = `p.user_id,p.username,p.display_name,p.bio,p.avatar_url,p.cover_url,p.category,p.published,p.follower_count,p.is_live,p.live_show_id,p.live_started_at`
+const profileColumns = `p.user_id,p.username,p.display_name,p.bio,p.avatar_url,p.cover_url,p.published,p.follower_count,p.is_live,p.live_show_id,p.live_started_at`
 
 func scanProfile(row pgx.Row) (Profile, error) {
 	var p Profile
-	err := row.Scan(&p.ID, &p.Username, &p.DisplayName, &p.Bio, &p.AvatarURL, &p.CoverURL, &p.Category, &p.Published, &p.FollowerCount, &p.IsLive, &p.LiveShowID, &p.LiveStartedAt)
+	err := row.Scan(&p.ID, &p.Username, &p.DisplayName, &p.Bio, &p.AvatarURL, &p.CoverURL, &p.Published, &p.FollowerCount, &p.IsLive, &p.LiveShowID, &p.LiveStartedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return p, ErrNotFound
 	}
@@ -51,7 +51,7 @@ func (s *Store) OwnProfile(ctx context.Context, id string) (Profile, error) {
 	return scanProfile(s.Pool.QueryRow(ctx, `SELECT `+profileColumns+` FROM creator_profiles p WHERE p.user_id=$1`, id))
 }
 func (s *Store) SaveProfile(ctx context.Context, id string, input ProfileInput) (Profile, error) {
-	return scanProfile(s.Pool.QueryRow(ctx, `UPDATE creator_profiles p SET display_name=$2,bio=$3,avatar_url=$4,cover_url=$5,category=$6,published=$7 OR is_live,updated_at=clock_timestamp() WHERE user_id=$1 RETURNING `+profileColumns, id, input.DisplayName, input.Bio, input.AvatarURL, input.CoverURL, input.Category, input.Published))
+	return scanProfile(s.Pool.QueryRow(ctx, `UPDATE creator_profiles p SET display_name=$2,bio=$3,avatar_url=$4,cover_url=$5,published=$6 OR is_live,updated_at=clock_timestamp() WHERE user_id=$1 RETURNING `+profileColumns, id, input.DisplayName, input.Bio, input.AvatarURL, input.CoverURL, input.Published))
 }
 func (s *Store) SaveAvatar(ctx context.Context, id, contentType string, data []byte) error {
 	if s.AvatarObjects != nil {
@@ -98,9 +98,6 @@ func (s *Store) List(ctx context.Context, o ListOptions, userID string) (Page, e
 	}
 	if o.Live {
 		where = append(where, "p.is_live")
-	}
-	if o.Category != "" {
-		where = append(where, "p.category="+add(o.Category))
 	}
 	if o.Query != "" {
 		where = append(where, "p.search_document @@ plainto_tsquery('simple',"+add(o.Query)+")")

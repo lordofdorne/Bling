@@ -51,7 +51,6 @@ describe("form schemas", () => {
       bio: "",
       avatarUrl: "",
       coverUrl: "",
-      category: "Music",
       published: true,
     };
     expect(profileSchema.safeParse(base).success).toBe(true);

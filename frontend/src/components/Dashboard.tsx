@@ -1,5 +1,5 @@
 import { Link, useLocation } from "react-router-dom";
-import { ArrowRight, Phone, Plus, Radio, Settings } from "lucide-react";
+import { ArrowRight, Phone, Plus, Settings } from "lucide-react";
 import { ApiError } from "../lib/api";
 import { useMe } from "../lib/auth";
 import { useControlSize } from "../lib/design";
@@ -37,19 +37,11 @@ function StudioOverview({ username }: { username: string }) {
 
   return (
     <>
-      <div className="mb-6">
-        <p className="text-[var(--sand-text)] text-xs font-bold tracking-[0.14em] uppercase">
-          Creator studio
-        </p>
-        <h1 className="mt-2 text-3xl font-extrabold tracking-tight">
-          {activeShow?.status === "LIVE"
-            ? "You’re live."
-            : `Welcome, ${username}.`}
-        </h1>
-        <p className="text-muted-foreground mt-2 text-sm">
-          Manage your Hotline and connect with the people waiting to talk.
-        </p>
-      </div>
+      <h1 className="mb-6 text-3xl font-extrabold tracking-tight">
+        {activeShow?.status === "LIVE"
+          ? "You’re live."
+          : `Welcome, ${username}.`}
+      </h1>
 
       <Card className="mb-6 py-3" aria-label="Channel status">
         <CardContent className="flex flex-wrap items-center justify-between gap-4 px-4">
@@ -99,16 +91,6 @@ function StudioOverview({ username }: { username: string }) {
 
       <Card id="hotline-controls" aria-label="Hotline controls">
         <CardContent className="flex flex-col gap-4">
-          <div className="flex items-center justify-between gap-3">
-            <span className="flex items-center gap-2 text-sm font-semibold">
-              <Radio className="size-4" />
-              Stream manager
-            </span>
-            <span className="text-muted-foreground text-[10px] font-bold tracking-[0.14em] uppercase">
-              Live control room
-            </span>
-          </div>
-
           {currentShow.isPending ? (
             <p className="text-muted-foreground text-sm">
               Loading show status…

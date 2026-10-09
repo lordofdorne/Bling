@@ -518,9 +518,7 @@ export function PublicHotline() {
           <CreatorAvatar profile={profile.data} className="size-12" />
           <div>
             <h2 className="text-lg font-bold">{profile.data.displayName}</h2>
-            <p className="text-muted-foreground text-sm">
-              {profile.data.category}
-            </p>
+            <p className="text-muted-foreground text-sm">@{username}</p>
           </div>
         </div>
       )}
@@ -558,7 +556,9 @@ export function PublicHotline() {
           <span className="bg-muted text-muted-foreground grid size-14 place-items-center rounded-xl">
             <Radio className="size-7" />
           </span>
-          <p className="text-muted-foreground text-sm">@{username}</p>
+          {!profile.data && (
+            <p className="text-muted-foreground text-sm">@{username}</p>
+          )}
           <h1 className="text-2xl font-extrabold tracking-tight">
             Hotline is currently closed.
           </h1>
@@ -587,16 +587,12 @@ export function PublicHotline() {
               <span className="bg-background/80 text-primary grid size-20 place-items-center rounded-full">
                 <Phone className="size-9" />
               </span>
-              <span className="absolute bottom-4 text-[11px] font-bold tracking-[0.18em] text-white/80 uppercase">
-                Less distance. More connection.
-              </span>
             </div>
             <Badge className="gap-1.5">
               <span className="bg-primary-foreground size-1.5 animate-pulse rounded-full" />
               Live now
             </Badge>
-            <p className="text-muted-foreground mt-3 text-sm">@{username}</p>
-            <h1 className="mt-1 text-3xl font-extrabold tracking-tight">
+            <h1 className="mt-3 text-3xl font-extrabold tracking-tight">
               The Hotline is open.
             </h1>
             {profile.data?.bio && (
@@ -618,18 +614,6 @@ export function PublicHotline() {
                 </p>
               )}
             </div>
-            <ol className="text-muted-foreground mt-6 flex flex-wrap gap-4 text-xs">
-              {["Choose your tier", "Join the line", "Have your moment"].map(
-                (step, index) => (
-                  <li key={step} className="flex items-center gap-2">
-                    <b className="text-[var(--sand-text)] font-bold">
-                      0{index + 1}
-                    </b>
-                    {step}
-                  </li>
-                ),
-              )}
-            </ol>
           </section>
           <CallerQueue showID={liveShow.data.id} />
         </div>

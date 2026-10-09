@@ -153,7 +153,7 @@ func listOptions(r *http.Request) (social.ListOptions, error) {
 	if q.Get("live") != "" && q.Get("live") != "true" && q.Get("live") != "false" {
 		return social.ListOptions{}, social.ErrInvalid
 	}
-	o := social.ListOptions{Query: q.Get("q"), Category: q.Get("category"), Cursor: q.Get("cursor"), Live: q.Get("live") == "true", Following: r.URL.Path == "/api/v1/following", Limit: limit}
+	o := social.ListOptions{Query: q.Get("q"), Cursor: q.Get("cursor"), Live: q.Get("live") == "true", Following: r.URL.Path == "/api/v1/following", Limit: limit}
 	return o, o.Validate()
 }
 func (h *socialHandler) list(w http.ResponseWriter, r *http.Request) {

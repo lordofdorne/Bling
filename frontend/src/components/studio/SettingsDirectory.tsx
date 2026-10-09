@@ -7,12 +7,7 @@ export function SettingsDirectory() {
   return (
     <div className="flex flex-col gap-8">
       <header>
-        <p className="text-[var(--sand-text)] text-xs font-bold tracking-[0.14em] uppercase">
-          Creator studio
-        </p>
-        <h1 className="mt-2 text-3xl font-extrabold tracking-tight">
-          Settings
-        </h1>
+        <h1 className="text-3xl font-extrabold tracking-tight">Settings</h1>
         <p className="text-muted-foreground mt-2 text-sm">
           Manage your channel, money, and account in one place.
         </p>

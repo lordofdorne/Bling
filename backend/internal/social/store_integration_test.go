@@ -47,7 +47,7 @@ func testUser(t *testing.T, s *Store, published bool) Profile {
 			t.Errorf("cleanup user: %v", err)
 		}
 	})
-	p, err := s.SaveProfile(context.Background(), id, ProfileInput{DisplayName: name, Category: "Music", Published: published})
+	p, err := s.SaveProfile(context.Background(), id, ProfileInput{DisplayName: name, Published: published})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -125,7 +125,7 @@ func TestProfilesPaginationAndFollowingIsolation(t *testing.T) {
 		}
 	}
 	flush(t, s)
-	options := ListOptions{Limit: 2, Category: "Music", Following: true}
+	options := ListOptions{Limit: 2, Following: true}
 	if err := options.Validate(); err != nil {
 		t.Fatal(err)
 	}
@@ -157,11 +157,11 @@ func TestProfilesPaginationAndFollowingIsolation(t *testing.T) {
 		t.Fatal("cross-account following leak", err)
 	}
 	p := testUser(t, s, true)
-	_, err = s.SaveProfile(ctx, p.ID, ProfileInput{DisplayName: "RareSearchToken", Bio: "Independent ceramics", Category: "Creative", Published: true})
+	_, err = s.SaveProfile(ctx, p.ID, ProfileInput{DisplayName: "RareSearchToken", Bio: "Independent ceramics", Published: true})
 	if err != nil {
 		t.Fatal(err)
 	}
-	found, err := s.List(ctx, ListOptions{Query: "RareSearchToken", Category: "Creative", Limit: 24}, "")
+	found, err := s.List(ctx, ListOptions{Query: "RareSearchToken", Limit: 24}, "")
 	if err != nil || len(found.Items) != 1 || found.Items[0].ID != p.ID {
 		t.Fatal("indexed text search failed", found, err)
 	}
