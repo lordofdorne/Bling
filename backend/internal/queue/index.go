@@ -37,29 +37,6 @@ func (i *RedisCandidateIndex) Remove(ctx context.Context, candidate Candidate) e
 	return nil
 }
 
-func (i *RedisCandidateIndex) Position(ctx context.Context, candidate Candidate) (int64, error) {
-	ranks, err := i.priorities(ctx, candidate.ShowID)
-	if err != nil {
-		return 0, err
-	}
-	var ahead int64
-	for _, rank := range ranks {
-		if rank <= candidate.PriorityRank {
-			continue
-		}
-		count, err := i.client.ZCard(ctx, candidatesKey(candidate.ShowID, rank)).Result()
-		if err != nil {
-			return 0, fmt.Errorf("count higher-priority candidates: %w", err)
-		}
-		ahead += count
-	}
-	rank, err := i.client.ZRank(ctx, candidatesKey(candidate.ShowID, candidate.PriorityRank), candidate.EntryID).Result()
-	if err != nil {
-		return 0, fmt.Errorf("rank queue candidate: %w", err)
-	}
-	return ahead + rank + 1, nil
-}
-
 func (i *RedisCandidateIndex) List(ctx context.Context, showID string, limit, offset int) ([]string, error) {
 	ranks, err := i.priorities(ctx, showID)
 	if err != nil {

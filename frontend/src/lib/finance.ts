@@ -1,3 +1,5 @@
+import { usingConvex } from "./backend";
+import * as convexHooks from "./convex/hooks";
 import { useQuery } from "@tanstack/react-query";
 import { apiRequest } from "./api";
 
@@ -32,7 +34,7 @@ type ActivityResponse = {
   };
 };
 
-export function usePaymentActivity() {
+function usePaymentActivityGo() {
   return useQuery({
     queryKey: ["payments", "activity"],
     queryFn: async () =>
@@ -40,3 +42,8 @@ export function usePaymentActivity() {
     staleTime: 10_000,
   });
 }
+
+// The Convex build swaps in src/lib/convex/hooks.ts (see lib/backend.ts).
+export const usePaymentActivity = usingConvex
+  ? convexHooks.usePaymentActivity
+  : usePaymentActivityGo;

@@ -1,3 +1,5 @@
+import { usingConvex } from "./backend";
+import * as convexHooks from "./convex/hooks";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest } from "./api";
 
@@ -49,7 +51,7 @@ type SessionResponse = { data: { accountSession: PayoutAccountSession } };
 
 const payoutKey = ["payouts", "account"] as const;
 
-export function usePayoutStatus() {
+function usePayoutStatusGo() {
   return useQuery({
     queryKey: payoutKey,
     queryFn: async () =>
@@ -59,7 +61,7 @@ export function usePayoutStatus() {
   });
 }
 
-export function useCreatorBalance() {
+function useCreatorBalanceGo() {
   return useQuery({
     queryKey: ["payouts", "balance"],
     queryFn: async () =>
@@ -68,7 +70,7 @@ export function useCreatorBalance() {
   });
 }
 
-export async function fetchPayoutAccountSession() {
+async function fetchPayoutAccountSessionGo() {
   return (
     await apiRequest<SessionResponse>("/api/v1/payouts/account-session", {
       method: "POST",
@@ -76,6 +78,20 @@ export async function fetchPayoutAccountSession() {
   ).data.accountSession;
 }
 
-export function usePayoutAccountSession() {
+function usePayoutAccountSessionGo() {
   return useMutation({ mutationFn: fetchPayoutAccountSession });
 }
+
+// The Convex build swaps in src/lib/convex/hooks.ts (see lib/backend.ts).
+export const usePayoutStatus = usingConvex
+  ? convexHooks.usePayoutStatus
+  : usePayoutStatusGo;
+export const useCreatorBalance = usingConvex
+  ? convexHooks.useCreatorBalance
+  : useCreatorBalanceGo;
+export const fetchPayoutAccountSession = usingConvex
+  ? convexHooks.fetchPayoutAccountSession
+  : fetchPayoutAccountSessionGo;
+export const usePayoutAccountSession = usingConvex
+  ? convexHooks.usePayoutAccountSession
+  : usePayoutAccountSessionGo;

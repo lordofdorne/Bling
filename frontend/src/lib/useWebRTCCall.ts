@@ -3,17 +3,13 @@ import { useQueryClient } from "@tanstack/react-query";
 import {
   BlingCall,
   CallStatus,
+  endCallOnPageHide,
   endParticipantCall,
   getRTCConfig,
-  participantEndURL,
+  signalTransport,
   transitionParticipantCall,
 } from "./calls";
-import {
-  CallRole,
-  WebRTCCallManager,
-  WebRTCCallPhase,
-  webSocketURL,
-} from "./webrtc";
+import { CallRole, WebRTCCallManager, WebRTCCallPhase } from "./webrtc";
 
 export function useWebRTCCall(call: BlingCall, role: CallRole) {
   const queryClient = useQueryClient();
@@ -64,26 +60,30 @@ export function useWebRTCCall(call: BlingCall, role: CallRole) {
     if (!manager.current) {
       try {
         const rtcConfig = await getRTCConfig(call.showId, call.id, role);
-        manager.current = new WebRTCCallManager({
-          role,
-          signalURL: webSocketURL(
-            `/api/v1/shows/${call.showId}/calls/${call.id}/${role === "creator" ? "creator-signals" : "signals"}`,
-          ),
-          iceServers: rtcConfig.iceServers,
-          onPhase: setPhase,
-          onRemoteStream: setRemoteStream,
-          onLocalReady:
-            role === "creator" ? () => updateState("CONNECTING") : undefined,
-          onConnected: () => updateState("LIVE"),
-          onFailure: async (failure) => {
-            setError(failure.message);
-            try {
-              await updateState("FAILED");
-            } catch {
-              // Another participant or the server timer may already have ended it.
-            }
+        const transport = signalTransport(call.showId, call.id, role);
+        manager.current = new WebRTCCallManager(
+          {
+            role,
+            signalURL: transport.signalURL,
+            iceServers: rtcConfig.iceServers,
+            onPhase: setPhase,
+            onRemoteStream: setRemoteStream,
+            onLocalReady:
+              role === "creator" ? () => updateState("CONNECTING") : undefined,
+            onConnected: () => updateState("LIVE"),
+            onFailure: async (failure) => {
+              setError(failure.message);
+              try {
+                await updateState("FAILED");
+              } catch {
+                // Another participant or the server timer may already have ended it.
+              }
+            },
           },
-        });
+          transport.createSocket
+            ? { createSocket: transport.createSocket }
+            : {},
+        );
       } catch (cause) {
         setError(
           cause instanceof Error
@@ -133,14 +133,7 @@ export function useWebRTCCall(call: BlingCall, role: CallRole) {
     const pageHidden = () => {
       if (call.status !== "ENDED" && call.status !== "FAILED") {
         void manager.current?.end();
-        const endpoint = participantEndURL(call.showId, call.id, role);
-        if (!navigator.sendBeacon(endpoint)) {
-          void fetch(endpoint, {
-            method: "POST",
-            credentials: "include",
-            keepalive: true,
-          });
-        }
+        endCallOnPageHide(call.showId, call.id, role);
       }
     };
     window.addEventListener("pagehide", pageHidden);

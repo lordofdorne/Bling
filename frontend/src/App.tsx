@@ -5,6 +5,10 @@ import { ProtectedRoute } from "./components/ProtectedRoute";
 import { PublicHotline } from "./components/PublicHotline";
 import { DiscoverPage, LegacyCreatorRedirect } from "./components/DiscoverPage";
 import { PasswordRecoveryPage } from "./components/PasswordRecoveryPage";
+import { ContactPage } from "./components/legal/ContactPage";
+import { PrivacyPage } from "./components/legal/PrivacyPage";
+import { RefundPage } from "./components/legal/RefundPage";
+import { TermsPage } from "./components/legal/TermsPage";
 import { ScreenSizeProvider } from "./lib/ScreenSizeProvider";
 import { ThemeProvider } from "./lib/ThemeProvider";
 import { Button } from "@/components/ui/button";
@@ -61,6 +65,10 @@ export function App() {
             }
           />
           <Route path="/u/:username" element={<PublicHotline />} />
+          <Route path="/terms" element={<TermsPage />} />
+          <Route path="/privacy" element={<PrivacyPage />} />
+          <Route path="/refunds" element={<RefundPage />} />
+          <Route path="/contact" element={<ContactPage />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
       </ScreenSizeProvider>

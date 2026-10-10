@@ -56,9 +56,11 @@ type Entry struct {
 	PaymentAttemptID    *string    `json:"-"`
 }
 
+// ViewerState is a caller's own view of their queue entry. It deliberately
+// carries no place in line: the queue is a holding area and creators choose
+// whom to connect, so no ordering is promised to callers.
 type ViewerState struct {
-	Entry    Entry `json:"entry"`
-	Position int64 `json:"position"`
+	Entry Entry `json:"entry"`
 }
 
 type JoinInput struct {
@@ -125,7 +127,6 @@ type OutboxEvent struct {
 type CandidateIndex interface {
 	Add(context.Context, Candidate) error
 	Remove(context.Context, Candidate) error
-	Position(context.Context, Candidate) (int64, error)
 	List(context.Context, string, int, int) ([]string, error)
 	Clear(context.Context, string) error
 }

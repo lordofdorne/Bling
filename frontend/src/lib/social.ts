@@ -1,3 +1,5 @@
+import { usingConvex } from "./backend";
+import * as convexHooks from "./convex/hooks";
 import { useEffect } from "react";
 import {
   useInfiniteQuery,
@@ -58,7 +60,7 @@ function queryString(filters: DiscoveryFilters, cursor: string) {
   if (cursor) params.set("cursor", cursor);
   return params.toString();
 }
-export function useCreators(filters: DiscoveryFilters = {}) {
+function useCreatorsGo(filters: DiscoveryFilters = {}) {
   const me = useMe();
   return useInfiniteQuery({
     queryKey: [
@@ -85,7 +87,7 @@ export function useCreators(filters: DiscoveryFilters = {}) {
     maxPages: 10,
   });
 }
-export function useCreatorProfile(username: string) {
+function useCreatorProfileGo(username: string) {
   const me = useMe();
   return useQuery({
     queryKey: ["social", "profile", username, me.data?.id ?? "guest"],
@@ -101,7 +103,7 @@ export function useCreatorProfile(username: string) {
     refetchInterval: 30_000,
   });
 }
-export function useOwnProfile() {
+function useOwnProfileGo() {
   const me = useMe();
   return useQuery({
     queryKey: ["social", "own-profile", me.data?.id],
@@ -115,7 +117,7 @@ export function useOwnProfile() {
     staleTime: 30_000,
   });
 }
-export function useSaveProfile() {
+function useSaveProfileGo() {
   const client = useQueryClient();
   return useMutation({
     mutationFn: async (input: ProfileInput) =>
@@ -128,7 +130,7 @@ export function useSaveProfile() {
     onSuccess: () => client.invalidateQueries({ queryKey: ["social"] }),
   });
 }
-export function useUploadAvatar() {
+function useUploadAvatarGo() {
   return useMutation({
     mutationFn: async (file: File) => {
       const body = new FormData();
@@ -142,7 +144,7 @@ export function useUploadAvatar() {
     },
   });
 }
-export function useFollowingCount() {
+function useFollowingCountGo() {
   const me = useMe();
   return useQuery({
     queryKey: ["social", "following-count", me.data?.id],
@@ -185,15 +187,17 @@ export function useFollowCreator() {
       profile: CreatorProfile;
       following: boolean;
     }) =>
-      (
-        await apiRequest<{ data: { isFollowing: boolean } }>(
-          `/api/v1/creators/${encodeURIComponent(profile.username)}/follow`,
-          {
-            method: following ? "POST" : "DELETE",
-            ...(following ? { body: "{}" } : {}),
-          },
-        )
-      ).data,
+      usingConvex
+        ? convexHooks.followRequest(profile.username, following)
+        : (
+            await apiRequest<{ data: { isFollowing: boolean } }>(
+              `/api/v1/creators/${encodeURIComponent(profile.username)}/follow`,
+              {
+                method: following ? "POST" : "DELETE",
+                ...(following ? { body: "{}" } : {}),
+              },
+            )
+          ).data,
     onMutate: async ({ profile, following }) => {
       await client.cancelQueries({ queryKey: ["social"] });
       const snapshots = client.getQueriesData({ queryKey: ["social"] });
@@ -240,7 +244,7 @@ export function useFollowCreator() {
 export function useFollowBusy() {
   return useIsMutating({ mutationKey: ["social", "follow"] }) > 0;
 }
-export function useNotifications() {
+function useNotificationsGo() {
   const me = useMe();
   return useInfiniteQuery({
     queryKey: ["social", "notifications", me.data?.id],
@@ -259,7 +263,7 @@ export function useNotifications() {
     maxPages: 10,
   });
 }
-export function useMarkNotificationsRead() {
+function useMarkNotificationsReadGo() {
   const client = useQueryClient();
   return useMutation({
     mutationFn: (ids: string[]) =>
@@ -271,7 +275,7 @@ export function useMarkNotificationsRead() {
       client.invalidateQueries({ queryKey: ["social", "notifications"] }),
   });
 }
-export function useChannelPresence(username: string, live: boolean) {
+function useChannelPresenceGo(username: string, live: boolean) {
   const client = useQueryClient();
   const me = useMe();
   useEffect(() => {
@@ -323,3 +327,32 @@ export const formatCount = (value: number) =>
     notation: "compact",
     maximumFractionDigits: 1,
   }).format(value);
+
+// The Convex build swaps in src/lib/convex/hooks.ts (see lib/backend.ts).
+export const useCreators = usingConvex
+  ? convexHooks.useCreators
+  : useCreatorsGo;
+export const useCreatorProfile = usingConvex
+  ? convexHooks.useCreatorProfile
+  : useCreatorProfileGo;
+export const useOwnProfile = usingConvex
+  ? convexHooks.useOwnProfile
+  : useOwnProfileGo;
+export const useSaveProfile = usingConvex
+  ? convexHooks.useSaveProfile
+  : useSaveProfileGo;
+export const useUploadAvatar = usingConvex
+  ? convexHooks.useUploadAvatar
+  : useUploadAvatarGo;
+export const useFollowingCount = usingConvex
+  ? convexHooks.useFollowingCount
+  : useFollowingCountGo;
+export const useNotifications = usingConvex
+  ? convexHooks.useNotifications
+  : useNotificationsGo;
+export const useMarkNotificationsRead = usingConvex
+  ? convexHooks.useMarkNotificationsRead
+  : useMarkNotificationsReadGo;
+export const useChannelPresence = usingConvex
+  ? convexHooks.useChannelPresence
+  : useChannelPresenceGo;

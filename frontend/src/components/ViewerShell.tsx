@@ -1,3 +1,4 @@
+import { SiteFooter } from "./SiteFooter";
 import { useRef, useState, type ReactNode } from "react";
 import { Link, NavLink, useNavigate, useSearchParams } from "react-router-dom";
 import {
@@ -355,6 +356,7 @@ export function ViewerShell({ children }: { children: ReactNode }) {
             )}
           >
             {children}
+            <SiteFooter />
           </div>
         </main>
       </div>

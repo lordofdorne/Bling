@@ -1,3 +1,7 @@
+import { usingConvex } from "./backend";
+import * as convexHooks from "./convex/hooks";
+import { ConvexSignalSocket } from "./convex/signalSocket";
+import { webSocketURL } from "./webrtc";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ApiError, apiRequest } from "./api";
 import type { QueueEntry } from "./queue";
@@ -45,7 +49,8 @@ export async function getRTCConfig(
   showID: string,
   callID: string,
   role: "creator" | "viewer",
-) {
+): Promise<RTCConfig> {
+  if (usingConvex) return convexHooks.rtcConfig(callID);
   const endpoint = role === "creator" ? "creator-rtc-config" : "rtc-config";
   return (
     await apiRequest<{ data: RTCConfig }>(
@@ -60,6 +65,7 @@ export async function transitionParticipantCall(
   role: "creator" | "viewer",
   status: CallStatus,
 ) {
+  if (usingConvex) return convexHooks.transitionCall(callID, status);
   const endpoint = role === "creator" ? "transition" : "viewer-transition";
   return (
     await apiRequest<{ data: BlingCall }>(
@@ -74,6 +80,7 @@ export async function endParticipantCall(
   callID: string,
   role: "creator" | "viewer",
 ) {
+  if (usingConvex) return convexHooks.transitionCall(callID, "ENDED");
   const endpoint = role === "creator" ? "creator-end" : "viewer-end";
   return (
     await apiRequest<{ data: BlingCall }>(
@@ -81,6 +88,48 @@ export async function endParticipantCall(
       { method: "POST" },
     )
   ).data;
+}
+
+/**
+ * Ends the call as the page goes away. The Go API takes a beacon; Convex
+ * gets a best-effort mutation, and if the page dies first the presence
+ * grace ends the call within about half a minute.
+ */
+export function endCallOnPageHide(
+  showID: string,
+  callID: string,
+  role: "creator" | "viewer",
+) {
+  if (usingConvex) {
+    void convexHooks.transitionCall(callID, "ENDED").catch(() => undefined);
+    return;
+  }
+  const endpoint = participantEndURL(showID, callID, role);
+  if (!navigator.sendBeacon(endpoint)) {
+    void fetch(endpoint, {
+      method: "POST",
+      credentials: "include",
+      keepalive: true,
+    });
+  }
+}
+
+/** How the call manager reaches the signaling channel for this backend. */
+export function signalTransport(
+  showID: string,
+  callID: string,
+  role: "creator" | "viewer",
+) {
+  return {
+    signalURL: usingConvex
+      ? `convex:${callID}`
+      : webSocketURL(
+          `/api/v1/shows/${showID}/calls/${callID}/${role === "creator" ? "creator-signals" : "signals"}`,
+        ),
+    createSocket: usingConvex
+      ? () => new ConvexSignalSocket(callID) as unknown as WebSocket
+      : undefined,
+  };
 }
 
 export function participantEndURL(
@@ -91,7 +140,7 @@ export function participantEndURL(
   return `/api/v1/shows/${showID}/calls/${callID}/${role === "creator" ? "creator-end" : "viewer-end"}`;
 }
 
-export function useActiveCall(showID: string) {
+function useActiveCallGo(showID: string) {
   return useQuery({
     queryKey: activeCallKey(showID),
     queryFn: () => getCall(`/api/v1/shows/${showID}/calls/active`),
@@ -100,7 +149,7 @@ export function useActiveCall(showID: string) {
   });
 }
 
-export function useViewerCall(showID: string) {
+function useViewerCallGo(showID: string) {
   return useQuery({
     queryKey: viewerCallKey(showID),
     queryFn: () => getCall(`/api/v1/shows/${showID}/calls/me`),
@@ -142,15 +191,15 @@ function useSelection(showID: string, random: boolean) {
   });
 }
 
-export function useSelectCaller(showID: string) {
+function useSelectCallerGo(showID: string) {
   return useSelection(showID, false);
 }
 
-export function useSelectRandomCaller(showID: string) {
+function useSelectRandomCallerGo(showID: string) {
   return useSelection(showID, true);
 }
 
-export function useTransitionCall(showID: string) {
+function useTransitionCallGo(showID: string) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async ({
@@ -177,3 +226,20 @@ export function useTransitionCall(showID: string) {
     },
   });
 }
+
+// The Convex build swaps in src/lib/convex/hooks.ts (see lib/backend.ts).
+export const useActiveCall = usingConvex
+  ? convexHooks.useActiveCall
+  : useActiveCallGo;
+export const useViewerCall = usingConvex
+  ? convexHooks.useViewerCall
+  : useViewerCallGo;
+export const useSelectCaller = usingConvex
+  ? convexHooks.useSelectCaller
+  : useSelectCallerGo;
+export const useSelectRandomCaller = usingConvex
+  ? convexHooks.useSelectRandomCaller
+  : useSelectRandomCallerGo;
+export const useTransitionCall = usingConvex
+  ? convexHooks.useTransitionCall
+  : useTransitionCallGo;

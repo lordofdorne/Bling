@@ -70,7 +70,7 @@ describe("App routes", () => {
     ).toBeInTheDocument();
   });
 
-  it("joins the public caller queue and shows a recoverable position", async () => {
+  it("joins the public caller queue without a place in line", async () => {
     const liveShow = {
       id: "show-1",
       creatorId: "user-1",
@@ -90,7 +90,6 @@ describe("App routes", () => {
       tierName: "Standard",
       priorityRank: 0,
       callDurationSeconds: 300,
-      queuePosition: 12,
       joinedAt: "2026-08-24T12:01:00Z",
     };
     const fetchMock = vi.fn(
@@ -128,10 +127,7 @@ describe("App routes", () => {
             },
           );
         if (path.endsWith("/queue") && init?.method === "POST")
-          return Response.json(
-            { data: { entry, position: 1 } },
-            { status: 201 },
-          );
+          return Response.json({ data: { entry } }, { status: 201 });
         return new Response(null, { status: 404 });
       },
     );
@@ -148,7 +144,6 @@ describe("App routes", () => {
     fireEvent.click(screen.getByRole("button", { name: "Send call request" }));
 
     expect(await screen.findByText("The host can see you")).toBeInTheDocument();
-    expect(screen.queryByText("#1")).not.toBeInTheDocument();
     const joinCall = fetchMock.mock.calls.find(
       ([input, init]) =>
         String(input).endsWith("/queue") && init?.method === "POST",
@@ -159,7 +154,7 @@ describe("App routes", () => {
     expect(JSON.parse(String(joinCall?.[1]?.body)).tierId).toBe("tier-1");
   });
 
-  it("restores a caller request after refresh without showing a position", async () => {
+  it("restores a caller request after refresh", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(async (input: RequestInfo | URL) => {
@@ -173,7 +168,6 @@ describe("App routes", () => {
         if (path.endsWith("/queue/me"))
           return Response.json({
             data: {
-              position: 3,
               entry: {
                 id: "entry-1",
                 showId: "show-1",
@@ -184,7 +178,6 @@ describe("App routes", () => {
                 tierName: "Standard",
                 priorityRank: 0,
                 callDurationSeconds: 300,
-                queuePosition: 12,
                 joinedAt: "2026-08-24T12:01:00Z",
               },
             },
@@ -194,7 +187,6 @@ describe("App routes", () => {
     );
     renderAt("/u/alice");
     expect(await screen.findByText("The host can see you")).toBeInTheDocument();
-    expect(screen.queryByText("#3")).not.toBeInTheDocument();
     expect(screen.getByText(/request is safely restored/i)).toBeInTheDocument();
   });
 

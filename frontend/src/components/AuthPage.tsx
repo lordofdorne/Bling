@@ -246,6 +246,23 @@ function RegisterForm({
         <Button type="submit" size="lg" disabled={register.isPending}>
           {register.isPending ? "Please wait…" : "Create account"}
         </Button>
+        <p className="text-muted-foreground text-center text-(length:--text-meta)">
+          By creating an account you agree to the{" "}
+          <Link
+            to="/terms"
+            className="text-foreground underline underline-offset-4"
+          >
+            Terms of Service
+          </Link>{" "}
+          and{" "}
+          <Link
+            to="/privacy"
+            className="text-foreground underline underline-offset-4"
+          >
+            Privacy Policy
+          </Link>
+          .
+        </p>
       </form>
     </Form>
   );

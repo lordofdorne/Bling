@@ -53,7 +53,6 @@ func (f *fakeRepository) MarkOutboxPublished(_ context.Context, ids []int64, _ t
 }
 
 type fakeIndex struct {
-	position  int64
 	ids       []string
 	err       error
 	listCalls int
@@ -61,9 +60,6 @@ type fakeIndex struct {
 
 func (f *fakeIndex) Add(context.Context, Candidate) error    { return f.err }
 func (f *fakeIndex) Remove(context.Context, Candidate) error { return f.err }
-func (f *fakeIndex) Position(context.Context, Candidate) (int64, error) {
-	return f.position, f.err
-}
 func (f *fakeIndex) List(context.Context, string, int, int) ([]string, error) {
 	f.listCalls++
 	return f.ids, f.err
@@ -95,11 +91,11 @@ func TestJoinValidatesBeforePersistence(t *testing.T) {
 	}
 }
 
-func TestJoinFallsBackToPostgresPositionWhenRedisIsUnavailable(t *testing.T) {
+func TestJoinSucceedsWhenRedisIsUnavailable(t *testing.T) {
 	entry := Entry{ID: "entry-1", ShowID: "show-1", Status: StatusWaiting, PriorityRank: 3, QueuePosition: 8}
-	repository := &fakeRepository{entry: entry, state: ViewerState{Entry: entry, Position: 4}}
+	repository := &fakeRepository{entry: entry}
 	state, err := testService(repository, &fakeIndex{err: errors.New("redis unavailable")}).Join(context.Background(), JoinInput{DisplayName: "Alice", Topic: "Launch", SessionTokenHash: []byte("viewer"), JoinKeyHash: []byte("join")})
-	if err != nil || state.Position != 4 {
+	if err != nil || state.Entry.ID != "entry-1" {
 		t.Fatalf("state=%+v err=%v", state, err)
 	}
 }

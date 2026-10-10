@@ -38,7 +38,7 @@ Acceptance: concurrent start attempts cannot create two live shows.
 ## PR 5 — Durable caller queue
 
 - Anonymous viewer identity token and hashed recovery credential
-- Join, leave, current position, and creator queue endpoints
+- Join, leave, recover own request, and creator queue endpoints
 - Explicit queue state machine, tier/duration snapshots, and sequence-based transactional ordering
 - PostgreSQL source of truth with a Redis sorted-set candidate index and transactional repair outbox
 - Caller form and creator queue UI using authoritative REST state with bounded polling

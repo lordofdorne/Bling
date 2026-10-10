@@ -179,18 +179,7 @@ func (r *PostgresRepository) Me(ctx context.Context, showID string, tokenHash []
 	if err != nil {
 		return ViewerState{}, fmt.Errorf("find viewer queue entry: %w", err)
 	}
-
-	var position int64
-	if entry.Status == StatusWaiting {
-		if err := r.pool.QueryRow(ctx, `
-			SELECT count(*) FROM queue_entries
-			WHERE show_id = $1 AND status = 'WAITING'
-			  AND (priority_rank > $2 OR (priority_rank = $2 AND queue_position <= $3))`,
-			showID, entry.PriorityRank, entry.QueuePosition).Scan(&position); err != nil {
-			return ViewerState{}, fmt.Errorf("calculate queue position: %w", err)
-		}
-	}
-	return ViewerState{Entry: entry, Position: position}, nil
+	return ViewerState{Entry: entry}, nil
 }
 
 func (r *PostgresRepository) Leave(ctx context.Context, showID string, tokenHash []byte, now time.Time) (Entry, error) {

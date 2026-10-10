@@ -162,7 +162,7 @@ func TestDurableQueueConcurrentJoinRecoveryAndShutdown(t *testing.T) {
 		}
 	}
 	state, err := service.Me(ctx, activeShow.ID, duplicate.SessionTokenHash)
-	if err != nil || state.Entry.ID != duplicateID || state.Position == 0 {
+	if err != nil || state.Entry.ID != duplicateID {
 		t.Fatalf("recovery state=%+v err=%v", state, err)
 	}
 	if err := service.AuthorizeViewer(ctx, activeShow.ID, duplicate.SessionTokenHash); err != nil {

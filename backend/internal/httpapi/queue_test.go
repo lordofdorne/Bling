@@ -60,7 +60,7 @@ func queueTestRouter(authentication *fakeAuthService, service *fakeQueueService)
 }
 
 func TestJoinQueueSetsOpaqueRecoveryCookieAndHashesCredentials(t *testing.T) {
-	service := &fakeQueueService{state: queuedomain.ViewerState{Entry: queuedomain.Entry{ID: "entry-1", Status: queuedomain.StatusWaiting}, Position: 1}}
+	service := &fakeQueueService{state: queuedomain.ViewerState{Entry: queuedomain.Entry{ID: "entry-1", Status: queuedomain.StatusWaiting}}}
 	router := queueTestRouter(&fakeAuthService{}, service)
 	request := httptest.NewRequest(http.MethodPost, "/api/v1/shows/"+testShowID+"/queue", strings.NewReader(`{"displayName":"Alice","topic":"Launch","tierId":"tier-1"}`))
 	request.Header.Set("Content-Type", "application/json")

@@ -1,3 +1,5 @@
+import { usingConvex } from "./backend";
+import * as convexHooks from "./convex/hooks";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect } from "react";
 import { ApiError, apiRequest } from "./api";
@@ -24,9 +26,10 @@ export type QueueEntry = {
   joinedAt: string;
 };
 
+// A caller's own request. There is deliberately no place in line: creators
+// pick whom to connect, so the queue is a holding area, not an order.
 export type ViewerQueueState = {
   entry: QueueEntry;
-  position: number;
 };
 
 type TiersResponse = { data: { tiers: QueueTier[] } };
@@ -58,7 +61,7 @@ function idempotencyKey(showID: string) {
   return { storageKey, value };
 }
 
-export function useQueueTiers(showID: string) {
+function useQueueTiersGo(showID: string) {
   return useQuery({
     queryKey: ["shows", showID, "tiers"],
     queryFn: async () =>
@@ -69,7 +72,7 @@ export function useQueueTiers(showID: string) {
   });
 }
 
-export function useViewerQueue(showID: string) {
+function useViewerQueueGo(showID: string) {
   return useQuery({
     queryKey: viewerKey(showID),
     queryFn: () => getViewerState(showID),
@@ -78,7 +81,7 @@ export function useViewerQueue(showID: string) {
   });
 }
 
-export function useJoinQueue(showID: string) {
+function useJoinQueueGo(showID: string) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (input: {
@@ -103,7 +106,7 @@ export function useJoinQueue(showID: string) {
   });
 }
 
-export function useLeaveQueue(showID: string) {
+function useLeaveQueueGo(showID: string) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: () =>
@@ -112,7 +115,7 @@ export function useLeaveQueue(showID: string) {
   });
 }
 
-export function useCreatorQueue(showID: string) {
+function useCreatorQueueGo(showID: string) {
   return useQuery({
     queryKey: creatorQueueKey(showID),
     queryFn: async () =>
@@ -126,7 +129,7 @@ export function useCreatorQueue(showID: string) {
   });
 }
 
-export function useQueueEvents(
+function useQueueEventsGo(
   showID: string,
   audience: "viewer" | "creator",
   enabled: boolean,
@@ -185,3 +188,23 @@ export function useQueueEvents(
     };
   }, [audience, enabled, queryClient, showID]);
 }
+
+// The Convex build swaps in src/lib/convex/hooks.ts (see lib/backend.ts).
+export const useQueueTiers = usingConvex
+  ? convexHooks.useQueueTiers
+  : useQueueTiersGo;
+export const useViewerQueue = usingConvex
+  ? convexHooks.useViewerQueue
+  : useViewerQueueGo;
+export const useJoinQueue = usingConvex
+  ? convexHooks.useJoinQueue
+  : useJoinQueueGo;
+export const useLeaveQueue = usingConvex
+  ? convexHooks.useLeaveQueue
+  : useLeaveQueueGo;
+export const useCreatorQueue = usingConvex
+  ? convexHooks.useCreatorQueue
+  : useCreatorQueueGo;
+export const useQueueEvents = usingConvex
+  ? convexHooks.useQueueEvents
+  : useQueueEventsGo;

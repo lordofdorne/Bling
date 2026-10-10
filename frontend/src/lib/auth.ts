@@ -1,3 +1,5 @@
+import { usingConvex } from "./backend";
+import * as convexHooks from "./convex/hooks";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ApiError, apiRequest } from "./api";
 
@@ -28,11 +30,11 @@ async function getMe(): Promise<Creator | null> {
   }
 }
 
-export function useMe() {
+function useMeGo() {
   return useQuery({ queryKey: meKey, queryFn: getMe, staleTime: 30_000 });
 }
 
-export function useLogin() {
+function useLoginGo() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (input: LoginInput) =>
@@ -44,7 +46,7 @@ export function useLogin() {
   });
 }
 
-export function useRegister() {
+function useRegisterGo() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (input: RegisterInput) =>
@@ -60,7 +62,7 @@ export function useRegister() {
   });
 }
 
-export function useForgotPassword() {
+function useForgotPasswordGo() {
   return useMutation({
     mutationFn: (email: string) =>
       apiRequest<void>("/api/v1/auth/forgot-password", {
@@ -70,7 +72,7 @@ export function useForgotPassword() {
   });
 }
 
-export function useResetPassword() {
+function useResetPasswordGo() {
   return useMutation({
     mutationFn: (password: string) =>
       apiRequest<void>("/api/v1/auth/reset-password", {
@@ -80,7 +82,7 @@ export function useResetPassword() {
   });
 }
 
-export function useLogout() {
+function useLogoutGo() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: () =>
@@ -92,3 +94,17 @@ export function useLogout() {
     },
   });
 }
+
+// The Convex build swaps in src/lib/convex/hooks.ts (see lib/backend.ts).
+export const useMe = usingConvex ? convexHooks.useMe : useMeGo;
+export const useLogin = usingConvex ? convexHooks.useLogin : useLoginGo;
+export const useRegister = usingConvex
+  ? convexHooks.useRegister
+  : useRegisterGo;
+export const useForgotPassword = usingConvex
+  ? convexHooks.useForgotPassword
+  : useForgotPasswordGo;
+export const useResetPassword = usingConvex
+  ? convexHooks.useResetPassword
+  : useResetPasswordGo;
+export const useLogout = usingConvex ? convexHooks.useLogout : useLogoutGo;

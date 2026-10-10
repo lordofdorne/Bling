@@ -1,3 +1,5 @@
+import { usingConvex } from "./backend";
+import * as convexHooks from "./convex/hooks";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ApiError, apiRequest } from "./api";
 
@@ -54,7 +56,7 @@ async function getLiveShow(username: string): Promise<HotlineShow | null> {
   }
 }
 
-export function useLiveShow(username: string) {
+function useLiveShowGo(username: string) {
   return useQuery({
     queryKey: liveShowKey(username),
     queryFn: () => getLiveShow(username),
@@ -63,7 +65,7 @@ export function useLiveShow(username: string) {
   });
 }
 
-export function useCurrentShow() {
+function useCurrentShowGo() {
   return useQuery({
     queryKey: currentShowKey,
     queryFn: async (): Promise<HotlineShow | null> => {
@@ -78,7 +80,7 @@ export function useCurrentShow() {
   });
 }
 
-export function useCreateShow() {
+function useCreateShowGo() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async () =>
@@ -88,7 +90,7 @@ export function useCreateShow() {
   });
 }
 
-export function useStartShow(username: string) {
+function useStartShowGo(username: string) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (showID: string) =>
@@ -104,7 +106,7 @@ export function useStartShow(username: string) {
   });
 }
 
-export function useEndShow(username: string) {
+function useEndShowGo(username: string) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (showID: string) =>
@@ -118,7 +120,7 @@ export function useEndShow(username: string) {
   });
 }
 
-export function useTierConfiguration(showID: string) {
+function useTierConfigurationGo(showID: string) {
   return useQuery({
     queryKey: tierConfigKey(showID),
     queryFn: async () =>
@@ -128,7 +130,7 @@ export function useTierConfiguration(showID: string) {
   });
 }
 
-export function useSaveTierConfiguration(showID: string) {
+function useSaveTierConfigurationGo(showID: string) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (tiers: HotlineTierInput[]) =>
@@ -142,3 +144,24 @@ export function useSaveTierConfiguration(showID: string) {
       queryClient.setQueryData(tierConfigKey(showID), tiers),
   });
 }
+
+// The Convex build swaps in src/lib/convex/hooks.ts (see lib/backend.ts).
+export const useLiveShow = usingConvex
+  ? convexHooks.useLiveShow
+  : useLiveShowGo;
+export const useCurrentShow = usingConvex
+  ? convexHooks.useCurrentShow
+  : useCurrentShowGo;
+export const useCreateShow = usingConvex
+  ? convexHooks.useCreateShow
+  : useCreateShowGo;
+export const useStartShow = usingConvex
+  ? convexHooks.useStartShow
+  : useStartShowGo;
+export const useEndShow = usingConvex ? convexHooks.useEndShow : useEndShowGo;
+export const useTierConfiguration = usingConvex
+  ? convexHooks.useTierConfiguration
+  : useTierConfigurationGo;
+export const useSaveTierConfiguration = usingConvex
+  ? convexHooks.useSaveTierConfiguration
+  : useSaveTierConfigurationGo;

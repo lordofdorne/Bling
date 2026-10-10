@@ -1,3 +1,5 @@
+import { usingConvex } from "./backend";
+import * as convexHooks from "./convex/hooks";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "./api";
 
@@ -37,7 +39,7 @@ function paymentKey(showID: string, tierID: string) {
   return { storageKey, value };
 }
 
-export function useAuthorizePayment(showID: string) {
+function useAuthorizePaymentGo(showID: string) {
   return useMutation({
     mutationFn: async (tierID: string) => {
       const key = paymentKey(showID, tierID);
@@ -56,7 +58,7 @@ export function useAuthorizePayment(showID: string) {
 
 const paymentMethodsKey = ["me", "payment-methods"] as const;
 
-export function usePaymentMethods() {
+function usePaymentMethodsGo() {
   return useQuery({
     queryKey: paymentMethodsKey,
     queryFn: async () =>
@@ -69,7 +71,7 @@ export function usePaymentMethods() {
   });
 }
 
-export function usePaymentMethodSetup() {
+function usePaymentMethodSetupGo() {
   return useMutation({
     mutationFn: async () =>
       (
@@ -81,7 +83,7 @@ export function usePaymentMethodSetup() {
   });
 }
 
-export function useRemovePaymentMethod() {
+function useRemovePaymentMethodGo() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (paymentMethodID: string) =>
@@ -94,7 +96,24 @@ export function useRemovePaymentMethod() {
   });
 }
 
-export function useRefreshPaymentMethods() {
+function useRefreshPaymentMethodsGo() {
   const queryClient = useQueryClient();
   return () => queryClient.invalidateQueries({ queryKey: paymentMethodsKey });
 }
+
+// The Convex build swaps in src/lib/convex/hooks.ts (see lib/backend.ts).
+export const useAuthorizePayment = usingConvex
+  ? convexHooks.useAuthorizePayment
+  : useAuthorizePaymentGo;
+export const usePaymentMethods = usingConvex
+  ? convexHooks.usePaymentMethods
+  : usePaymentMethodsGo;
+export const usePaymentMethodSetup = usingConvex
+  ? convexHooks.usePaymentMethodSetup
+  : usePaymentMethodSetupGo;
+export const useRemovePaymentMethod = usingConvex
+  ? convexHooks.useRemovePaymentMethod
+  : useRemovePaymentMethodGo;
+export const useRefreshPaymentMethods = usingConvex
+  ? convexHooks.useRefreshPaymentMethods
+  : useRefreshPaymentMethodsGo;

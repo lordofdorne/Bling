@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { convex } from "@/lib/backend";
 import { cn } from "@/lib/utils";
 
 type Readiness = {
@@ -6,6 +7,13 @@ type Readiness = {
 };
 
 async function getReadiness(): Promise<Readiness> {
+  // Convex has no /readyz; its client knows whether it is connected.
+  if (convex) {
+    if (!convex.connectionState().isWebSocketConnected) {
+      throw new Error("Convex is unreachable");
+    }
+    return { status: "ok" };
+  }
   const response = await fetch("/readyz");
   if (!response.ok) {
     throw new Error("API dependencies are unavailable");

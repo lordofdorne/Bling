@@ -5,7 +5,7 @@ import reactRefresh from "eslint-plugin-react-refresh";
 import tseslint from "typescript-eslint";
 
 export default tseslint.config(
-  { ignores: ["dist", "coverage"] },
+  { ignores: ["dist", "coverage", "convex/_generated"] },
   {
     files: ["**/*.{ts,tsx}"],
     extends: [
@@ -24,6 +24,12 @@ export default tseslint.config(
       "react-refresh/only-export-components": [
         "warn",
         { allowConstantExport: true },
+      ],
+      // A leading underscore marks a parameter kept only to match a shared
+      // signature (e.g. the Convex hooks mirroring the Go ones).
+      "@typescript-eslint/no-unused-vars": [
+        "error",
+        { argsIgnorePattern: "^_", varsIgnorePattern: "^_" },
       ],
     },
   },

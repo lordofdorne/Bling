@@ -31,27 +31,11 @@ func (s *Service) Join(ctx context.Context, input JoinInput) (ViewerState, error
 	if err := s.index.Add(ctx, candidate); err != nil {
 		s.logger.Warn("queue index update deferred to outbox", "error", err, "show_id", entry.ShowID, "queue_entry_id", entry.ID)
 	}
-	position, err := s.index.Position(ctx, candidate)
-	if err != nil {
-		state, repositoryErr := s.repository.Me(ctx, entry.ShowID, input.SessionTokenHash)
-		if repositoryErr != nil {
-			return ViewerState{}, repositoryErr
-		}
-		return state, nil
-	}
-	return ViewerState{Entry: entry, Position: position}, nil
+	return ViewerState{Entry: entry}, nil
 }
 
 func (s *Service) Me(ctx context.Context, showID string, tokenHash []byte) (ViewerState, error) {
-	state, err := s.repository.Me(ctx, showID, tokenHash)
-	if err != nil || state.Entry.Status != StatusWaiting {
-		return state, err
-	}
-	position, indexErr := s.index.Position(ctx, candidateFromEntry(state.Entry))
-	if indexErr == nil {
-		state.Position = position
-	}
-	return state, nil
+	return s.repository.Me(ctx, showID, tokenHash)
 }
 
 func (s *Service) Leave(ctx context.Context, showID string, tokenHash []byte) (Entry, error) {
