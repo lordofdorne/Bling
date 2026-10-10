@@ -299,6 +299,9 @@ export default defineSchema({
     metadata: v.optional(v.record(v.string(), v.union(v.string(), v.number()))),
   })
     .index("by_key", ["idempotencyKey"])
+    // Newest first for the activity list (Convex orders by _creationTime
+    // within an index).
+    .index("by_creator_currency", ["creatorId", "currency"])
     .index("by_creator_currency_effective", [
       "creatorId",
       "currency",

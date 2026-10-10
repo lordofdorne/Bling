@@ -707,7 +707,7 @@ describe("App routes", () => {
     expect(screen.getByRole("button", { name: "Save tiers" })).toBeEnabled();
   });
 
-  it("shows the 80/20 split and shared card fee when Stripe is ready", async () => {
+  it("shows each payment's split, then payout status when Stripe is ready", async () => {
     const creator = {
       id: "user-1",
       username: "alice",
@@ -772,12 +772,16 @@ describe("App routes", () => {
     ).toBeInTheDocument();
     fireEvent.click(screen.getByRole("link", { name: "Creator payouts" }));
     expect(
-      await screen.findByRole("heading", { name: "Your earnings split" }),
+      await screen.findByRole("heading", { name: "Balance" }),
     ).toBeInTheDocument();
-    expect(await screen.findByText("Payouts enabled")).toBeInTheDocument();
+    expect(await screen.findByText("Payouts on")).toBeInTheDocument();
+    // The revenue split is in the Terms, not repeated here.
     expect(
-      screen.getByText("Creator share", { exact: false }),
-    ).toBeInTheDocument();
+      screen.queryByRole("heading", { name: "Your earnings split" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Set up payouts" }),
+    ).not.toBeInTheDocument();
   });
 
   it("renders the balance ledger on the payouts dashboard", async () => {
@@ -853,72 +857,38 @@ describe("App routes", () => {
 
     renderAt("/dashboard/settings/payouts");
 
-    expect(await screen.findByText("Paid call")).toBeInTheDocument();
-    expect(screen.getByText("+$19.49")).toBeInTheDocument();
-    expect(screen.getByText("Monthly payout")).toBeInTheDocument();
-    expect(screen.getAllByText("Posted").length).toBe(2);
-    // The balance cards lead with what can be paid out next.
-    expect(screen.getByText("Available for next payout")).toBeInTheDocument();
+    // Activity renders as rows on phones and a table from tablet up; the
+    // test DOM has both, since CSS decides which one shows.
+    expect((await screen.findAllByText("Paid call")).length).toBe(2);
+    expect(screen.getAllByText("+$19.49").length).toBe(2);
+    expect(screen.getAllByText("Payout to bank").length).toBe(2);
+    expect(screen.getAllByText("−$25.00").length).toBe(2);
+    expect(screen.getAllByText("Cleared").length).toBe(4);
+    // The balance leads with what can be paid out next.
+    expect(screen.getByText("Available for payout")).toBeInTheDocument();
     expect(screen.getByText("$75.00")).toBeInTheDocument();
-    expect(screen.getByText("Pending clearance")).toBeInTheDocument();
+    expect(screen.getByText("On hold")).toBeInTheDocument();
     expect(screen.getByText("$25.00")).toBeInTheDocument();
-    expect(screen.getByText("Action required")).toBeInTheDocument();
-    // No bank account on file, so there is nothing to set up yet.
+    expect(screen.getByText("Not added")).toBeInTheDocument();
+    expect(screen.getByText("Setup needed")).toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: "Set up Hotline" }),
-    ).not.toBeInTheDocument();
+      screen.getByRole("button", { name: "Set up payouts" }),
+    ).toBeInTheDocument();
   });
 
-  it("sets up a Hotline from payouts once bank details are added", async () => {
+  it("shows the bank account and payout schedule once Stripe is ready", async () => {
     const creator = {
       id: "user-1",
       username: "alice",
       email: "alice@example.com",
       createdAt: "2026-08-24T12:00:00Z",
     };
-    const draft = {
-      id: "show-1",
-      creatorId: "user-1",
-      status: "CREATED",
-      createdAt: "2026-08-24T12:00:00Z",
-    };
-    let created = false;
-    const fetchMock = vi.fn(
-      async (input: RequestInfo | URL, init?: RequestInit) => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
         const path = String(input);
         if (path === "/api/v1/me")
           return Response.json({ data: { user: creator } });
-        if (path === "/api/v1/shows" && init?.method === "POST") {
-          created = true;
-          return Response.json({ data: { show: draft } }, { status: 201 });
-        }
-        if (path === "/api/v1/shows/current")
-          return created
-            ? Response.json({ data: { show: draft } })
-            : new Response(
-                JSON.stringify({ error: { code: "SHOW_NOT_FOUND" } }),
-                {
-                  status: 404,
-                  headers: { "Content-Type": "application/json" },
-                },
-              );
-        if (path === "/api/v1/shows/show-1/tier-config")
-          return Response.json({
-            data: {
-              tiers: [
-                {
-                  id: "tier-1",
-                  name: "Standard",
-                  priorityRank: 100,
-                  callDurationSeconds: 300,
-                  priceCents: 0,
-                  enabled: true,
-                  createdAt: "2026-08-24T12:00:00Z",
-                  updatedAt: "2026-08-24T12:00:00Z",
-                },
-              ],
-            },
-          });
         if (path === "/api/v1/payouts/account")
           return Response.json({
             data: {
@@ -940,27 +910,40 @@ describe("App routes", () => {
               },
             },
           });
+        if (path === "/api/v1/payouts/balance")
+          return Response.json({
+            data: {
+              balance: {
+                currency: "usd",
+                totalCents: 0,
+                pendingCents: 0,
+                availableCents: 0,
+                nextPayoutAt: "2026-11-01T00:00:00Z",
+              },
+              activity: [],
+            },
+          });
         if (path === "/api/v1/payments/activity")
           return Response.json({ data: { activity: [], payoutFailure: null } });
         return new Response(null, { status: 404 });
-      },
+      }),
     );
-    vi.stubGlobal("fetch", fetchMock);
 
     renderAt("/dashboard/settings/payouts");
 
-    fireEvent.click(
-      await screen.findByRole("button", { name: "Set up Hotline" }),
-    );
+    expect(await screen.findByText("Test Bank •••• 6789")).toBeInTheDocument();
+    // The payout day is a calendar date, whatever the viewer's time zone.
+    expect(screen.getByText("Nov 1, 2026")).toBeInTheDocument();
+    expect(screen.getByText("Monthly, $25 minimum")).toBeInTheDocument();
     expect(
-      await screen.findByRole("button", { name: "Start Hotline" }),
+      screen.getByRole("button", { name: "Manage bank account" }),
     ).toBeInTheDocument();
     expect(
-      fetchMock.mock.calls.some(
-        ([path, init]) =>
-          String(path) === "/api/v1/shows" && init?.method === "POST",
-      ),
-    ).toBe(true);
+      screen.getByText("Earnings from paid calls will show here."),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("Nothing yet. Paid calls and payouts will appear here."),
+    ).toBeInTheDocument();
   });
 
   it("ends the active Hotline", async () => {

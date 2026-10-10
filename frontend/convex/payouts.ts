@@ -365,7 +365,7 @@ export const balance = query({
     const summary = await balanceAt(ctx, creatorId, currency, now);
     const activity = await ctx.db
       .query("ledgerEntries")
-      .withIndex("by_creator_currency_effective", (q) =>
+      .withIndex("by_creator_currency", (q) =>
         q.eq("creatorId", creatorId).eq("currency", currency),
       )
       .order("desc")
@@ -380,6 +380,63 @@ export const balance = query({
         effectiveAt: entry.effectiveAt,
         createdAt: entry._creationTime,
       })),
+    };
+  },
+});
+
+// Ledger kinds that change what a creator earned, as opposed to payouts,
+// which only move money they already earned to their bank.
+const EARNING_KINDS = new Set([
+  "EARNING",
+  "REFUND_REVERSAL",
+  "DISPUTE_DEBIT",
+  "DISPUTE_RELEASE",
+]);
+const DAY_MS = 24 * 60 * 60 * 1000;
+const MAX_EARNINGS_DAYS = 366;
+// Reads at most this many entries; far more paid calls than any one creator
+// makes in a year today. Older days drop off first if it is ever reached.
+const EARNINGS_SCAN_LIMIT = 8000;
+
+/**
+ * Net earnings per UTC day over the last `days` days (paid calls, less
+ * refunds and dispute holds), for the payouts chart. Days without activity
+ * are left out; the client fills them in. A day is when the money was
+ * earned, not when the hold clears.
+ */
+export const earnings = query({
+  args: { days: v.number() },
+  handler: async (ctx, { days }) => {
+    const creatorId = await requireCreatorId(ctx);
+    const { currency } = config();
+    const span = Math.min(Math.max(Math.floor(days), 1), MAX_EARNINGS_DAYS);
+    const today = Math.floor(Date.now() / DAY_MS) * DAY_MS;
+    const since = today - (span - 1) * DAY_MS;
+    // Effective dates are the earning time plus the hold (or later), so
+    // everything earned since `since` has an effective date after it.
+    const entries = await ctx.db
+      .query("ledgerEntries")
+      .withIndex("by_creator_currency_effective", (q) =>
+        q
+          .eq("creatorId", creatorId)
+          .eq("currency", currency)
+          .gte("effectiveAt", since),
+      )
+      .order("desc")
+      .take(EARNINGS_SCAN_LIMIT);
+    const totals = new Map<string, number>();
+    for (const entry of entries) {
+      if (!EARNING_KINDS.has(entry.kind) || entry._creationTime < since) {
+        continue;
+      }
+      const day = new Date(entry._creationTime).toISOString().slice(0, 10);
+      totals.set(day, (totals.get(day) ?? 0) + entry.amountCents);
+    }
+    return {
+      currency,
+      days: [...totals]
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([date, cents]) => ({ date, cents })),
     };
   },
 });

@@ -1,255 +1,64 @@
-import { Link, useNavigate } from "react-router-dom";
-import { ArrowRight, Landmark, Phone, Plus, Settings } from "lucide-react";
+import { useMemo, useState } from "react";
+import { Bar, BarChart, CartesianGrid, XAxis } from "recharts";
+import { Settings } from "lucide-react";
 import {
   useCreatorBalance,
+  useCreatorEarnings,
   usePayoutAccountSession,
   usePayoutStatus,
+  type EarningsDay,
+  type LedgerEntry,
 } from "../../lib/payouts";
+import { usePaymentActivity } from "../../lib/finance";
+import { useControlSize } from "../../lib/design";
+import { PAYOUT_TERMS } from "../../lib/site";
 import { PayoutSetup } from "../PayoutSetup";
 import { Grid, GridItem } from "../Grid";
+import { SectionHeader } from "../page";
+import { formatDate, formatPrice, formatSignedPrice } from "./format";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { usePaymentActivity } from "../../lib/finance";
-import { useCreateShow, useCurrentShow } from "../../lib/shows";
-import { formatDate, formatPrice } from "./format";
+import {
+  ChartContainer,
+  ChartTooltip,
+  ChartTooltipContent,
+  type ChartConfig,
+} from "@/components/ui/chart";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
-import { SectionHeader } from "../page";
-import { useControlSize } from "../../lib/design";
 
-// The creator-facing name for each ledger kind: money moving, not an enum.
-function ledgerEntryLabel(kind: string) {
-  switch (kind) {
-    case "EARNING":
-      return "Paid call";
-    case "REFUND_REVERSAL":
-      return "Refund";
-    case "DISPUTE_DEBIT":
-      return "Dispute hold";
-    case "DISPUTE_RELEASE":
-      return "Dispute released";
-    case "PAYOUT_RESERVATION":
-      return "Monthly payout";
-    case "PAYOUT_RELEASE":
-      return "Payout returned";
-    default:
-      return "Balance adjustment";
-  }
-}
-
-function BalanceFigure({
-  label,
-  value,
-  note,
-  emphasis,
-}: {
-  label: string;
-  value: string;
-  note: string;
-  emphasis?: boolean;
-}) {
-  return (
-    <div className="flex min-w-0 flex-col gap-1">
-      <span className="text-muted-foreground text-(length:--text-meta)">
-        {label}
-      </span>
-      <strong
-        className={cn(
-          "font-semibold tracking-tight tabular-nums",
-          emphasis ? "text-3xl" : "text-xl",
-        )}
-      >
-        {value}
-      </strong>
-      <small className="text-muted-foreground text-(length:--text-meta)">
-        {note}
-      </small>
-    </div>
-  );
-}
-
-// Once a bank account is on file the creator can get paid, so this card
-// points at the Hotline: live, still in setup, or off air (none yet, or the
-// last one ended). Drafts and live shows link back to the studio.
-function HotlineSetupCard() {
-  const navigate = useNavigate();
-  const currentShow = useCurrentShow();
-  const createShow = useCreateShow();
-  const controlSize = useControlSize();
-  const show = currentShow.data;
-  const studioLink = "/dashboard";
-
-  return (
-    <Card aria-label="Hotline setup">
-      <CardContent className="flex flex-col gap-(--card-gap) tablet:flex-row tablet:items-center tablet:justify-between">
-        <div className="flex items-start gap-3">
-          <span className="border-border-strong bg-background grid size-10 shrink-0 place-items-center rounded-lg border text-[var(--sand-text)]">
-            <Phone className="size-5" />
-          </span>
-          <SectionHeader
-            eyebrow="Hotline"
-            title={
-              show?.status === "LIVE"
-                ? "Your Hotline is live"
-                : show?.status === "CREATED"
-                  ? "Finish setting up your Hotline"
-                  : "Your Hotline is off air"
-            }
-            description={
-              show?.status === "LIVE"
-                ? "Callers can join from your public page."
-                : show?.status === "CREATED"
-                  ? "Configure tiers and pricing, then go live."
-                  : "Set up a new Hotline whenever you're ready to take calls."
-            }
-          />
-        </div>
-        {currentShow.isPending ? null : show ? (
-          <Button
-            asChild
-            variant="secondary"
-            size={controlSize}
-            className="w-full tablet:w-auto"
-          >
-            <Link to={studioLink}>
-              {show.status === "LIVE" ? "Open studio" : "Continue setup"}
-              <ArrowRight className="size-4" />
-            </Link>
-          </Button>
-        ) : (
-          <Button
-            type="button"
-            size={controlSize}
-            className="w-full tablet:w-auto"
-            onClick={() =>
-              createShow.mutate(undefined, {
-                onSuccess: () => navigate(studioLink),
-              })
-            }
-            disabled={createShow.isPending || currentShow.isError}
-          >
-            <Plus className="size-4" />
-            {createShow.isPending ? "Creating…" : "Set up Hotline"}
-          </Button>
-        )}
-        {createShow.isError && (
-          <Alert variant="destructive">
-            <AlertDescription>
-              Unable to create your Hotline. Please try again.
-            </AlertDescription>
-          </Alert>
-        )}
-      </CardContent>
-    </Card>
-  );
-}
+// Creator payouts, laid out like other creator platforms' earnings pages:
+// what you can be paid and when, how earnings are trending, and every
+// balance movement. The revenue split lives in the Terms, not here.
 
 export function PayoutSettings() {
   const payouts = usePayoutStatus();
   const payoutSession = usePayoutAccountSession();
-  const creatorBalance = useCreatorBalance();
   const paymentActivity = usePaymentActivity();
-  const controlSize = useControlSize();
-  const balance = creatorBalance.data?.balance;
-  const ledger = creatorBalance.data?.activity ?? [];
+  const failure = paymentActivity.data?.payoutFailure;
   const ready = payouts.data?.ready === true;
-  const platformFeePercent = payouts.data?.platformFeePercent ?? 20;
-  const creatorPercent = 100 - platformFeePercent;
-  const setupLabel = payouts.data?.connected
-    ? payouts.data.transfersStatus === "active"
-      ? "Manage bank account"
-      : "Continue payout setup"
-    : "Set up payouts";
-  const money = (cents: number | undefined) =>
-    creatorBalance.isPending ? "—" : formatPrice(cents ?? 0);
 
   return (
     <div
       className="flex flex-col gap-(--stack-gap)"
       aria-label="Creator payouts"
     >
-      <Card>
-        <CardContent className="flex flex-col gap-(--card-gap)">
-          <div className="flex items-start gap-3">
-            <span
-              className={cn(
-                "mt-1.5 size-2 shrink-0 rounded-full",
-                ready
-                  ? "bg-[var(--green-light)] ring-4 ring-[var(--green)]/20"
-                  : "bg-muted-foreground",
-              )}
-            />
-            <div className="min-w-0">
-              <strong className="text-(length:--text-body) block">
-                {payouts.isPending
-                  ? "Checking payout account"
-                  : payouts.isError
-                    ? "Payout status unavailable"
-                    : ready
-                      ? "Payouts enabled"
-                      : "Action required"}
-              </strong>
-              <small className="text-muted-foreground text-(length:--text-meta)">
-                {ready
-                  ? "Your eligible balance is paid monthly"
-                  : "Finish setup before your first bank deposit"}
-              </small>
-            </div>
-          </div>
-
-          <div
-            aria-label="Creator balance"
-            className="grid grid-cols-2 gap-x-4 gap-y-(--card-gap) border-t pt-(--card-gap) laptop:grid-cols-3"
-          >
-            <div className="col-span-2 laptop:col-span-1">
-              <BalanceFigure
-                emphasis
-                label="Available for next payout"
-                value={money(balance?.availableCents)}
-                note={`Next payout: ${
-                  balance?.nextPayoutAt
-                    ? formatDate(balance.nextPayoutAt, { calendarDay: true })
-                    : "Paid monthly"
-                }`}
-              />
-            </div>
-            <BalanceFigure
-              label="Pending clearance"
-              value={money(balance?.pendingCents)}
-              note="Calls still inside the earnings hold"
-            />
-            <BalanceFigure
-              label="Total balance"
-              value={money(balance?.totalCents)}
-              note="Available and pending earnings"
-            />
-          </div>
-
-          {!payoutSession.data && (
-            <Button
-              variant={ready ? "secondary" : "default"}
-              size={controlSize}
-              type="button"
-              className="w-full tablet:w-fit"
-              onClick={() => payoutSession.mutate()}
-              disabled={payoutSession.isPending || payouts.isPending}
-            >
-              <Settings className="size-4" />
-              {payoutSession.isPending ? "Opening…" : setupLabel}
-            </Button>
-          )}
-        </CardContent>
-      </Card>
-
-      {payouts.data?.externalAccountPresent && <HotlineSetupCard />}
-
-      {paymentActivity.data?.payoutFailure && (
+      {failure && (
         <Alert variant="destructive">
           <AlertTitle>Your latest payout needs attention.</AlertTitle>
           <AlertDescription>
-            Update your payout details before another bank transfer can be sent.
-            Reference: {paymentActivity.data.payoutFailure.failureCode}
+            Update your bank details before another payout can be sent.
+            Reference: {failure.failureCode}
           </AlertDescription>
         </Alert>
       )}
@@ -259,7 +68,7 @@ export function PayoutSettings() {
           <CardContent className="flex flex-col gap-(--card-gap)">
             <SectionHeader
               eyebrow="Secure setup"
-              title="Connect your payout account"
+              title="Your payout account"
               action={
                 <Button
                   variant="ghost"
@@ -280,162 +89,459 @@ export function PayoutSettings() {
           </CardContent>
         </Card>
       ) : (
-        <Grid>
-          <GridItem span={6} tablet={8} phone={4}>
-            <Card className="h-full" aria-label="Payout destination">
-              <CardContent className="flex h-full flex-col gap-(--card-gap)">
-                <SectionHeader
-                  eyebrow="Payout destination"
-                  title="Bank account"
-                  action={
-                    <Badge variant={ready ? "success" : "outline"}>
-                      {ready ? "Verified" : "Setup needed"}
-                    </Badge>
-                  }
-                />
-                {payouts.data?.externalAccountPresent ? (
-                  <div className="bg-muted flex items-center gap-3 rounded-lg p-(--inset-pad)">
-                    <span className="bg-background grid size-10 shrink-0 place-items-center rounded-lg">
-                      <Landmark className="size-5" />
-                    </span>
-                    <div className="min-w-0">
-                      <strong className="block truncate text-sm">
-                        {payouts.data.externalAccountBankName || "Bank account"}
-                      </strong>
-                      <small className="text-muted-foreground text-xs">
-                        •••• {payouts.data.externalAccountLast4}
-                        {payouts.data.externalAccountCurrency
-                          ? ` · ${payouts.data.externalAccountCurrency.toUpperCase()}`
-                          : ""}
-                      </small>
-                    </div>
-                  </div>
-                ) : (
-                  <p className="text-muted-foreground text-sm">
-                    <strong className="text-foreground block">
-                      No payout account ready
-                    </strong>
-                    Add your identity and bank details through Stripe.
-                  </p>
-                )}
-              </CardContent>
-            </Card>
-          </GridItem>
-
-          <GridItem span={6} tablet={8} phone={4}>
-            <Card className="h-full" aria-label="Earnings split">
-              <CardContent className="flex flex-col gap-(--card-gap)">
-                <SectionHeader
-                  eyebrow="Every paid call"
-                  title="Your earnings split"
-                  action={
-                    <span className="text-2xl font-semibold tracking-tight">
-                      {creatorPercent}%
-                    </span>
-                  }
-                />
-                <div className="flex h-2 gap-0.5 overflow-hidden rounded-full">
-                  <span
-                    className="bg-primary rounded-l-full"
-                    style={{ width: `${creatorPercent}%` }}
-                  />
-                  <span
-                    className="bg-muted-foreground/40 rounded-r-full"
-                    style={{ width: `${platformFeePercent}%` }}
-                  />
-                </div>
-                <div className="flex justify-between text-xs">
-                  <span>
-                    <strong className="text-sm">{creatorPercent}%</strong>{" "}
-                    Creator share
-                  </span>
-                  <span className="text-muted-foreground">
-                    <strong className="text-foreground text-sm">
-                      {platformFeePercent}%
-                    </strong>{" "}
-                    Bling
-                  </span>
-                </div>
-                <p className="text-muted-foreground text-xs">
-                  You and Bling each pay half of the basic card fee. Bling
-                  absorbs the extra cent when it cannot split evenly.
-                </p>
-              </CardContent>
-            </Card>
-          </GridItem>
-        </Grid>
+        !payouts.isPending && !ready && <SetupPrompt />
       )}
-
-      <Card aria-label="Balance activity">
-        <CardContent className="flex flex-col gap-(--card-gap)">
-          <SectionHeader
-            eyebrow="Balance activity"
-            title="Recent transactions"
-            action={
-              <span className="text-muted-foreground text-xs">
-                {ledger.length} {ledger.length === 1 ? "entry" : "entries"}
-              </span>
-            }
-          />
-          {creatorBalance.isError ? (
-            <Alert variant="destructive">
-              <AlertDescription>
-                Unable to load your balance activity.
-              </AlertDescription>
-            </Alert>
-          ) : ledger.length === 0 ? (
-            <p className="text-muted-foreground text-sm">
-              <strong className="text-foreground block">
-                No balance activity yet
-              </strong>
-              Completed paid calls and monthly payouts will appear here.
-            </p>
-          ) : (
-            // A list, not a table: rows stay readable at phone width without
-            // horizontal scrolling.
-            <ul className="-mx-(--card-pad) divide-y border-t">
-              {ledger.map((entry) => {
-                const pending = new Date(entry.effectiveAt) > new Date();
-                return (
-                  <li
-                    key={entry.id}
-                    className="flex items-center gap-3 px-(--card-pad) py-3"
-                  >
-                    <div className="min-w-0 flex-1">
-                      <strong className="block truncate text-sm font-semibold">
-                        {ledgerEntryLabel(entry.kind)}
-                      </strong>
-                      <small className="text-muted-foreground text-xs">
-                        {formatDate(entry.createdAt)}
-                      </small>
-                    </div>
-                    <div className="flex flex-col items-end gap-1">
-                      <span
-                        className={cn(
-                          "text-sm font-semibold tabular-nums",
-                          entry.amountCents < 0 && "text-muted-foreground",
-                        )}
-                      >
-                        {entry.amountCents > 0 ? "+" : ""}
-                        {formatPrice(entry.amountCents)}
-                      </span>
-                      <Badge variant={pending ? "outline" : "success"}>
-                        {pending ? "Pending" : "Posted"}
-                      </Badge>
-                    </div>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-        </CardContent>
-      </Card>
 
       {payoutSession.isError && (
         <Alert variant="destructive">
           <AlertDescription>{payoutSession.error.message}</AlertDescription>
         </Alert>
       )}
+
+      <Grid>
+        <GridItem span={4} tablet={8} phone={4}>
+          <BalanceCard />
+        </GridItem>
+        <GridItem span={8} tablet={8} phone={4}>
+          <EarningsCard />
+        </GridItem>
+      </Grid>
+
+      <ActivityCard />
     </div>
+  );
+}
+
+/** Shown until Stripe has verified the creator's identity and bank. */
+function SetupPrompt() {
+  const payouts = usePayoutStatus();
+  const payoutSession = usePayoutAccountSession();
+  const controlSize = useControlSize();
+  const started = payouts.data?.connected === true;
+
+  return (
+    <Card aria-label="Payout setup">
+      <CardContent className="flex flex-col gap-(--card-gap) tablet:flex-row tablet:items-center tablet:justify-between">
+        <SectionHeader
+          title={started ? "Finish payout setup" : "Set up payouts"}
+          description={
+            payouts.isError
+              ? "Payout status is unavailable right now. Try again shortly."
+              : started
+                ? "Stripe needs a few more details before your first payout."
+                : "Add your identity and bank details through Stripe to get paid for calls."
+          }
+        />
+        <Button
+          size={controlSize}
+          type="button"
+          className="w-full tablet:w-auto"
+          onClick={() => payoutSession.mutate()}
+          disabled={payoutSession.isPending}
+        >
+          {payoutSession.isPending
+            ? "Opening…"
+            : started
+              ? "Continue setup"
+              : "Set up payouts"}
+        </Button>
+      </CardContent>
+    </Card>
+  );
+}
+
+// ------------------------------------------------------------ balance
+
+function BalanceCard() {
+  const payouts = usePayoutStatus();
+  const creatorBalance = useCreatorBalance();
+  const payoutSession = usePayoutAccountSession();
+  const controlSize = useControlSize();
+  const balance = creatorBalance.data?.balance;
+  const ready = payouts.data?.ready === true;
+  const money = (cents: number | undefined) =>
+    creatorBalance.isPending ? "—" : formatPrice(cents ?? 0);
+  const nextPayout = balance?.nextPayoutAt
+    ? formatDate(balance.nextPayoutAt, { calendarDay: true })
+    : "—";
+  const bank = payouts.data?.externalAccountPresent
+    ? `${payouts.data.externalAccountBankName || "Bank"} •••• ${payouts.data.externalAccountLast4}`
+    : "Not added";
+
+  return (
+    <Card className="h-full" aria-label="Balance">
+      <CardContent className="flex h-full flex-col gap-(--card-gap)">
+        <SectionHeader
+          title="Balance"
+          action={
+            payouts.isPending ? null : (
+              <Badge variant={ready ? "success" : "outline"}>
+                {ready ? "Payouts on" : "Setup needed"}
+              </Badge>
+            )
+          }
+        />
+
+        <div className="flex flex-col gap-1">
+          <span className="text-muted-foreground text-(length:--text-meta)">
+            Available for payout
+          </span>
+          <strong className="text-(length:--text-page-title) leading-none font-bold tracking-tight tabular-nums">
+            {money(balance?.availableCents)}
+          </strong>
+        </div>
+
+        <dl className="divide-y border-y text-(length:--text-body)">
+          <BalanceRow
+            label="On hold"
+            hint={`Clears ${PAYOUT_TERMS.earningsHoldDays} days after each call`}
+            value={money(balance?.pendingCents)}
+          />
+          <BalanceRow label="Next payout" value={nextPayout} />
+          <BalanceRow
+            label="Schedule"
+            value={`Monthly, $${PAYOUT_TERMS.payoutMinimumDollars} minimum`}
+          />
+          <BalanceRow label="Bank account" value={bank} />
+        </dl>
+
+        {payouts.data?.connected && !payoutSession.data && (
+          <Button
+            variant="secondary"
+            size={controlSize}
+            type="button"
+            className="mt-auto w-full"
+            onClick={() => payoutSession.mutate()}
+            disabled={payoutSession.isPending}
+          >
+            <Settings className="size-4" />
+            {payoutSession.isPending ? "Opening…" : "Manage bank account"}
+          </Button>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function BalanceRow({
+  label,
+  value,
+  hint,
+}: {
+  label: string;
+  value: string;
+  hint?: string;
+}) {
+  return (
+    <div className="flex items-baseline justify-between gap-4 py-3">
+      <dt className="min-w-0">
+        <span className="block">{label}</span>
+        {hint && (
+          <span className="text-muted-foreground block text-(length:--text-meta)">
+            {hint}
+          </span>
+        )}
+      </dt>
+      <dd className="min-w-0 truncate text-right font-semibold tabular-nums">
+        {value}
+      </dd>
+    </div>
+  );
+}
+
+// ------------------------------------------------------------ earnings
+
+type Range = "30d" | "12m";
+
+const chartConfig = {
+  cents: { label: "Earnings", color: "var(--accent)" },
+} satisfies ChartConfig;
+
+type Point = { key: string; label: string; title: string; cents: number };
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+const utcDay = (date: Date) => date.toISOString().slice(0, 10);
+const utcLabel = (date: Date, options: Intl.DateTimeFormatOptions) =>
+  new Intl.DateTimeFormat("en-US", { ...options, timeZone: "UTC" }).format(
+    date,
+  );
+
+/** Fills in quiet days (or months) so the chart has an even axis. */
+function buildSeries(days: EarningsDay[], range: Range): Point[] {
+  const today = new Date(Math.floor(Date.now() / DAY_MS) * DAY_MS);
+  if (range === "30d") {
+    const totals = new Map(days.map((day) => [day.date, day.cents]));
+    return Array.from({ length: 30 }, (_, index) => {
+      const date = new Date(today.getTime() - (29 - index) * DAY_MS);
+      const key = utcDay(date);
+      return {
+        key,
+        label: utcLabel(date, { month: "short", day: "numeric" }),
+        title: utcLabel(date, {
+          month: "long",
+          day: "numeric",
+          year: "numeric",
+        }),
+        cents: totals.get(key) ?? 0,
+      };
+    });
+  }
+  const totals = new Map<string, number>();
+  for (const day of days) {
+    const month = day.date.slice(0, 7);
+    totals.set(month, (totals.get(month) ?? 0) + day.cents);
+  }
+  return Array.from({ length: 12 }, (_, index) => {
+    const date = new Date(
+      Date.UTC(today.getUTCFullYear(), today.getUTCMonth() - (11 - index), 1),
+    );
+    const key = utcDay(date).slice(0, 7);
+    return {
+      key,
+      label: utcLabel(date, { month: "short" }),
+      title: utcLabel(date, { month: "long", year: "numeric" }),
+      cents: totals.get(key) ?? 0,
+    };
+  });
+}
+
+function EarningsCard() {
+  const [range, setRange] = useState<Range>("30d");
+  const earnings = useCreatorEarnings(range === "30d" ? 30 : 366);
+  const series = useMemo(
+    () => buildSeries(earnings.data?.days ?? [], range),
+    [earnings.data, range],
+  );
+  const total = series.reduce((sum, point) => sum + point.cents, 0);
+  const empty = !earnings.isPending && series.every((point) => !point.cents);
+
+  return (
+    <Card className="h-full" aria-label="Earnings">
+      <CardContent className="flex h-full flex-col gap-(--card-gap)">
+        <SectionHeader
+          title="Earnings"
+          action={
+            <Tabs
+              value={range}
+              onValueChange={(value) => setRange(value as Range)}
+            >
+              <TabsList aria-label="Earnings period">
+                <TabsTrigger value="30d">30 days</TabsTrigger>
+                <TabsTrigger value="12m">12 months</TabsTrigger>
+              </TabsList>
+            </Tabs>
+          }
+        />
+
+        <div className="flex flex-col gap-1">
+          <span className="text-muted-foreground text-(length:--text-meta)">
+            {range === "30d" ? "Last 30 days" : "Last 12 months"}, after refunds
+          </span>
+          <strong className="text-(length:--text-page-title) leading-none font-bold tracking-tight tabular-nums">
+            {earnings.isPending ? "—" : formatPrice(total)}
+          </strong>
+        </div>
+
+        {earnings.isError ? (
+          <Alert variant="destructive">
+            <AlertDescription>Unable to load your earnings.</AlertDescription>
+          </Alert>
+        ) : (
+          <div className="relative mt-auto">
+            <ChartContainer
+              config={chartConfig}
+              className="aspect-auto h-48 w-full"
+              aria-hidden={empty}
+            >
+              <BarChart data={series} margin={{ left: 0, right: 0 }}>
+                <CartesianGrid vertical={false} />
+                <XAxis
+                  dataKey="label"
+                  tickLine={false}
+                  axisLine={false}
+                  tickMargin={8}
+                  minTickGap={24}
+                />
+                <ChartTooltip
+                  cursor={false}
+                  content={
+                    <ChartTooltipContent
+                      hideIndicator
+                      labelFormatter={(_, payload) =>
+                        (payload?.[0]?.payload as Point | undefined)?.title
+                      }
+                      formatter={(value) => (
+                        <span className="font-semibold tabular-nums">
+                          {formatPrice(Number(value))}
+                        </span>
+                      )}
+                    />
+                  }
+                />
+                <Bar dataKey="cents" fill="var(--color-cents)" radius={4} />
+              </BarChart>
+            </ChartContainer>
+            {empty && (
+              <p className="text-muted-foreground absolute inset-0 grid place-items-center text-center text-(length:--text-meta)">
+                Earnings from paid calls will show here.
+              </p>
+            )}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+// ------------------------------------------------------------ activity
+
+// The creator-facing name for each ledger kind: money moving, not an enum.
+function ledgerEntryLabel(kind: string) {
+  switch (kind) {
+    case "EARNING":
+      return "Paid call";
+    case "REFUND_REVERSAL":
+      return "Refund";
+    case "DISPUTE_DEBIT":
+      return "Dispute hold";
+    case "DISPUTE_RELEASE":
+      return "Dispute released";
+    case "PAYOUT_RESERVATION":
+      return "Payout to bank";
+    case "PAYOUT_RELEASE":
+      return "Payout returned";
+    default:
+      return "Balance adjustment";
+  }
+}
+
+function entryStatus(entry: LedgerEntry) {
+  const pending = new Date(entry.effectiveAt) > new Date();
+  return {
+    pending,
+    badge: (
+      <Badge variant={pending ? "outline" : "success"}>
+        {pending ? "On hold" : "Cleared"}
+      </Badge>
+    ),
+    note: pending ? `Clears ${formatDate(entry.effectiveAt)}` : undefined,
+  };
+}
+
+function Amount({ cents }: { cents: number }) {
+  return (
+    <span
+      className={cn(
+        "font-semibold tabular-nums",
+        cents < 0 && "text-muted-foreground",
+      )}
+    >
+      {formatSignedPrice(cents)}
+    </span>
+  );
+}
+
+function ActivityCard() {
+  const creatorBalance = useCreatorBalance();
+  // Newest first by when it happened (the Go API orders by when it clears).
+  const entries = useMemo(
+    () =>
+      [...(creatorBalance.data?.activity ?? [])].sort((a, b) =>
+        b.createdAt.localeCompare(a.createdAt),
+      ),
+    [creatorBalance.data],
+  );
+
+  return (
+    <Card aria-label="Balance activity">
+      <CardContent className="flex flex-col gap-(--card-gap)">
+        <SectionHeader
+          title="Activity"
+          description="Paid calls, refunds and payouts, newest first."
+        />
+        {creatorBalance.isError ? (
+          <Alert variant="destructive">
+            <AlertDescription>Unable to load your activity.</AlertDescription>
+          </Alert>
+        ) : creatorBalance.isPending ? null : entries.length === 0 ? (
+          <p className="text-muted-foreground text-(length:--text-body)">
+            Nothing yet. Paid calls and payouts will appear here.
+          </p>
+        ) : (
+          <>
+            {/* Phones: compact rows. */}
+            <ul className="-mx-(--card-pad) divide-y border-t tablet:hidden">
+              {entries.map((entry) => {
+                const status = entryStatus(entry);
+                return (
+                  <li
+                    key={entry.id}
+                    className="flex items-center gap-3 px-(--card-pad) py-3"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <strong className="block truncate text-(length:--text-body) font-semibold">
+                        {ledgerEntryLabel(entry.kind)}
+                      </strong>
+                      <small className="text-muted-foreground text-(length:--text-meta)">
+                        {formatDate(entry.createdAt)}
+                        {status.note ? ` · ${status.note}` : ""}
+                      </small>
+                    </div>
+                    <div className="flex flex-col items-end gap-1">
+                      <Amount cents={entry.amountCents} />
+                      {status.badge}
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+
+            {/* Tablet and up: a table. */}
+            <div className="-mx-(--card-pad) max-tablet:hidden">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="pl-(--card-pad)">Date</TableHead>
+                    <TableHead>Description</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead className="pr-(--card-pad) text-right">
+                      Amount
+                    </TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {entries.map((entry) => {
+                    const status = entryStatus(entry);
+                    return (
+                      <TableRow key={entry.id}>
+                        <TableCell className="text-muted-foreground pl-(--card-pad)">
+                          {formatDate(entry.createdAt)}
+                        </TableCell>
+                        <TableCell className="font-medium">
+                          {ledgerEntryLabel(entry.kind)}
+                        </TableCell>
+                        <TableCell>
+                          <span className="flex items-center gap-2">
+                            {status.badge}
+                            {status.note && (
+                              <span className="text-muted-foreground text-(length:--text-meta)">
+                                {status.note}
+                              </span>
+                            )}
+                          </span>
+                        </TableCell>
+                        <TableCell className="pr-(--card-pad) text-right">
+                          <Amount cents={entry.amountCents} />
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </div>
+          </>
+        )}
+      </CardContent>
+    </Card>
   );
 }

@@ -483,6 +483,11 @@ export function useCreatorBalance() {
   });
 }
 
+/** Net earnings per day for the payouts chart (see convex/payouts.ts). */
+export function useCreatorEarnings(days: number) {
+  return useQuery(convexQuery(api.payouts.earnings, { days }));
+}
+
 export function fetchPayoutAccountSession() {
   return runAction(api.payouts.accountSession, {});
 }

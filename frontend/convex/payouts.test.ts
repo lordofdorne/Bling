@@ -491,6 +491,52 @@ describe("the ledger", () => {
   });
 });
 
+describe("earnings chart", () => {
+  it("totals net earnings per day, by when they were earned", async () => {
+    const env = setup();
+    const { host } = await onboardedCreator(env);
+    const { attemptId } = await liveCall(env, host);
+    const intent = (await env.t.run((ctx) => ctx.db.get(attemptId)))!
+      .stripePaymentIntentId!;
+    // Two days later, support refunds half of it.
+    vi.advanceTimersByTime(48 * HOUR);
+    const event = await stripe.signedEvent("refund.created", {
+      id: "re_half",
+      object: "refund",
+      payment_intent: intent,
+      amount: 250,
+      currency: "usd",
+      status: "succeeded",
+    });
+    await env.t.fetch("/stripe/webhook", {
+      method: "POST",
+      body: event.payload,
+      headers: { "stripe-signature": event.signature },
+    });
+
+    expect(await host.client.query(api.payouts.earnings, { days: 30 })).toEqual(
+      {
+        currency: "usd",
+        days: [
+          { date: "2026-10-09", cents: 378 },
+          { date: "2026-10-11", cents: -189 },
+        ],
+      },
+    );
+    // A window that starts after the call leaves the earning out.
+    expect(
+      (await host.client.query(api.payouts.earnings, { days: 1 })).days,
+    ).toEqual([{ date: "2026-10-11", cents: -189 }]);
+    // Activity lists the refund first: it happened later, though the
+    // earning clears later still.
+    expect(
+      (await host.client.query(api.payouts.balance, {})).activity.map(
+        (entry) => entry.kind,
+      ),
+    ).toEqual(["REFUND_REVERSAL", "EARNING"]);
+  });
+});
+
 describe("monthly payout run", () => {
   it("works out the period being paid", () => {
     expect(payoutPeriod(OCT_9, 1)).toEqual({
