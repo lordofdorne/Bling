@@ -15,13 +15,19 @@ export function formatCallLength(seconds: number) {
   return `${Number(minutes.toFixed(2))} ${minutes === 1 ? "minute" : "minutes"}`;
 }
 
-export function formatDate(value: string) {
+/**
+ * A date in the viewer's time zone. Pass `calendarDay` for dates the server
+ * stores as midnight UTC (the payout day), so they don't slip back a day in
+ * the Americas.
+ */
+export function formatDate(value: string, { calendarDay = false } = {}) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "";
   return new Intl.DateTimeFormat("en-US", {
     day: "numeric",
     month: "short",
     year: "numeric",
+    timeZone: calendarDay ? "UTC" : undefined,
   }).format(date);
 }
 

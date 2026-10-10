@@ -206,7 +206,7 @@ export function PayoutSettings() {
                 value={money(balance?.availableCents)}
                 note={`Next payout: ${
                   balance?.nextPayoutAt
-                    ? formatDate(balance.nextPayoutAt)
+                    ? formatDate(balance.nextPayoutAt, { calendarDay: true })
                     : "Paid monthly"
                 }`}
               />
