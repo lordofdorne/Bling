@@ -4,7 +4,7 @@ import { internal } from "./_generated/api";
 import { httpAction, internalMutation } from "./_generated/server";
 import { adjustForDispute, reverseForRefund } from "./lib/ledger";
 import { recordCaptured, recordNotCaptured } from "./lib/payments";
-import { stripeClient, webhookSecret } from "./lib/stripe";
+import { stripeClient, webhookSecrets } from "./lib/stripe";
 
 // Stripe webhook, served at <CONVEX_SITE_URL>/stripe/webhook. Ported from
 // backend/internal/httpapi/payment.go.
@@ -38,8 +38,8 @@ const idOf = (value: string | { id: string } | null | undefined) =>
   typeof value === "string" ? value : value?.id;
 
 export const stripeWebhook = httpAction(async (ctx, request) => {
-  const secret = webhookSecret();
-  if (!secret) {
+  const secrets = webhookSecrets();
+  if (!secrets.length) {
     return Response.json(
       { error: { code: "WEBHOOK_DISABLED" } },
       { status: 503 },
@@ -47,14 +47,21 @@ export const stripeWebhook = httpAction(async (ctx, request) => {
   }
   const body = await request.text();
   if (body.length > 1 << 20) return new Response(null, { status: 413 });
-  let event: Stripe.Event;
-  try {
-    event = await stripeClient().webhooks.constructEventAsync(
-      body,
-      request.headers.get("stripe-signature") ?? "",
-      secret,
-    );
-  } catch {
+  const signature = request.headers.get("stripe-signature") ?? "";
+  let event: Stripe.Event | undefined;
+  for (const secret of secrets) {
+    try {
+      event = await stripeClient().webhooks.constructEventAsync(
+        body,
+        signature,
+        secret,
+      );
+      break;
+    } catch {
+      // Signed for the other destination, or forged; try the next secret.
+    }
+  }
+  if (!event) {
     return Response.json(
       { error: { code: "INVALID_WEBHOOK_SIGNATURE" } },
       { status: 400 },

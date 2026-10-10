@@ -9,6 +9,7 @@ import { expectCode, free, type Participant, setup } from "./test.helpers";
 import {
   createFakeStripe,
   type FakeStripe,
+  CONNECT_WEBHOOK_SECRET,
   WEBHOOK_SECRET,
 } from "./test.stripe";
 
@@ -18,7 +19,7 @@ vi.mock("./lib/stripe", async (importOriginal) => ({
   ...(await importOriginal<typeof import("./lib/stripe")>()),
   stripeClient: () => stripe.client,
   publishableKey: () => "pk_test_fake",
-  webhookSecret: () => WEBHOOK_SECRET,
+  webhookSecrets: () => [WEBHOOK_SECRET, CONNECT_WEBHOOK_SECRET],
 }));
 
 const HOUR = 60 * 60_000;
@@ -289,7 +290,7 @@ describe("payout setup", () => {
       const signature =
         await stripe.client.webhooks.generateTestHeaderStringAsync({
           payload,
-          secret: WEBHOOK_SECRET,
+          secret: CONNECT_WEBHOOK_SECRET,
         });
       await env.t.fetch("/stripe/webhook", {
         method: "POST",

@@ -5,7 +5,11 @@ import { fail } from "./errors";
 // runs in Convex's default runtime, so no "use node" file is needed.
 //
 // Environment (npx convex env set): STRIPE_SECRET_KEY,
-// STRIPE_PUBLISHABLE_KEY, STRIPE_WEBHOOK_SECRET.
+// STRIPE_PUBLISHABLE_KEY, STRIPE_WEBHOOK_SECRET, and
+// STRIPE_CONNECT_WEBHOOK_SECRET. Stripe sends events about Bling's own
+// account (payments, refunds, disputes) and about creators' connected
+// accounts (account updates, payouts) through separate destinations, each
+// with its own signing secret; both point at the same URL.
 //
 // Tests replace this module with vi.mock, so nothing here talks to Stripe in
 // the test suite.
@@ -22,8 +26,12 @@ export function publishableKey(): string {
   return key;
 }
 
-export function webhookSecret(): string | undefined {
-  return process.env.STRIPE_WEBHOOK_SECRET || undefined;
+/** Signing secrets the webhook accepts; empty when webhooks are off. */
+export function webhookSecrets(): string[] {
+  return [
+    process.env.STRIPE_WEBHOOK_SECRET,
+    process.env.STRIPE_CONNECT_WEBHOOK_SECRET,
+  ].filter((secret): secret is string => !!secret);
 }
 
 /**

@@ -53,7 +53,7 @@ Differences from the Go API, all deliberate:
 - **Ending a show releases waiting callers' card holds** right away. The Go API left them to lapse after seven days.
 - **The scheduler, not Workpool, runs captures and refunds.** Captures happen one at a time per show and refunds are rare, so Workpool's concurrency limits are not needed yet.
 
-Environment, set with `npx convex env set`: `STRIPE_SECRET_KEY`, `STRIPE_PUBLISHABLE_KEY`, `STRIPE_WEBHOOK_SECRET`.
+Environment, set with `npx convex env set`: `STRIPE_SECRET_KEY`, `STRIPE_PUBLISHABLE_KEY`, `STRIPE_WEBHOOK_SECRET` (the destination for Bling's own account) and `STRIPE_CONNECT_WEBHOOK_SECRET` (the destination for connected accounts: `account.updated` and `payout.*`). Both destinations use the same URL.
 
 Verified on 2026-10-09 with Stripe test mode against the local backend, with webhooks forwarded by `stripe listen`: authorize created a manual-capture PaymentIntent, a test card confirmed it, `joinPaid` verified the hold, selecting the caller captured $5 and opened the call, ending it before LIVE refunded $5, and the three resulting webhooks were each applied once. A forged signature gets 400. The unit tests (`payments.test.ts`) use an in-memory Stripe but real webhook signing.
 

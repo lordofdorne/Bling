@@ -6,6 +6,7 @@ import Stripe from "stripe";
 // Convex does not deploy files with more than one dot in their name.
 
 export const WEBHOOK_SECRET = "whsec_test_secret";
+export const CONNECT_WEBHOOK_SECRET = "whsec_test_connect_secret";
 
 type Intent = {
   id: string;
