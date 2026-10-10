@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Link, Navigate, useNavigate, useSearchParams } from "react-router-dom";
-import { ArrowRight, Phone, Sparkles } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 import { useLogin, useMe, useRegister } from "../lib/auth";
 import {
   loginSchema,
@@ -62,25 +62,6 @@ export function AuthPage({ mode }: AuthPageProps) {
           </h2>
           <p className="text-muted-foreground mt-4 text-sm">
             The best part of going live? The people on the other end.
-          </p>
-          <div
-            className="relative mt-10 grid h-64 place-items-center rounded-2xl border border-[var(--mauve-border)] bg-[var(--mauve-surface)]"
-            aria-hidden="true"
-          >
-            <span className="border-primary/30 absolute size-44 animate-pulse rounded-full border" />
-            <span className="bg-background text-primary grid size-24 place-items-center rounded-full">
-              <Phone className="size-10" />
-            </span>
-            <span className="text-[var(--sand-text)] absolute top-6 right-8">
-              <Sparkles className="size-7" />
-            </span>
-            <span className="text-muted-foreground absolute bottom-5 flex items-center gap-2 text-xs">
-              <span className="bg-primary size-2 rounded-full" />
-              Good conversations start here.
-            </span>
-          </div>
-          <p className="text-muted-foreground mt-6 text-xs">
-            Your voice. Your space. Your Bling.
           </p>
         </section>
 

@@ -10,7 +10,6 @@ import {
   Phone,
   Radio,
   Search,
-  Sparkles,
   X,
 } from "lucide-react";
 import {
@@ -32,19 +31,17 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
+import { Wordmark } from "./Logo";
 import { cn } from "@/lib/utils";
 
 export function Brand() {
   return (
     <Link
-      className="flex min-h-(--touch-min) items-center gap-2 text-2xl font-extrabold tracking-tight"
+      className="text-foreground flex min-h-(--touch-min) items-center"
       to="/"
       aria-label="Bling home"
     >
-      <span className="bg-primary text-primary-foreground grid size-8 place-items-center rounded-xl">
-        <Sparkles className="size-[18px]" />
-      </span>
-      bling<span className="text-primary -ml-2">.</span>
+      <Wordmark />
     </Link>
   );
 }
