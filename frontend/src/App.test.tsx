@@ -764,12 +764,13 @@ describe("App routes", () => {
     );
 
     renderAt("/dashboard/settings/payments");
-    expect(await screen.findByText("Refunded")).toBeInTheDocument();
-    expect(
-      screen.getByText(
-        "Creator share: $19.49 · includes your $0.51 half of the card fee",
-      ),
-    ).toBeInTheDocument();
+    // Rows on phones, a table from tablet up; the test DOM has both.
+    expect((await screen.findAllByText("Refunded")).length).toBe(2);
+    expect(screen.getAllByText("$25.00").length).toBe(2);
+    // Fees are Bling's 20% plus the creator's half of the card fee.
+    expect(screen.getByText("−$5.51")).toBeInTheDocument();
+    // A refunded call earns nothing.
+    expect(screen.queryByText("$19.49")).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("link", { name: "Creator payouts" }));
     expect(
       await screen.findByRole("heading", { name: "Balance" }),
@@ -943,6 +944,102 @@ describe("App routes", () => {
     ).toBeInTheDocument();
     expect(
       screen.getByText("Nothing yet. Paid calls and payouts will appear here."),
+    ).toBeInTheDocument();
+  });
+
+  it("shows account details and starts a password change with the email filled in", async () => {
+    const creator = {
+      id: "user-1",
+      username: "alice",
+      email: "alice@example.com",
+      createdAt: "2026-08-24T12:00:00Z",
+    };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        if (String(input) === "/api/v1/me")
+          return Response.json({ data: { user: creator } });
+        return new Response(null, { status: 404 });
+      }),
+    );
+
+    renderAt("/dashboard/settings/account");
+
+    expect(await screen.findByText("alice@example.com")).toBeInTheDocument();
+    expect(screen.getByText("@alice")).toBeInTheDocument();
+    expect(screen.getByText("/u/alice")).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "Contact support" }),
+    ).toHaveAttribute("href", expect.stringContaining("mailto:"));
+
+    fireEvent.click(screen.getByRole("link", { name: "Change" }));
+    expect(await screen.findByLabelText("Email")).toHaveValue(
+      "alice@example.com",
+    );
+  });
+
+  it("asks before removing a saved card", async () => {
+    const creator = {
+      id: "user-1",
+      username: "alice",
+      email: "alice@example.com",
+      createdAt: "2026-08-24T12:00:00Z",
+    };
+    let removed = false;
+    const fetchMock = vi.fn(
+      async (input: RequestInfo | URL, init?: RequestInit) => {
+        const path = String(input);
+        if (path === "/api/v1/me")
+          return Response.json({ data: { user: creator } });
+        if (path === "/api/v1/me/payment-methods")
+          return Response.json({
+            data: {
+              paymentMethods: removed
+                ? []
+                : [
+                    {
+                      id: "pm_1",
+                      brand: "visa",
+                      last4: "4242",
+                      expMonth: 4,
+                      expYear: 2031,
+                    },
+                  ],
+            },
+          });
+        if (
+          path === "/api/v1/me/payment-methods/pm_1" &&
+          init?.method === "DELETE"
+        ) {
+          removed = true;
+          return new Response(null, { status: 204 });
+        }
+        if (path === "/api/v1/payments/activity")
+          return Response.json({ data: { activity: [], payoutFailure: null } });
+        return new Response(null, { status: 404 });
+      },
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderAt("/dashboard/settings/payments");
+
+    expect(await screen.findByText("Visa •••• 4242")).toBeInTheDocument();
+    expect(screen.getByText("Expires 04/31")).toBeInTheDocument();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Remove Visa ending in 4242" }),
+    );
+    // Nothing is removed until the dialog is confirmed.
+    expect(
+      await screen.findByRole("heading", {
+        name: "Remove Visa ending in 4242?",
+      }),
+    ).toBeInTheDocument();
+    expect(removed).toBe(false);
+    fireEvent.click(screen.getByRole("button", { name: "Remove card" }));
+    expect(
+      await screen.findByText(
+        "No saved cards. Add one now, or save one during your next paid call.",
+      ),
     ).toBeInTheDocument();
   });
 

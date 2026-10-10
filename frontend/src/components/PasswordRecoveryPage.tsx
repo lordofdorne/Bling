@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Link, Navigate, useNavigate } from "react-router-dom";
+import { Link, Navigate, useLocation, useNavigate } from "react-router-dom";
 import { ArrowLeft } from "lucide-react";
 import {
   passwordResetByCode,
@@ -121,9 +121,15 @@ function ForgotPasswordForm({
   onDone: (email: string) => void;
 }) {
   const forgot = useForgotPassword();
+  // Account settings passes the signed-in email in navigation state (never
+  // the URL, which ends up in logs and history).
+  const location = useLocation();
+  const state = location.state as { email?: unknown } | null;
   const form = useForm<ForgotPasswordValues>({
     resolver: zodResolver(forgotPasswordSchema),
-    defaultValues: { email: "" },
+    defaultValues: {
+      email: typeof state?.email === "string" ? state.email : "",
+    },
   });
 
   const submit = form.handleSubmit(async ({ email }) => {

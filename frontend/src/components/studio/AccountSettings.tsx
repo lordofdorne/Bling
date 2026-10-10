@@ -1,65 +1,192 @@
+import { useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
-import { LogOut } from "lucide-react";
+import { Check, Copy, ExternalLink, LogOut } from "lucide-react";
 import { useMe } from "../../lib/auth";
 import { useControlSize } from "../../lib/design";
+import { SITE } from "../../lib/site";
 import { ThemeSwitch } from "../ThemeSwitch";
 import { SectionHeader } from "../page";
 import { useSignOut } from "./StudioShell";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Separator } from "@/components/ui/separator";
+
+// Account settings in the usual shape: one card per topic, each row a
+// setting with its value and, where there is one, its action on the right.
+// Destructive things sit last.
 
 export function AccountSettings({ username }: { username: string }) {
   const me = useMe();
+  const email = me.data?.email ?? "";
+  const channelPath = `/u/${username}`;
+
+  return (
+    <div className="flex flex-col gap-(--stack-gap)">
+      <Card aria-label="Account">
+        <CardContent className="flex flex-col gap-(--card-gap)">
+          <SectionHeader
+            title="Account"
+            description="How you sign in and where fans find you."
+          />
+          <dl className="divide-y border-y">
+            <SettingRow
+              label="Username"
+              hint="Your username is permanent."
+              value={`@${username}`}
+            />
+            <SettingRow label="Email" value={email || "—"} />
+            <SettingRow
+              label="Public channel"
+              value={channelPath}
+              action={<ChannelActions path={channelPath} />}
+            />
+          </dl>
+        </CardContent>
+      </Card>
+
+      <Card aria-label="Security">
+        <CardContent className="flex flex-col gap-(--card-gap)">
+          <SectionHeader
+            title="Security"
+            description="Changing your password signs you out everywhere else."
+          />
+          <dl className="divide-y border-y">
+            <SettingRow
+              label="Password"
+              value="••••••••••••"
+              action={
+                <Button asChild variant="secondary" size="sm">
+                  <Link to="/forgot-password" state={{ email }}>
+                    Change
+                  </Link>
+                </Button>
+              }
+            />
+          </dl>
+        </CardContent>
+      </Card>
+
+      <Card aria-label="Appearance">
+        <CardContent className="flex flex-col gap-(--card-gap)">
+          <SectionHeader
+            title="Appearance"
+            description="Dark, light, or match your device."
+          />
+          <ThemeSwitch />
+        </CardContent>
+      </Card>
+
+      <SessionCard />
+
+      <Card aria-label="Delete account">
+        <CardContent className="flex flex-col gap-(--card-gap) tablet:flex-row tablet:items-center tablet:justify-between">
+          <SectionHeader
+            title="Delete account"
+            description="Close your account and delete your profile and data. Payment records are kept as the law requires."
+          />
+          <Button
+            asChild
+            variant="outline"
+            className="border-destructive text-destructive hover:bg-destructive/10 w-full tablet:w-auto"
+          >
+            <a
+              href={`mailto:${SITE.supportEmail}?subject=${encodeURIComponent(
+                "Delete my Bling account",
+              )}`}
+            >
+              Contact support
+            </a>
+          </Button>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+function SettingRow({
+  label,
+  value,
+  hint,
+  action,
+}: {
+  label: string;
+  value: ReactNode;
+  hint?: string;
+  action?: ReactNode;
+}) {
+  return (
+    <div className="flex min-h-(--touch-min) items-center gap-4 py-3">
+      <div className="flex min-w-0 flex-1 flex-col gap-1 tablet:flex-row tablet:items-baseline tablet:gap-6">
+        <dt className="text-muted-foreground shrink-0 text-(length:--text-meta) tablet:w-36 tablet:text-(length:--text-body)">
+          {label}
+        </dt>
+        <dd className="m-0 min-w-0">
+          <span className="block truncate font-medium">{value}</span>
+          {hint && (
+            <span className="text-muted-foreground block text-(length:--text-meta)">
+              {hint}
+            </span>
+          )}
+        </dd>
+      </div>
+      {action && <div className="flex shrink-0 gap-2">{action}</div>}
+    </div>
+  );
+}
+
+function ChannelActions({ path }: { path: string }) {
+  const [copied, setCopied] = useState(false);
+
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(`${window.location.origin}${path}`);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // Clipboard access can be refused; the link is still visible to copy.
+    }
+  }
+
+  return (
+    <>
+      <Button
+        variant="secondary"
+        size="icon"
+        type="button"
+        onClick={() => void copy()}
+        aria-label={copied ? "Link copied" : "Copy channel link"}
+      >
+        {copied ? <Check className="size-4" /> : <Copy className="size-4" />}
+      </Button>
+      <Button asChild variant="secondary" size="icon">
+        <Link to={path} aria-label="Open your channel">
+          <ExternalLink className="size-4" />
+        </Link>
+      </Button>
+    </>
+  );
+}
+
+/**
+ * On laptop and up, Sign out also lives at the foot of the sidebar. Phones
+ * and tablets reach it here, never from the tab bar.
+ */
+function SessionCard() {
   const signOut = useSignOut();
   const controlSize = useControlSize();
-  return (
-    <div className="flex flex-col gap-(--section-gap)">
-      <section
-        aria-label="Appearance"
-        className="flex flex-col gap-(--stack-gap)"
-      >
-        <SectionHeader
-          title="Appearance"
-          description="Switch between dark, light, or your device setting."
-        />
-        <ThemeSwitch />
-      </section>
 
-      <section aria-label="Account" className="flex flex-col gap-(--stack-gap)">
+  return (
+    <Card aria-label="Session">
+      <CardContent className="flex flex-col gap-(--card-gap) tablet:flex-row tablet:items-center tablet:justify-between">
         <SectionHeader
-          title="Account"
-          description="Your sign-in details and permanent channel address."
+          title="Sign out"
+          description="Sign out of Bling on this device."
         />
-        <Card>
-          <CardContent>
-            <dl className="text-sm">
-              <Row label="Username" value={`@${username}`} />
-              <Separator />
-              <Row label="Email address" value={me.data?.email ?? "—"} />
-              <Separator />
-              <Row
-                label="Public channel"
-                value={
-                  <Link
-                    className="font-semibold underline underline-offset-4"
-                    to={`/u/${username}`}
-                  >
-                    /u/{username}
-                  </Link>
-                }
-              />
-            </dl>
-          </CardContent>
-        </Card>
-        {/* On laptop and up, Sign out also lives at the foot of the sidebar.
-            Phones and tablets reach it here, never from the tab bar. */}
         <Button
-          variant="outline"
+          variant="secondary"
           size={controlSize}
           type="button"
-          className="w-full tablet:w-fit"
+          className="w-full tablet:w-auto"
           onClick={() => void signOut.run()}
           disabled={signOut.isPending}
         >
@@ -73,16 +200,7 @@ export function AccountSettings({ username }: { username: string }) {
             </AlertDescription>
           </Alert>
         )}
-      </section>
-    </div>
-  );
-}
-
-function Row({ label, value }: { label: string; value: React.ReactNode }) {
-  return (
-    <div className="flex items-baseline justify-between gap-6 py-4 first:pt-0 last:pb-0">
-      <dt className="text-muted-foreground shrink-0">{label}</dt>
-      <dd className="m-0 min-w-0 truncate text-right">{value}</dd>
-    </div>
+      </CardContent>
+    </Card>
   );
 }
