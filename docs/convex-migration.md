@@ -124,4 +124,4 @@ The first design was much slower (ICE p50 278 ms): every send counted the recipi
 
 - **Email.** Password reset sends through Resend: verify the sending domain in Resend, then set `AUTH_RESEND_KEY` and `AUTH_EMAIL_FROM` on the production deployment. Email verification at sign-up is not on yet (it would use the same provider via `Password({ verify })`).
 - **Convex region and plan** for production, chosen before phase 7.
-- **TURN.** coturn on a VPS works with the current shared-secret credentials; a managed TURN service needs its own credential action in phase 2.
+- **TURN.** Production uses Cloudflare's managed TURN: `rtc.config` mints credentials per participant from `CLOUDFLARE_TURN_KEY_ID` and `CLOUDFLARE_TURN_API_TOKEN` (4-hour lifetime, port 53 URLs dropped), falling back to STUN only if Cloudflare is unreachable. A self-hosted coturn with `TURN_URL` and `TURN_SHARED_SECRET` still works when Cloudflare isn't configured.

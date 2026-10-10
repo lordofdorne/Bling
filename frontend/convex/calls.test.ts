@@ -440,4 +440,79 @@ describe("RTC configuration", () => {
       "CALL_NOT_FOUND",
     );
   });
+
+  describe("with Cloudflare TURN", () => {
+    beforeEach(() => {
+      vi.stubEnv("CLOUDFLARE_TURN_KEY_ID", "key-id");
+      vi.stubEnv("CLOUDFLARE_TURN_API_TOKEN", "api-token");
+      // Cloudflare wins over a coturn configuration.
+      vi.stubEnv("TURN_URL", "turn:turn.blinghotline.com:3478");
+      vi.stubEnv("TURN_SHARED_SECRET", "shared-secret");
+    });
+    afterEach(() => vi.unstubAllGlobals());
+
+    it("mints credentials per request and drops port 53", async () => {
+      const fetchMock = vi.fn(async (url: string, init: RequestInit) => {
+        expect(url).toBe(
+          "https://rtc.live.cloudflare.com/v1/turn/keys/key-id/credentials/generate-ice-servers",
+        );
+        expect(new Headers(init.headers).get("Authorization")).toBe(
+          "Bearer api-token",
+        );
+        expect(JSON.parse(String(init.body))).toEqual({ ttl: 4 * 60 * 60 });
+        return Response.json(
+          {
+            iceServers: [
+              {
+                urls: [
+                  "stun:stun.cloudflare.com:3478",
+                  "stun:stun.cloudflare.com:53",
+                ],
+              },
+              {
+                urls: [
+                  "turn:turn.cloudflare.com:3478?transport=udp",
+                  "turn:turn.cloudflare.com:53?transport=udp",
+                  "turns:turn.cloudflare.com:443?transport=tcp",
+                ],
+                username: "cf-user",
+                credential: "cf-secret",
+              },
+            ],
+          },
+          { status: 201 },
+        );
+      });
+      vi.stubGlobal("fetch", fetchMock);
+      const { caller, callId } = await connectedCall();
+
+      expect(await caller.client.action(api.rtc.config, { callId })).toEqual({
+        iceServers: [
+          { urls: ["stun:stun.cloudflare.com:3478"] },
+          {
+            urls: [
+              "turn:turn.cloudflare.com:3478?transport=udp",
+              "turns:turn.cloudflare.com:443?transport=tcp",
+            ],
+            username: "cf-user",
+            credential: "cf-secret",
+          },
+        ],
+      });
+      await caller.client.action(api.rtc.config, { callId });
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+    });
+
+    it("falls back to STUN when Cloudflare is unreachable", async () => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async () => new Response("unavailable", { status: 503 })),
+      );
+      vi.spyOn(console, "error").mockImplementation(() => {});
+      const { caller, callId } = await connectedCall();
+      expect(await caller.client.action(api.rtc.config, { callId })).toEqual({
+        iceServers: [{ urls: ["stun:stun.cloudflare.com:3478"] }],
+      });
+    });
+  });
 });
