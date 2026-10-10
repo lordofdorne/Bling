@@ -69,8 +69,9 @@ function BalanceFigure({
   );
 }
 
-// Once a bank account is on file the creator can get paid, so the next step
-// is opening a Hotline. Drafts and live shows link back to the studio.
+// Once a bank account is on file the creator can get paid, so this card
+// points at the Hotline: live, still in setup, or off air (none yet, or the
+// last one ended). Drafts and live shows link back to the studio.
 function HotlineSetupCard() {
   const navigate = useNavigate();
   const currentShow = useCurrentShow();
@@ -87,18 +88,20 @@ function HotlineSetupCard() {
             <Phone className="size-5" />
           </span>
           <SectionHeader
-            eyebrow="Next step"
+            eyebrow="Hotline"
             title={
               show?.status === "LIVE"
                 ? "Your Hotline is live"
                 : show?.status === "CREATED"
                   ? "Finish setting up your Hotline"
-                  : "Set up your Hotline"
+                  : "Your Hotline is off air"
             }
             description={
               show?.status === "LIVE"
                 ? "Callers can join from your public page."
-                : "Your bank account is connected. Configure tiers and pricing, then go live."
+                : show?.status === "CREATED"
+                  ? "Configure tiers and pricing, then go live."
+                  : "Set up a new Hotline whenever you're ready to take calls."
             }
           />
         </div>
