@@ -92,7 +92,7 @@ Verified on 2026-10-09 against the local backend: sign-up created the profile, a
 - **Live data.** Single-record and list reads use `@convex-dev/react-query`, so they update live; the queue WebSocket hook is a no-op. The paged directory and notifications keep the Go hooks' 30-second polling, because the follow button's optimistic updates are written against those caches.
 - **Sessions.** Creators sign in with Convex Auth (password). Callers get an anonymous session the first time they join, pay or open a live channel (`lib/convex/session.ts`). One sign-in is shared and waited on until the server sees it; without that, a heartbeat sent straight after sign-in failed as unauthenticated.
 - **Calls.** `WebRTCCallManager` is unchanged. In Convex mode it gets a `ConvexSignalSocket` (`lib/convex/signalSocket.ts`): a WebSocket-shaped object that reads the inbox query, batches ICE candidates for 15 ms, acknowledges after 250 ms of quiet, sends a presence heartbeat every 10 seconds, and reports leaving on close. Ending on page hide is a best-effort mutation; if the page dies first, the presence grace ends the call.
-- **Not available in Convex mode yet:** password reset, which needs an email provider for Convex Auth (the forms say so).
+- **Password reset** uses Convex Auth's emailed-code flow (`convex/passwordReset.ts`, sent through Resend): `/forgot-password` asks for the email, then takes the 8-digit code and new password and signs the person in, ending their other sessions. Codes last 15 minutes, each address gets at most 3 emails per 15 minutes, and Convex Auth limits wrong guesses. The page never says whether an account exists. Env: `AUTH_RESEND_KEY`, `AUTH_EMAIL_FROM`; locally `AUTH_EMAIL_LOG_CODES=true` writes codes to the Convex logs instead.
 
 Run it locally with `npm run convex` in one terminal and `VITE_BACKEND=convex npm run dev -- --port 5175` in another (or the `frontend-convex` entry in `.claude/launch.json`).
 
@@ -122,6 +122,6 @@ The first design was much slower (ICE p50 278 ms): every send counted the recipi
 
 ## Open decisions
 
-- **Email.** Password reset and verification need an email provider for Convex Auth (for example Resend).
+- **Email.** Password reset sends through Resend: verify the sending domain in Resend, then set `AUTH_RESEND_KEY` and `AUTH_EMAIL_FROM` on the production deployment. Email verification at sign-up is not on yet (it would use the same provider via `Password({ verify })`).
 - **Convex region and plan** for production, chosen before phase 7.
 - **TURN.** coturn on a VPS works with the current shared-secret credentials; a managed TURN service needs its own credential action in phase 2.

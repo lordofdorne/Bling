@@ -70,8 +70,9 @@ const MESSAGES: Record<string, string> = {
   INVALID_AVATAR: "Choose a JPG, PNG, or WebP image smaller than 768 KB.",
   INVALID_CREDENTIALS: "Email or password is incorrect.",
   EMAIL_TAKEN: "An account already uses that email.",
-  PASSWORD_RESET_UNAVAILABLE:
-    "Password reset is not available yet. Contact support for help.",
+  EMAIL_UNAVAILABLE: "We couldn't send the email. Try again in a few minutes.",
+  INVALID_RESET_CODE:
+    "That code is wrong or has expired. Check the email or send a new code.",
 };
 
 export function toApiError(cause: unknown): ApiError {

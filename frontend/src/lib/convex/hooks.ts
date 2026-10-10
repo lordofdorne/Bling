@@ -12,7 +12,12 @@ import { useEffect } from "react";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { ApiError } from "../api";
-import type { Creator, LoginInput, RegisterInput } from "../auth";
+import type {
+  Creator,
+  LoginInput,
+  RegisterInput,
+  ResetPasswordInput,
+} from "../auth";
 import {
   convexClient,
   iso,
@@ -135,16 +140,49 @@ export function useLogout() {
   });
 }
 
-/** Password reset needs an email provider for Convex Auth (open decision). */
-function useUnavailableReset() {
+const normalizeEmail = (email: string) => email.trim().toLowerCase();
+
+/** Emails an 8-digit reset code (convex/passwordReset.ts). */
+export function useForgotPassword() {
+  const { signIn } = useAuthActions();
   return useMutation({
-    mutationFn: async (_value: string) => {
-      throw toApiError(new ConvexError({ code: "PASSWORD_RESET_UNAVAILABLE" }));
+    mutationFn: async (email: string) => {
+      try {
+        await signIn("password", {
+          flow: "reset",
+          email: normalizeEmail(email),
+        });
+      } catch (cause) {
+        // An email without an account fails too. Report only our own errors
+        // (send limits, email outages) so the form never reveals who has an
+        // account.
+        if (cause instanceof ConvexError) throw toApiError(cause);
+      }
     },
   });
 }
-export const useForgotPassword = useUnavailableReset;
-export const useResetPassword = useUnavailableReset;
+
+/** Checks the code, sets the new password, and signs the person in. */
+export function useResetPassword() {
+  const { signIn } = useAuthActions();
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ email, code, password }: ResetPasswordInput) => {
+      try {
+        await signIn("password", {
+          flow: "reset-verification",
+          email: normalizeEmail(email),
+          code,
+          newPassword: password,
+        });
+      } catch (cause) {
+        if (cause instanceof ConvexError) throw toApiError(cause);
+        throw toApiError(new ConvexError({ code: "INVALID_RESET_CODE" }));
+      }
+      await settleSignIn(client);
+    },
+  });
+}
 
 // ------------------------------------------------------------ shows
 

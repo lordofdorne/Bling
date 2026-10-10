@@ -2,7 +2,7 @@ import { SITE } from "@/lib/site";
 import { LegalPage, LegalSection, SupportEmail } from "./LegalPage";
 
 // Written from what Bling actually stores and who processes it. Update it
-// when a new provider (an email service, say) is added.
+// when a new provider is added.
 
 export function PrivacyPage() {
   return (
@@ -74,6 +74,10 @@ export function PrivacyPage() {
           </li>
           <li>
             <strong>Vercel</strong>: hosting for the website.
+          </li>
+          <li>
+            <strong>Resend</strong>: sends account emails, such as password
+            reset codes.
           </li>
           <li>
             <strong>Network relay providers</strong>: help connect calls when a

@@ -5,6 +5,7 @@ import { ConvexError } from "convex/values";
 import type { DataModel } from "./_generated/dataModel";
 import type { MutationCtx } from "./_generated/server";
 import { createProfile } from "./lib/social";
+import { ResendPasswordReset } from "./passwordReset";
 
 // Creators sign up with email, password and a username. Callers join a queue
 // as anonymous users, which replaces the Go API's viewer recovery cookie: the
@@ -20,6 +21,7 @@ function invalid(message: string): never {
 export const { auth, signIn, signOut, store, isAuthenticated } = convexAuth({
   providers: [
     Password<DataModel>({
+      reset: ResendPasswordReset,
       profile(params) {
         const email = String(params.email ?? "")
           .trim()

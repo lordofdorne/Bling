@@ -16,6 +16,18 @@ type AuthResponse = {
 
 export type LoginInput = { email: string; password: string };
 export type RegisterInput = LoginInput & { username: string };
+/** The Go API resets through an emailed link and ignores email and code. */
+export type ResetPasswordInput = {
+  email: string;
+  code: string;
+  password: string;
+};
+
+/**
+ * Convex emails a code that is entered on the forgot-password page, then
+ * signs the person in; the Go API emails a link to /reset-password.
+ */
+export const passwordResetByCode = usingConvex;
 
 const meKey = ["creator", "me"] as const;
 
@@ -74,7 +86,7 @@ function useForgotPasswordGo() {
 
 function useResetPasswordGo() {
   return useMutation({
-    mutationFn: (password: string) =>
+    mutationFn: ({ password }: ResetPasswordInput) =>
       apiRequest<void>("/api/v1/auth/reset-password", {
         method: "POST",
         body: JSON.stringify({ password }),

@@ -162,10 +162,11 @@ export async function avatarUrl(ctx: QueryCtx, profile: Doc<"profiles">) {
 export async function rateLimit(
   ctx: MutationCtx,
   key: string,
-  perMinute: number,
+  perWindow: number,
+  windowMs = 60_000,
 ) {
   const now = Date.now();
-  const windowStart = now - (now % 60_000);
+  const windowStart = now - (now % windowMs);
   const row = await ctx.db
     .query("rateLimits")
     .withIndex("by_key", (q) => q.eq("key", key))
@@ -178,6 +179,6 @@ export async function rateLimit(
     await ctx.db.patch(row._id, { windowStart, count: 1 });
     return;
   }
-  if (row.count >= perMinute) fail("RATE_LIMITED");
+  if (row.count >= perWindow) fail("RATE_LIMITED");
   await ctx.db.patch(row._id, { count: row.count + 1 });
 }

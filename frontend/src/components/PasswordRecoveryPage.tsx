@@ -1,14 +1,21 @@
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Link } from "react-router-dom";
+import { Link, Navigate, useNavigate } from "react-router-dom";
 import { ArrowLeft } from "lucide-react";
-import { useForgotPassword, useResetPassword } from "../lib/auth";
+import {
+  passwordResetByCode,
+  useForgotPassword,
+  useResetPassword,
+} from "../lib/auth";
 import {
   forgotPasswordSchema,
+  RESET_CODE_LENGTH,
   resetPasswordSchema,
+  resetWithCodeSchema,
   type ForgotPasswordValues,
   type ResetPasswordValues,
+  type ResetWithCodeValues,
 } from "../lib/schemas";
 import { Brand } from "./ViewerShell";
 import { FormError, TextField } from "./form-fields";
@@ -19,8 +26,18 @@ import { Form } from "@/components/ui/form";
 
 type PasswordRecoveryPageProps = { mode: "forgot" | "reset" };
 
+// With Convex the reset happens on /forgot-password: request a code, then
+// enter it with the new password. The Go API emails a link to
+// /reset-password instead.
+
 export function PasswordRecoveryPage({ mode }: PasswordRecoveryPageProps) {
+  const navigate = useNavigate();
   const [submitted, setSubmitted] = useState(false);
+  const [codeSentTo, setCodeSentTo] = useState("");
+
+  if (passwordResetByCode && mode === "reset") {
+    return <Navigate to="/forgot-password" replace />;
+  }
 
   return (
     <main className="min-h-screen pt-(--safe-top) pb-(--safe-bottom)">
@@ -41,18 +58,30 @@ export function PasswordRecoveryPage({ mode }: PasswordRecoveryPageProps) {
                 Account recovery
               </p>
               <h1 className="mt-2 text-2xl font-extrabold tracking-tight">
-                {mode === "forgot"
-                  ? "Reset your password."
-                  : "Choose a new password."}
+                {codeSentTo
+                  ? "Check your email."
+                  : mode === "forgot"
+                    ? "Reset your password."
+                    : "Choose a new password."}
               </h1>
               <p className="text-muted-foreground mt-2 text-sm">
-                {mode === "forgot"
-                  ? "Enter your email and we’ll send a secure reset link if an account exists."
-                  : "Use at least 12 characters for your new password."}
+                {codeSentTo
+                  ? `If an account exists for ${codeSentTo}, we sent it an ${RESET_CODE_LENGTH}-digit code. It expires in 15 minutes.`
+                  : mode === "forgot"
+                    ? passwordResetByCode
+                      ? "Enter your email and we’ll send a reset code if an account exists."
+                      : "Enter your email and we’ll send a secure reset link if an account exists."
+                    : "Use at least 12 characters for your new password."}
               </p>
             </div>
 
-            {submitted ? (
+            {codeSentTo ? (
+              <CodeResetForm
+                email={codeSentTo}
+                onDone={() => navigate("/dashboard", { replace: true })}
+                onChangeEmail={() => setCodeSentTo("")}
+              />
+            ) : submitted ? (
               <>
                 <Alert>
                   <AlertDescription>
@@ -66,7 +95,14 @@ export function PasswordRecoveryPage({ mode }: PasswordRecoveryPageProps) {
                 </Button>
               </>
             ) : mode === "forgot" ? (
-              <ForgotPasswordForm onDone={() => setSubmitted(true)} />
+              <ForgotPasswordForm
+                byCode={passwordResetByCode}
+                onDone={(email) =>
+                  passwordResetByCode
+                    ? setCodeSentTo(email.trim().toLowerCase())
+                    : setSubmitted(true)
+                }
+              />
             ) : (
               <ResetPasswordForm onDone={() => setSubmitted(true)} />
             )}
@@ -77,7 +113,13 @@ export function PasswordRecoveryPage({ mode }: PasswordRecoveryPageProps) {
   );
 }
 
-function ForgotPasswordForm({ onDone }: { onDone: () => void }) {
+function ForgotPasswordForm({
+  byCode,
+  onDone,
+}: {
+  byCode: boolean;
+  onDone: (email: string) => void;
+}) {
   const forgot = useForgotPassword();
   const form = useForm<ForgotPasswordValues>({
     resolver: zodResolver(forgotPasswordSchema),
@@ -87,7 +129,7 @@ function ForgotPasswordForm({ onDone }: { onDone: () => void }) {
   const submit = form.handleSubmit(async ({ email }) => {
     try {
       await forgot.mutateAsync(email);
-      onDone();
+      onDone(email);
     } catch {
       // Mutation state renders the server's safe error message.
     }
@@ -105,7 +147,11 @@ function ForgotPasswordForm({ onDone }: { onDone: () => void }) {
         />
         <FormError error={forgot.error} />
         <Button type="submit" size="lg" disabled={forgot.isPending}>
-          {forgot.isPending ? "Please wait…" : "Send reset link"}
+          {forgot.isPending
+            ? "Please wait…"
+            : byCode
+              ? "Send reset code"
+              : "Send reset link"}
         </Button>
       </form>
     </Form>
@@ -121,7 +167,7 @@ function ResetPasswordForm({ onDone }: { onDone: () => void }) {
 
   const submit = form.handleSubmit(async ({ password }) => {
     try {
-      await reset.mutateAsync(password);
+      await reset.mutateAsync({ email: "", code: "", password });
       onDone();
     } catch {
       // Mutation state renders the server's safe error message.
@@ -149,6 +195,103 @@ function ResetPasswordForm({ onDone }: { onDone: () => void }) {
         <Button type="submit" size="lg" disabled={reset.isPending}>
           {reset.isPending ? "Please wait…" : "Update password"}
         </Button>
+      </form>
+    </Form>
+  );
+}
+
+function CodeResetForm({
+  email,
+  onDone,
+  onChangeEmail,
+}: {
+  email: string;
+  onDone: () => void;
+  onChangeEmail: () => void;
+}) {
+  const reset = useResetPassword();
+  const resend = useForgotPassword();
+  const form = useForm<ResetWithCodeValues>({
+    resolver: zodResolver(resetWithCodeSchema),
+    defaultValues: { code: "", password: "", confirmation: "" },
+  });
+
+  const submit = form.handleSubmit(async ({ code, password }) => {
+    try {
+      await reset.mutateAsync({ email, code, password });
+      onDone();
+    } catch {
+      // Mutation state renders the server's safe error message.
+    }
+  });
+
+  const sendAgain = async () => {
+    reset.reset();
+    try {
+      await resend.mutateAsync(email);
+    } catch {
+      // Mutation state renders the server's safe error message.
+    }
+  };
+
+  return (
+    <Form {...form}>
+      <form className="flex flex-col gap-4" onSubmit={submit} noValidate>
+        <TextField
+          control={form.control}
+          name="code"
+          label="Code"
+          inputMode="numeric"
+          autoComplete="one-time-code"
+          enterKeyHint="next"
+          autoFocus
+        />
+        <TextField
+          control={form.control}
+          name="password"
+          label="New password"
+          type="password"
+          autoComplete="new-password"
+          description="Use at least 12 characters."
+        />
+        <TextField
+          control={form.control}
+          name="confirmation"
+          label="Confirm new password"
+          type="password"
+          autoComplete="new-password"
+          enterKeyHint="done"
+        />
+        <FormError error={reset.error ?? resend.error} />
+        {resend.isSuccess && !reset.error && (
+          <Alert>
+            <AlertDescription>
+              We sent a new code. Use the newest one.
+            </AlertDescription>
+          </Alert>
+        )}
+        <Button type="submit" size="lg" disabled={reset.isPending}>
+          {reset.isPending ? "Please wait…" : "Set new password"}
+        </Button>
+        <div className="flex flex-col tablet:flex-row tablet:justify-between">
+          <Button
+            type="button"
+            variant="link"
+            size="sm"
+            disabled={resend.isPending}
+            onClick={sendAgain}
+          >
+            {resend.isPending ? "Sending…" : "Send a new code"}
+          </Button>
+          <Button
+            type="button"
+            variant="link"
+            size="sm"
+            onClick={onChangeEmail}
+          >
+            Use a different email
+          </Button>
+        </div>
       </form>
     </Form>
   );

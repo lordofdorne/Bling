@@ -6,6 +6,7 @@ import { ConvexError } from "convex/values";
 export type ErrorCode =
   | "UNAUTHENTICATED"
   | "VALIDATION_FAILED"
+  | "EMAIL_UNAVAILABLE"
   | "SHOW_NOT_FOUND"
   | "SHOW_NOT_LIVE"
   | "NO_LIVE_SHOW"

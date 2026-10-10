@@ -67,6 +67,31 @@ export const resetPasswordSchema = z
   });
 export type ResetPasswordValues = z.infer<typeof resetPasswordSchema>;
 
+/** Matches RESET_CODE_LENGTH in convex/passwordReset.ts. */
+export const RESET_CODE_LENGTH = 8;
+
+export const resetWithCodeSchema = z
+  .object({
+    code: z
+      .string()
+      .transform((value) => value.replace(/\s+/g, ""))
+      .pipe(
+        z
+          .string()
+          .regex(
+            new RegExp(`^\\d{${RESET_CODE_LENGTH}}$`),
+            `Enter the ${RESET_CODE_LENGTH}-digit code from the email.`,
+          ),
+      ),
+    password: newPasswordField,
+    confirmation: z.string().min(1, "Confirm your new password."),
+  })
+  .refine((values) => values.password === values.confirmation, {
+    path: ["confirmation"],
+    message: "Passwords do not match.",
+  });
+export type ResetWithCodeValues = z.infer<typeof resetWithCodeSchema>;
+
 // ---- Creator profile ----
 
 export const profileSchema = z.object({

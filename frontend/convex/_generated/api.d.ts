@@ -23,6 +23,7 @@ import type * as lib_payments from "../lib/payments.js";
 import type * as lib_social from "../lib/social.js";
 import type * as lib_stripe from "../lib/stripe.js";
 import type * as notifications from "../notifications.js";
+import type * as passwordReset from "../passwordReset.js";
 import type * as paymentMethods from "../paymentMethods.js";
 import type * as payments from "../payments.js";
 import type * as payouts from "../payouts.js";
@@ -59,6 +60,7 @@ declare const fullApi: ApiFromModules<{
   "lib/social": typeof lib_social;
   "lib/stripe": typeof lib_stripe;
   notifications: typeof notifications;
+  passwordReset: typeof passwordReset;
   paymentMethods: typeof paymentMethods;
   payments: typeof payments;
   payouts: typeof payouts;
