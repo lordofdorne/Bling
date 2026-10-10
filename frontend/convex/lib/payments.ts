@@ -51,7 +51,7 @@ export async function requestRefund(
   await ctx.scheduler.runAfter(0, internal.refunds.run, { refundId });
 }
 
-async function callForAttempt(
+export async function callForAttempt(
   ctx: MutationCtx,
   attemptId: Id<"paymentAttempts">,
 ) {

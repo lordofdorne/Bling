@@ -425,6 +425,70 @@ describe("the ledger", () => {
       (await host.client.query(api.payouts.balance, {})).balance.totalCents,
     ).toBe(0);
   });
+
+  async function dashboardRefund(
+    env: ReturnType<typeof setup>,
+    intentId: string,
+    id: string,
+    amount: number,
+  ) {
+    const event = await stripe.signedEvent("refund.created", {
+      id,
+      object: "refund",
+      payment_intent: intentId,
+      amount,
+      currency: "usd",
+      status: "succeeded",
+    });
+    await env.t.fetch("/stripe/webhook", {
+      method: "POST",
+      body: event.payload,
+      headers: { "stripe-signature": event.signature },
+    });
+  }
+
+  it("reverses the share when support refunds in the Stripe dashboard", async () => {
+    const env = setup();
+    const { host } = await onboardedCreator(env);
+    const { attemptId } = await liveCall(env, host);
+    const attempt = (await env.t.run((ctx) => ctx.db.get(attemptId)))!;
+    await dashboardRefund(env, attempt.stripePaymentIntentId!, "re_dash", 500);
+
+    expect(
+      (await host.client.query(api.payouts.balance, {})).balance.totalCents,
+    ).toBe(0);
+    const refunds = await env.t.run((ctx) =>
+      ctx.db.query("paymentRefunds").collect(),
+    );
+    expect(refunds).toMatchObject([
+      {
+        stripeRefundId: "re_dash",
+        status: "SUCCEEDED",
+        reason: "OUTSIDE_BLING",
+      },
+    ]);
+  });
+
+  it("reverses part of the share for a partial refund, never more than earned", async () => {
+    const env = setup();
+    const { host } = await onboardedCreator(env);
+    const { attemptId } = await liveCall(env, host);
+    const intent = (await env.t.run((ctx) => ctx.db.get(attemptId)))!
+      .stripePaymentIntentId!;
+    const balance = async () =>
+      (await host.client.query(api.payouts.balance, {})).balance.totalCents;
+
+    // $2.50 of $5.00 takes back half of the $3.78 share.
+    await dashboardRefund(env, intent, "re_half", 250);
+    expect(await balance()).toBe(189);
+    // Redelivery changes nothing.
+    await dashboardRefund(env, intent, "re_half", 250);
+    expect(await balance()).toBe(189);
+    await dashboardRefund(env, intent, "re_rest", 250);
+    expect(await balance()).toBe(0);
+    await dashboardRefund(env, intent, "re_extra", 100);
+    expect(await balance()).toBe(0);
+  });
 });
 
 describe("monthly payout run", () => {

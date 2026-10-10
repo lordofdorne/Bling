@@ -3,7 +3,11 @@ import type Stripe from "stripe";
 import { internal } from "./_generated/api";
 import { httpAction, internalMutation } from "./_generated/server";
 import { adjustForDispute, reverseForRefund } from "./lib/ledger";
-import { recordCaptured, recordNotCaptured } from "./lib/payments";
+import {
+  callForAttempt,
+  recordCaptured,
+  recordNotCaptured,
+} from "./lib/payments";
 import { stripeClient, webhookSecrets } from "./lib/stripe";
 
 // Stripe webhook, served at <CONVEX_SITE_URL>/stripe/webhook. Ported from
@@ -96,6 +100,8 @@ export const stripeWebhook = httpAction(async (ctx, request) => {
         intentId: idOf(refund.payment_intent),
         status: refund.status ?? "",
         failureReason: refund.failure_reason ?? undefined,
+        amountCents: refund.amount,
+        currency: refund.currency,
       },
     });
   } else if (event.type.startsWith("charge.dispute.")) {
@@ -162,6 +168,8 @@ export const apply = internalMutation({
         intentId: v.optional(v.string()),
         status: v.string(),
         failureReason: v.optional(v.string()),
+        amountCents: v.optional(v.number()),
+        currency: v.optional(v.string()),
       }),
     ),
     dispute: v.optional(
@@ -238,20 +246,43 @@ export const apply = internalMutation({
 
     if (args.refund) {
       const { id, intentId, status, failureReason } = args.refund;
-      const refund =
+      let refund =
         (await ctx.db
           .query("paymentRefunds")
           .withIndex("by_stripe_refund", (q) => q.eq("stripeRefundId", id))
           .first()) ??
+        // A refund Bling requested whose Stripe id isn't recorded yet.
         (intentId
           ? await ctx.db
               .query("paymentRefunds")
               .withIndex("by_intent", (q) =>
                 q.eq("stripePaymentIntentId", intentId),
               )
+              .filter((q) => q.eq(q.field("stripeRefundId"), undefined))
               .first()
           : null);
-      if (!refund) return;
+      if (!refund) {
+        // Refunded outside Bling, such as by support in the Stripe
+        // dashboard. Record it so the creator's share is reversed too. It
+        // carries its Stripe id, so the refund sweep only ever re-reads it.
+        const attempt = await attemptForIntent(intentId);
+        const call = attempt && (await callForAttempt(ctx, attempt._id));
+        if (!attempt || !call || !intentId) return;
+        if (args.refund.amountCents === undefined) return;
+        const refundId = await ctx.db.insert("paymentRefunds", {
+          paymentAttemptId: attempt._id,
+          callId: call._id,
+          stripePaymentIntentId: intentId,
+          stripeRefundId: id,
+          amountCents: args.refund.amountCents,
+          currency: args.refund.currency ?? attempt.currency,
+          reason: "OUTSIDE_BLING",
+          status: "PENDING",
+          attempts: 0,
+          nextAttemptAt: Date.now(),
+        });
+        refund = (await ctx.db.get(refundId))!;
+      }
       const next =
         status === "succeeded"
           ? "SUCCEEDED"

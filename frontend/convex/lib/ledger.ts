@@ -125,10 +125,34 @@ export async function reverseForRefund(
 ) {
   const earning = await earningFor(ctx, refund.paymentAttemptId);
   if (!earning) return;
+  // A partial refund (possible from the Stripe dashboard) takes back the
+  // same share of the earning; refunds together never take back more than
+  // was earned.
+  const attempt = await ctx.db.get(refund.paymentAttemptId);
+  const share =
+    attempt && refund.amountCents < attempt.amountCents
+      ? Math.round(
+          (earning.amountCents * refund.amountCents) / attempt.amountCents,
+        )
+      : earning.amountCents;
+  const reversals = await ctx.db
+    .query("ledgerEntries")
+    .withIndex("by_attempt_kind", (q) =>
+      q
+        .eq("paymentAttemptId", refund.paymentAttemptId)
+        .eq("kind", "REFUND_REVERSAL"),
+    )
+    .collect();
+  const others = reversals.filter(
+    (entry) => entry.idempotencyKey !== `refund:${refund._id}`,
+  );
+  const reversed = -others.reduce((sum, entry) => sum + entry.amountCents, 0);
+  const amount = Math.min(share, earning.amountCents - reversed);
+  if (amount <= 0) return;
   await postEntry(ctx, {
     creatorId: earning.creatorId,
     kind: "REFUND_REVERSAL",
-    amountCents: -earning.amountCents,
+    amountCents: -amount,
     currency: earning.currency,
     effectiveAt: Date.now(),
     idempotencyKey: `refund:${refund._id}`,
