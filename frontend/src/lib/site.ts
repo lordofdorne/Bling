@@ -4,8 +4,8 @@
 export const SITE = {
   name: "Bling",
   url: "https://blinghotline.com",
-  /** Placeholder until a support inbox is chosen. */
-  supportEmail: "support@blinghotline.com",
+  /** Policies, contact page and account deletion all point here. */
+  supportEmail: "blinghotlinesupport@gmail.com",
   /** The legal entity that operates Bling, as it should appear in policies. */
   operator: "Bling",
   policiesEffective: "October 10, 2026",
