@@ -2,7 +2,7 @@
 
 Bling is moving from the Go API (Postgres, Redis, WebSockets, background workers) to [Convex](https://convex.dev). The target production stack is **Vercel** (frontend) + **Convex** (database, functions, realtime, scheduled jobs) + a **TURN** server for call audio, which no backend replaces.
 
-The Go API keeps running and stays the production backend until the final phase. Each phase ports one area to Convex with tests, and the frontend switches over area by area.
+**Status:** production runs on Convex. The Go API is legacy and not used in production; this document records how each area was ported.
 
 ## Where things live
 
@@ -93,6 +93,7 @@ Verified on 2026-10-09 against the local backend: sign-up created the profile, a
 - **Sessions.** Creators sign in with Convex Auth (password). Callers get an anonymous session the first time they join, pay or open a live channel (`lib/convex/session.ts`). One sign-in is shared and waited on until the server sees it; without that, a heartbeat sent straight after sign-in failed as unauthenticated.
 - **Calls.** `WebRTCCallManager` is unchanged. In Convex mode it gets a `ConvexSignalSocket` (`lib/convex/signalSocket.ts`): a WebSocket-shaped object that reads the inbox query, batches ICE candidates for 15 ms, acknowledges after 250 ms of quiet, sends a presence heartbeat every 10 seconds, and reports leaving on close. Ending on page hide is a best-effort mutation; if the page dies first, the presence grace ends the call.
 - **Password reset** uses Convex Auth's emailed-code flow (`convex/passwordReset.ts`, sent through Resend): `/forgot-password` asks for the email, then takes the 8-digit code and new password and signs the person in, ending their other sessions. Codes last 15 minutes, each address gets at most 3 emails per 15 minutes, and Convex Auth limits wrong guesses. The page never says whether an account exists. Env: `AUTH_RESEND_KEY`, `AUTH_EMAIL_FROM`; locally `AUTH_EMAIL_LOG_CODES=true` writes codes to the Convex logs instead.
+- **Convex-only features.** The creator's caller list shows tags (follower, first call or number of past calls) and private caller notes (`convex/callerNotes.ts`) only on Convex. The Go API keys a queue entry to a session token rather than an account, so it cannot recognize a caller across shows; its entries have no `caller` field and the list hides tags, filters and notes.
 
 Run it locally with `npm run convex` in one terminal and `VITE_BACKEND=convex npm run dev -- --port 5175` in another (or the `frontend-convex` entry in `.claude/launch.json`).
 
@@ -124,4 +125,7 @@ The first design was much slower (ICE p50 278 ms): every send counted the recipi
 
 - **Email.** Password reset sends through Resend: verify the sending domain in Resend, then set `AUTH_RESEND_KEY` and `AUTH_EMAIL_FROM` on the production deployment. Email verification at sign-up is not on yet (it would use the same provider via `Password({ verify })`).
 - **Convex region and plan** for production, chosen before phase 7.
+- **Scheduled Hotlines.** `shows.schedule` sets `scheduledFor` on a draft (5 minutes to 60 days ahead) and mirrors it to `profiles.nextHotlineAt`, which the public page shows (with an .ics download) until the Hotline goes live or for 3 hours past the time. It announces; the creator still opens the Hotline.
+- **Fan receipts.** Stripe sends them: `payments.authorize` sets `receipt_email` (the account email, or the one a guest gives on a paid tier) and a description like "Call with @alice · Priority (2 min)". Turn on Stripe's customer emails for successful payments and refunds.
+- **Live alerts.** Going live (at most once per creator per 6 hours) walks followers in batches of 100 (`liveAlerts.collect`) and sends each batch through Resend's batch API with an idempotency key and up to 3 attempts. Unsubscribe links are HMAC-signed user ids (`UNSUBSCRIBE_SECRET`, else the auth signing key); GET asks to confirm, POST (and mail clients' one-click) unsubscribes. Preferences live in `emailPreferences`, written only on change. `EMAIL_POSTAL_ADDRESS` adds the mailing address US law expects in the footer.
 - **TURN.** Production uses Cloudflare's managed TURN: `rtc.config` mints credentials per participant from `CLOUDFLARE_TURN_KEY_ID` and `CLOUDFLARE_TURN_API_TOKEN` (4-hour lifetime, port 53 URLs dropped), falling back to STUN only if Cloudflare is unreachable. A self-hosted coturn with `TURN_URL` and `TURN_SHARED_SECRET` still works when Cloudflare isn't configured.

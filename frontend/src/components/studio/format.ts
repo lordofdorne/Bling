@@ -29,6 +29,26 @@ export function formatDate(value: string, { calendarDay = false } = {}) {
   }).format(date);
 }
 
+/** A moment with weekday, time and zone, e.g. "Fri, Oct 17, 8:00 PM EDT". */
+export function formatDateTime(value: string | Date) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return new Intl.DateTimeFormat("en-US", {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    timeZoneName: "short",
+  }).format(date);
+}
+
+/** A date as a `datetime-local` input value, in the viewer's time zone. */
+export function toDateTimeInput(date: Date) {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
 export function formatSignedPrice(cents: number) {
   return `${cents < 0 ? "−" : "+"}${formatPrice(Math.abs(cents))}`;
 }

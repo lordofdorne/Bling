@@ -5,6 +5,7 @@ import { ConvexError } from "convex/values";
 import type { DataModel } from "./_generated/dataModel";
 import type { MutationCtx } from "./_generated/server";
 import { createProfile } from "./lib/social";
+import { SIGNUP_PLATFORM_FEE_BPS } from "./lib/stripe";
 import { ResendPasswordReset } from "./passwordReset";
 
 // Creators sign up with email, password and a username. Callers join a queue
@@ -57,7 +58,11 @@ export const { auth, signIn, signOut, store, isAuthenticated } = convexAuth({
           .first();
         if (taken) invalid("That username is taken.");
       }
-      const userId = await ctx.db.insert("users", args.profile);
+      // Creators keep the platform fee they sign up with (lib/stripe.ts).
+      const userId = await ctx.db.insert("users", {
+        ...args.profile,
+        ...(username ? { platformFeeBps: SIGNUP_PLATFORM_FEE_BPS } : {}),
+      });
       // Every account with a username gets an unpublished creator profile.
       if (username) await createProfile(ctx, userId, username);
       return userId;

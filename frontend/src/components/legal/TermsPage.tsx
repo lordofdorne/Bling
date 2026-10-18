@@ -1,4 +1,4 @@
-import { PAYOUT_TERMS, SITE } from "@/lib/site";
+import { BETA, PAYOUT_TERMS, SITE } from "@/lib/site";
 import { LegalPage, LegalSection, PolicyLink, SupportEmail } from "./LegalPage";
 
 // Starting-point terms written from how Bling works. Have them reviewed by a
@@ -100,6 +100,13 @@ export function TermsPage() {
             Stripe's standard card fee (2.9% + 30¢). Bling keeps{" "}
             {PAYOUT_TERMS.platformSharePercent}% and pays the other half of the
             fee.
+          </li>
+          <li>
+            Bling is in beta. Creators who sign up during the beta earn{" "}
+            {BETA.creatorSharePercent}% of the price instead, and Bling keeps{" "}
+            {BETA.platformSharePercent}%; the card fee is split the same way.
+            Your rate is set when you create your account and shown in your
+            payout settings.
           </li>
           <li>
             Earnings become available {PAYOUT_TERMS.earningsHoldDays} days after

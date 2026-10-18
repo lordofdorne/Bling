@@ -28,20 +28,30 @@ import {
   type BottomNavItem,
 } from "./BottomNav";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import { Wordmark } from "./Logo";
+import { BETA } from "../lib/site";
 import { cn } from "@/lib/utils";
 
 export function Brand() {
   return (
     <Link
-      className="text-foreground flex min-h-(--touch-min) items-center"
+      className="text-foreground flex min-h-(--touch-min) items-center gap-2"
       to="/"
-      aria-label="Bling home"
+      aria-label={BETA.active ? "Bling beta, home" : "Bling home"}
     >
       <Wordmark />
+      {BETA.active && (
+        <Badge
+          variant="outline"
+          className="border-(--sand) text-(--sand-text) tracking-[0.08em] uppercase"
+        >
+          Beta
+        </Badge>
+      )}
     </Link>
   );
 }

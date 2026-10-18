@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Link, Navigate, useNavigate, useSearchParams } from "react-router-dom";
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, Sparkles } from "lucide-react";
 import { useLogin, useMe, useRegister } from "../lib/auth";
 import {
   loginSchema,
@@ -10,9 +10,10 @@ import {
   type LoginValues,
   type RegisterValues,
 } from "../lib/schemas";
+import { BETA, PAYOUT_TERMS } from "../lib/site";
 import { Brand } from "./ViewerShell";
 import { FormError, TextField } from "./form-fields";
-import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Form } from "@/components/ui/form";
@@ -99,10 +100,23 @@ export function AuthPage({ mode }: AuthPageProps) {
                 onDone={() => navigate(destination, { replace: true })}
               />
             ) : (
-              <RegisterForm
-                onDone={() => navigate(destination, { replace: true })}
-                onConfirmationRequired={setConfirmationEmail}
-              />
+              <>
+                {BETA.active && !viewerIntent && (
+                  <Alert role="note" className="border-(--sand)">
+                    <Sparkles />
+                    <AlertTitle>Bling is in beta</AlertTitle>
+                    <AlertDescription>
+                      Creators who sign up now keep {BETA.creatorSharePercent}%
+                      of every paid call, instead of the usual{" "}
+                      {PAYOUT_TERMS.creatorSharePercent}%.
+                    </AlertDescription>
+                  </Alert>
+                )}
+                <RegisterForm
+                  onDone={() => navigate(destination, { replace: true })}
+                  onConfirmationRequired={setConfirmationEmail}
+                />
+              </>
             )}
 
             <p className="text-muted-foreground text-sm">

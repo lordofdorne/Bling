@@ -15,6 +15,7 @@ import { fail } from "./lib/errors";
 import { recordCaptured, recordNotCaptured } from "./lib/payments";
 import {
   isTransientStripeError,
+  creatorFeeBps,
   paymentFees,
   publishableKey,
   stripeClient,
@@ -48,12 +49,30 @@ async function stripeCall<T>(request: () => Promise<T>): Promise<T> {
 
 // ------------------------------------------------------------ authorize
 
+const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+/**
+ * Where Stripe sends the fan's receipt (and any refund notice): their account
+ * email, or the one a guest typed in. Bling passes it to Stripe and does not
+ * store it.
+ */
+function receiptEmailFor(accountEmail: string | undefined, given?: string) {
+  if (accountEmail) return accountEmail;
+  const email = given?.trim().toLowerCase();
+  if (!email) return undefined;
+  if (email.length > 254 || !EMAIL.test(email)) {
+    fail("VALIDATION_FAILED", "Enter a valid email for your receipt.");
+  }
+  return email;
+}
+
 /** Starts (or resumes, for the same idempotency key) a hold for a tier. */
 export const authorize = action({
   args: {
     showId: v.id("shows"),
     tierId: v.id("showTiers"),
     idempotencyKey: v.string(),
+    receiptEmail: v.optional(v.string()),
   },
   handler: async (
     ctx,
@@ -72,19 +91,34 @@ export const authorize = action({
     const stripe = stripeClient();
     const key = publishableKey();
     const payer = await ctx.runQuery(internal.payments.payer, {});
+    const receiptEmail = receiptEmailFor(payer.email, args.receiptEmail);
     // Signed-in callers get a Stripe customer so they can reuse saved cards.
     const stripeCustomerId = payer.email
       ? await ensureCustomer(ctx, stripe, payer.userId, payer.email)
       : undefined;
     const attempt = await ctx.runMutation(internal.payments.prepare, {
-      ...args,
+      showId: args.showId,
+      tierId: args.tierId,
+      idempotencyKey: args.idempotencyKey,
       stripeCustomerId,
+    });
+    const details = await ctx.runQuery(internal.payments.receiptDetails, {
+      showId: attempt.showId,
+      tierId: attempt.tierId,
     });
 
     let intent: Stripe.PaymentIntent;
     if (attempt.stripePaymentIntentId) {
       const intentId = attempt.stripePaymentIntentId;
       intent = await stripeCall(() => stripe.paymentIntents.retrieve(intentId));
+      // A guest who retries with a corrected email gets the receipt there.
+      if (receiptEmail && intent.receipt_email !== receiptEmail) {
+        intent = await stripeCall(() =>
+          stripe.paymentIntents.update(intentId, {
+            receipt_email: receiptEmail,
+          }),
+        );
+      }
     } else {
       intent = await stripeCall(() =>
         stripe.paymentIntents.create(
@@ -93,7 +127,9 @@ export const authorize = action({
             currency: attempt.currency,
             capture_method: "manual",
             payment_method_types: ["card", "link"],
-            description: "Bling Hotline call",
+            // Shown on the Stripe receipt the fan gets once they're charged.
+            description: `Call with @${details.username} · ${details.tierName} (${details.minutes} min)`,
+            receipt_email: receiptEmail,
             customer: attempt.stripeCustomerId,
             metadata: {
               bling_payment_attempt_id: attempt._id,
@@ -155,6 +191,21 @@ export const payer = internalQuery({
   },
 });
 
+/** What a fan's receipt says they paid for. */
+export const receiptDetails = internalQuery({
+  args: { showId: v.id("shows"), tierId: v.id("showTiers") },
+  handler: async (ctx, { showId, tierId }) => {
+    const show = await ctx.db.get(showId);
+    const tier = await ctx.db.get(tierId);
+    const creator = show && (await ctx.db.get(show.creatorId));
+    return {
+      username: creator?.username ?? "creator",
+      tierName: tier?.name ?? "Hotline call",
+      minutes: Number(((tier?.callDurationSeconds ?? 0) / 60).toFixed(2)),
+    };
+  },
+});
+
 export const prepare = internalMutation({
   args: {
     showId: v.id("shows"),
@@ -199,7 +250,10 @@ export const prepare = internalMutation({
       stripeCustomerId: args.stripeCustomerId,
       amountCents: tier.priceCents,
       currency: "usd",
-      ...paymentFees(tier.priceCents),
+      ...paymentFees(
+        tier.priceCents,
+        creatorFeeBps(await ctx.db.get(show.creatorId)),
+      ),
       status: "CREATED",
     });
     return (await ctx.db.get(attemptId))!;

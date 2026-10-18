@@ -198,6 +198,18 @@ function BalanceCard() {
             value={money(balance?.pendingCents)}
           />
           <BalanceRow label="Next payout" value={nextPayout} />
+          {payouts.data && (
+            <BalanceRow
+              label="Your share"
+              hint={
+                100 - payouts.data.platformFeePercent >
+                PAYOUT_TERMS.creatorSharePercent
+                  ? "Beta rate, locked in when you joined"
+                  : "Less half the card fee"
+              }
+              value={`${100 - payouts.data.platformFeePercent}% per call`}
+            />
+          )}
           <BalanceRow
             label="Schedule"
             value={`Monthly, $${PAYOUT_TERMS.payoutMinimumDollars} minimum`}

@@ -39,9 +39,12 @@ function paymentKey(showID: string, tierID: string) {
   return { storageKey, value };
 }
 
+export type AuthorizeInput = { tierID: string; receiptEmail?: string };
+
+/** The Go API sends no receipts, so the email is not passed on. */
 function useAuthorizePaymentGo(showID: string) {
   return useMutation({
-    mutationFn: async (tierID: string) => {
+    mutationFn: async ({ tierID }: AuthorizeInput) => {
       const key = paymentKey(showID, tierID);
       const response = await apiRequest<AuthorizationResponse>(
         `/api/v1/shows/${showID}/payments/authorize`,

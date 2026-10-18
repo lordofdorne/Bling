@@ -48,9 +48,12 @@ import {
   useCreatorProfile,
   useChannelPresence,
   formatCount,
+  type CreatorProfile,
 } from "../lib/social";
 import { CreatorAvatar, CreatorCover } from "./CreatorIdentity";
-import { Check, Phone, Radio } from "lucide-react";
+import { CalendarPlus, Check, Phone, Radio } from "lucide-react";
+import { downloadCalendarFile, hotlineEvent } from "../lib/calendar";
+import { formatDateTime } from "./studio/format";
 
 const emptyTiers: QueueTier[] = [];
 
@@ -70,7 +73,7 @@ function CallerQueue({ showID }: { showID: string }) {
   // round trip to the card step and back.
   const form = useForm<CallRequestValues>({
     resolver: zodResolver(callRequestSchema),
-    defaultValues: { displayName: "", topic: "", tierId: "" },
+    defaultValues: { displayName: "", topic: "", tierId: "", receiptEmail: "" },
   });
   const [pending, setPending] = useState<{
     authorization: PaymentAuthorization & { storageKey: string };
@@ -194,6 +197,7 @@ function CallerQueue({ showID }: { showID: string }) {
       join={join}
       authorize={authorize}
       onAuthorized={setPending}
+      guest={!me.data}
     />
   );
 }
@@ -204,6 +208,7 @@ function CallRequestForm({
   join,
   authorize,
   onAuthorized,
+  guest,
 }: {
   form: UseFormReturn<CallRequestValues>;
   tiers: QueueTier[];
@@ -213,6 +218,8 @@ function CallRequestForm({
     authorization: PaymentAuthorization & { storageKey: string };
     request: CallRequestValues;
   }) => void;
+  /** Guests have no account email, so a paid tier asks where to send the receipt. */
+  guest: boolean;
 }) {
   const chosenTierID = useWatch({ control: form.control, name: "tierId" });
   // Default to the first open tier, and fall back to it if the host removes
@@ -230,12 +237,25 @@ function CallRequestForm({
     const tier = tiers.find((value) => value.id === request.tierId);
     if (!tier) return;
     if (tier.priceCents === 0) {
-      join.mutate(request);
+      join.mutate({
+        displayName: request.displayName,
+        topic: request.topic,
+        tierId: request.tierId,
+      });
+      return;
+    }
+    if (guest && !request.receiptEmail) {
+      form.setError("receiptEmail", {
+        message: "Enter an email for your receipt.",
+      });
       return;
     }
     try {
       onAuthorized({
-        authorization: await authorize.mutateAsync(tier.id),
+        authorization: await authorize.mutateAsync({
+          tierID: tier.id,
+          receiptEmail: guest ? request.receiptEmail : undefined,
+        }),
         request,
       });
     } catch {
@@ -310,6 +330,17 @@ function CallRequestForm({
                     <FormMessage />
                   </FormItem>
                 )}
+              />
+            )}
+            {guest && (selectedTier?.priceCents ?? 0) > 0 && (
+              <TextField
+                control={form.control}
+                name="receiptEmail"
+                label="Email for your receipt"
+                type="email"
+                inputMode="email"
+                autoComplete="email"
+                description="Stripe sends your receipt, and any refund notice, here."
               />
             )}
             <Button
@@ -553,12 +584,18 @@ export function PublicHotline() {
           {!profile.data && (
             <p className="text-muted-foreground text-sm">@{username}</p>
           )}
-          <h1 className="text-(length:--text-page-title) font-extrabold tracking-tight">
-            Hotline is currently closed.
-          </h1>
-          <p className="text-muted-foreground text-sm">
-            Come back when this creator is live.
-          </p>
+          {profile.data?.nextHotlineAt ? (
+            <UpcomingHotline profile={profile.data} />
+          ) : (
+            <>
+              <h1 className="text-(length:--text-page-title) font-extrabold tracking-tight">
+                Hotline is currently closed.
+              </h1>
+              <p className="text-muted-foreground text-sm">
+                Come back when this creator is live.
+              </p>
+            </>
+          )}
           {profile.data && <FollowButton profile={profile.data} />}
           {profile.data && (
             <p className="text-muted-foreground text-xs">
@@ -613,5 +650,63 @@ export function PublicHotline() {
         </div>
       )}
     </ViewerShell>
+  );
+}
+
+/**
+ * A creator's announced next Hotline. The page switches to the live line by
+ * itself when it opens, so "starting soon" just asks fans to stay.
+ */
+function UpcomingHotline({ profile }: { profile: CreatorProfile }) {
+  const opens = new Date(profile.nextHotlineAt!);
+  // A clock that ticks every 30 seconds, so the card turns to "starting
+  // soon" on its own while the page is open.
+  const [now, setNow] = useState(0);
+  useEffect(() => {
+    const tick = () => setNow(Date.now());
+    const first = window.setTimeout(tick, 0);
+    const timer = window.setInterval(tick, 30_000);
+    return () => {
+      window.clearTimeout(first);
+      window.clearInterval(timer);
+    };
+  }, []);
+  const soon = now > 0 && opens.getTime() <= now;
+  const addToCalendar = () => {
+    const url = `${window.location.origin}/u/${profile.username}`;
+    downloadCalendarFile(
+      hotlineEvent({
+        username: profile.username,
+        displayName: profile.displayName,
+        start: opens,
+        url,
+      }),
+      `${profile.username}-hotline.ics`,
+    );
+  };
+
+  return (
+    <>
+      <Badge variant="secondary">{soon ? "Starting soon" : "Upcoming"}</Badge>
+      <h1 className="text-(length:--text-page-title) font-extrabold tracking-tight">
+        {soon ? "The Hotline opens any minute." : "Hotline opens"}
+      </h1>
+      <p className="text-(length:--text-body) font-semibold">
+        {soon
+          ? `Scheduled for ${formatDateTime(opens)}`
+          : formatDateTime(opens)}
+      </p>
+      <p className="text-muted-foreground text-sm">
+        {soon
+          ? "Stay on this page; the line opens here."
+          : "Follow so you don't miss it, or add it to your calendar."}
+      </p>
+      {!soon && (
+        <Button variant="secondary" type="button" onClick={addToCalendar}>
+          <CalendarPlus className="size-4" />
+          Add to calendar
+        </Button>
+      )}
+    </>
   );
 }

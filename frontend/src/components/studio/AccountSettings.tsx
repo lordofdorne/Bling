@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { Check, Copy, ExternalLink, LogOut } from "lucide-react";
+import { useEmailPreferences, useSetLiveAlerts } from "../../lib/alerts";
 import { useMe } from "../../lib/auth";
 import { useControlSize } from "../../lib/design";
 import { SITE } from "../../lib/site";
@@ -10,6 +11,7 @@ import { useSignOut } from "./StudioShell";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Switch } from "@/components/ui/switch";
 
 // Account settings in the usual shape: one card per topic, each row a
 // setting with its value and, where there is one, its action on the right.
@@ -66,6 +68,8 @@ export function AccountSettings({ username }: { username: string }) {
         </CardContent>
       </Card>
 
+      <NotificationsCard />
+
       <Card aria-label="Appearance">
         <CardContent className="flex flex-col gap-(--card-gap)">
           <SectionHeader
@@ -100,6 +104,47 @@ export function AccountSettings({ username }: { username: string }) {
         </CardContent>
       </Card>
     </div>
+  );
+}
+
+/** Email alerts; hidden when this account has no email to send to. */
+function NotificationsCard() {
+  const preferences = useEmailPreferences();
+  const setLiveAlerts = useSetLiveAlerts();
+  if (!preferences.data) return null;
+  const enabled = setLiveAlerts.isPending
+    ? setLiveAlerts.variables
+    : preferences.data.liveAlerts;
+
+  return (
+    <Card aria-label="Notifications">
+      <CardContent className="flex flex-col gap-(--card-gap)">
+        <SectionHeader
+          title="Notifications"
+          description={`Emails go to ${preferences.data.email}.`}
+        />
+        <dl className="divide-y border-y">
+          <SettingRow
+            label="Creators going live"
+            value="Email me when a creator I follow opens their Hotline."
+            action={
+              <Switch
+                checked={enabled}
+                onCheckedChange={(checked) => setLiveAlerts.mutate(checked)}
+                aria-label="Email me when creators I follow go live"
+              />
+            }
+          />
+        </dl>
+        {setLiveAlerts.isError && (
+          <Alert variant="destructive">
+            <AlertDescription>
+              Couldn't save that. Please try again.
+            </AlertDescription>
+          </Alert>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 

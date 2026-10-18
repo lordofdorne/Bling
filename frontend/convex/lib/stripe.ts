@@ -50,29 +50,44 @@ export function isTransientStripeError(error: unknown): boolean {
   );
 }
 
-// Fees, ported unchanged from backend/internal/payment/store.go. The creator
-// gets 80% of the price less half of Stripe's published basic domestic card
-// fee (2.9% + 30¢); Bling keeps 20% and absorbs the other half, including the
-// odd cent.
-export const PLATFORM_FEE_BPS = 2000;
+// Fees, ported from backend/internal/payment/store.go. The creator gets their
+// share of the price less half of Stripe's published basic domestic card fee
+// (2.9% + 30¢); Bling keeps the rest and absorbs the other half of the card
+// fee, including the odd cent.
+//
+// Each creator's platform fee is fixed on their user record when they sign
+// up. While Bling is in beta, new creators pay 10% and keep 90%. To end the
+// beta, set SIGNUP_PLATFORM_FEE_BPS to STANDARD_PLATFORM_FEE_BPS: new creators
+// then keep 80%, and beta creators keep the rate they joined with.
+export const STANDARD_PLATFORM_FEE_BPS = 2000;
+export const BETA_PLATFORM_FEE_BPS = 1000;
+export const SIGNUP_PLATFORM_FEE_BPS = BETA_PLATFORM_FEE_BPS;
+
+/**
+ * A creator's platform fee. Accounts made before rates were stored all joined
+ * during the beta, so a missing rate is the beta rate.
+ */
+export function creatorFeeBps(creator: { platformFeeBps?: number } | null) {
+  return creator?.platformFeeBps ?? BETA_PLATFORM_FEE_BPS;
+}
 const BASIC_CARD_FEE_BPS = 290;
 const BASIC_CARD_FIXED_FEE_CENTS = 30;
 const CREATOR_PROCESSING_FEE_SHARE_BPS = 5000;
 
-export function paymentFees(amountCents: number) {
+export function paymentFees(amountCents: number, platformFeeBps: number) {
   const basicCardFeeCents =
     Math.floor((amountCents * BASIC_CARD_FEE_BPS + 5000) / 10000) +
     BASIC_CARD_FIXED_FEE_CENTS;
   const creatorProcessingFeeCents = Math.floor(
     (basicCardFeeCents * CREATOR_PROCESSING_FEE_SHARE_BPS) / 10000,
   );
-  const creatorShareBps = 10000 - PLATFORM_FEE_BPS;
+  const creatorShareBps = 10000 - platformFeeBps;
   const platformFeeCents =
     amountCents -
     Math.floor((amountCents * creatorShareBps) / 10000) +
     creatorProcessingFeeCents;
   return {
-    platformFeeBps: PLATFORM_FEE_BPS,
+    platformFeeBps,
     platformFeeCents,
     basicCardFeeCents,
     creatorProcessingFeeCents,

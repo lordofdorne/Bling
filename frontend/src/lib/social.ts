@@ -26,6 +26,8 @@ export type CreatorProfile = {
   liveStartedAt: string | null;
   isFollowing: boolean;
   channelVisitors: number | null;
+  /** The announced next Hotline, while upcoming or just past (Convex only). */
+  nextHotlineAt?: string | null;
 };
 export type ProfileInput = Pick<
   CreatorProfile,

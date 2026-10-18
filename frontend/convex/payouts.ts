@@ -13,7 +13,7 @@ import {
 import { requireCreatorId } from "./lib/auth";
 import { fail } from "./lib/errors";
 import { balanceAt, postEntry } from "./lib/ledger";
-import { PLATFORM_FEE_BPS, publishableKey, stripeClient } from "./lib/stripe";
+import { creatorFeeBps, publishableKey, stripeClient } from "./lib/stripe";
 
 // Creator payouts. Ported from backend/internal/payout (Connect accounts)
 // and backend/internal/balance (balances and the monthly transfer run).
@@ -29,7 +29,6 @@ import { PLATFORM_FEE_BPS, publishableKey, stripeClient } from "./lib/stripe";
 // CREATOR_PAYOUT_MINIMUM_CENTS (default 2500), CREATOR_PAYOUT_CURRENCY
 // (default usd), CREATOR_EARNINGS_HOLD_HOURS (default 168, lib/ledger.ts).
 
-const PLATFORM_FEE_PERCENT = PLATFORM_FEE_BPS / 100;
 const CREATOR_PROCESSING_FEE_PERCENT = 50;
 const MAX_TRANSFER_ATTEMPTS = 10;
 const TRANSFER_LEASE_MS = 5 * 60_000;
@@ -65,7 +64,7 @@ export function accountReady(account: AccountFields | null | undefined) {
   );
 }
 
-function statusFor(account: AccountFields | null) {
+function statusFor(account: AccountFields | null, platformFeeBps: number) {
   return {
     connected: Boolean(account),
     transfersStatus: account?.transfersStatus ?? "",
@@ -78,7 +77,7 @@ function statusFor(account: AccountFields | null) {
     detailsSubmitted: account?.detailsSubmitted ?? false,
     ready: accountReady(account),
     requirementsDue: account?.requirementsDue ?? [],
-    platformFeePercent: PLATFORM_FEE_PERCENT,
+    platformFeePercent: platformFeeBps / 100,
     creatorProcessingFeePercent: CREATOR_PROCESSING_FEE_PERCENT,
   };
 }
@@ -171,7 +170,12 @@ export const creator = internalQuery({
       .query("payoutAccounts")
       .withIndex("by_creator", (q) => q.eq("creatorId", creatorId))
       .first();
-    return { creatorId, email: user.email ?? "", account };
+    return {
+      creatorId,
+      email: user.email ?? "",
+      platformFeeBps: creatorFeeBps(user),
+      account,
+    };
   },
 });
 
@@ -213,11 +217,11 @@ export const saveAccount = internalMutation({
 export const status = action({
   args: {},
   handler: async (ctx): Promise<ReturnType<typeof statusFor>> => {
-    const { creatorId, account } = await ctx.runQuery(
+    const { creatorId, account, platformFeeBps } = await ctx.runQuery(
       internal.payouts.creator,
       {},
     );
-    if (!account) return statusFor(null);
+    if (!account) return statusFor(null, platformFeeBps);
     const refreshed = await providerCall(() =>
       readAccount(stripeClient(), account.stripeAccountId),
     );
@@ -225,7 +229,7 @@ export const status = action({
       creatorId,
       account: refreshed,
     });
-    return statusFor(refreshed);
+    return statusFor(refreshed, platformFeeBps);
   },
 });
 
@@ -238,7 +242,7 @@ export const current = query({
       .query("payoutAccounts")
       .withIndex("by_creator", (q) => q.eq("creatorId", creatorId))
       .first();
-    return statusFor(account);
+    return statusFor(account, creatorFeeBps(await ctx.db.get(creatorId)));
   },
 });
 

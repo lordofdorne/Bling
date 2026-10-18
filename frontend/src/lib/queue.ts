@@ -24,6 +24,18 @@ export type QueueEntry = {
   callDurationSeconds: number;
   tierPriceCents: number;
   joinedAt: string;
+  /** Only on the creator's list, and only where the backend knows it. */
+  caller?: CallerInsight;
+};
+
+// What a creator knows about a waiting caller. The Go API cannot tell callers
+// apart across shows, so its entries carry none of this.
+export type CallerInsight = {
+  follower: boolean;
+  /** Earlier calls with this creator that went live, counted up to 10. */
+  pastCalls: number;
+  /** The creator's private note. Callers never see it. */
+  note: string;
 };
 
 // A caller's own request. There is deliberately no place in line: creators
@@ -189,6 +201,14 @@ function useQueueEventsGo(
   }, [audience, enabled, queryClient, showID]);
 }
 
+function useSaveCallerNoteGo(_showID: string) {
+  return useMutation({
+    mutationFn: async (_input: { entryId: string; note: string }) => {
+      throw new ApiError(501, "NOT_SUPPORTED", "Caller notes need Convex.");
+    },
+  });
+}
+
 // The Convex build swaps in src/lib/convex/hooks.ts (see lib/backend.ts).
 export const useQueueTiers = usingConvex
   ? convexHooks.useQueueTiers
@@ -205,6 +225,9 @@ export const useLeaveQueue = usingConvex
 export const useCreatorQueue = usingConvex
   ? convexHooks.useCreatorQueue
   : useCreatorQueueGo;
+export const useSaveCallerNote = usingConvex
+  ? convexHooks.useSaveCallerNote
+  : useSaveCallerNoteGo;
 export const useQueueEvents = usingConvex
   ? convexHooks.useQueueEvents
   : useQueueEventsGo;

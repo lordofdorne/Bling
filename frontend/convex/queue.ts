@@ -6,6 +6,7 @@ import {
   internalMutation,
   type MutationCtx,
   mutation,
+  type QueryCtx,
   query,
 } from "./_generated/server";
 import { requireCreatorId, requireUserId } from "./lib/auth";
@@ -25,6 +26,9 @@ import { showForCreator } from "./shows";
 
 /** Most entries a creator's list returns at once. */
 const CREATOR_LIST_LIMIT = 200;
+
+/** Past calls counted per caller; the list shows "10+" beyond this. */
+const PAST_CALLS_COUNTED = 10;
 
 function publicEntry(entry: Doc<"queueEntries">) {
   return {
@@ -238,6 +242,49 @@ export const waiting = query({
           .take(remaining)),
       );
     }
-    return entries.map(publicEntry);
+    return Promise.all(
+      entries.map(async (entry) => ({
+        ...publicEntry(entry),
+        caller: await callerInsight(ctx, creatorId, entry.viewerId),
+      })),
+    );
   },
 });
+
+/**
+ * What the creator knows about one caller: whether they follow, how many
+ * calls with this creator went live, and the creator's private note. Only the
+ * creator's list carries this; a caller's own entry never does.
+ */
+async function callerInsight(
+  ctx: QueryCtx,
+  creatorId: Id<"users">,
+  viewerId: Id<"users">,
+) {
+  const [follow, calls, note] = await Promise.all([
+    ctx.db
+      .query("follows")
+      .withIndex("by_follower_creator", (q) =>
+        q.eq("followerId", viewerId).eq("creatorId", creatorId),
+      )
+      .first(),
+    ctx.db
+      .query("calls")
+      .withIndex("by_creator_viewer", (q) =>
+        q.eq("creatorId", creatorId).eq("viewerId", viewerId),
+      )
+      .filter((q) => q.neq(q.field("startedAt"), undefined))
+      .take(PAST_CALLS_COUNTED),
+    ctx.db
+      .query("callerNotes")
+      .withIndex("by_creator_viewer", (q) =>
+        q.eq("creatorId", creatorId).eq("viewerId", viewerId),
+      )
+      .first(),
+  ]);
+  return {
+    follower: follow !== null,
+    pastCalls: calls.length,
+    note: note?.note ?? "",
+  };
+}

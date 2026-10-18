@@ -11,9 +11,21 @@ export const SITE = {
   policiesEffective: "October 10, 2026",
 } as const;
 
+/**
+ * Bling is in beta. Creators who sign up now keep a bigger share of each
+ * paid call; convex/lib/stripe.ts fixes that rate on their account. When the
+ * beta ends, turn this off and switch SIGNUP_PLATFORM_FEE_BPS there.
+ */
+export const BETA = {
+  active: true,
+  creatorSharePercent: 90,
+  platformSharePercent: 10,
+} as const;
+
 // Numbers the policies quote. They match the backend's defaults
 // (convex/lib/stripe.ts fees, convex/payouts.ts and convex/lib/ledger.ts).
 export const PAYOUT_TERMS = {
+  /** The standard share, for creators who join after the beta. */
   creatorSharePercent: 80,
   platformSharePercent: 20,
   earningsHoldDays: 7,

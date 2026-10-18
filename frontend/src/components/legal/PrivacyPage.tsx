@@ -22,7 +22,9 @@ export function PrivacyPage() {
           </li>
           <li>
             <strong>Call requests:</strong> the name and topic you send. The
-            creator you request sees them.
+            creator you request sees them. For a paid call without an account,
+            the email you give for your receipt goes to Stripe, which sends the
+            receipt; Bling does not keep it.
           </li>
           <li>
             <strong>Activity:</strong> who you follow, notifications and whether
@@ -56,6 +58,11 @@ export function PrivacyPage() {
           <li>
             to run Bling: accounts, Hotlines, calls, follows and notifications;
           </li>
+          <li>
+            to email you when a creator you follow opens their Hotline. Every
+            email has an unsubscribe link, and you can turn these off in
+            Settings at any time;
+          </li>
           <li>to process payments, refunds and creator payouts;</li>
           <li>to prevent fraud and abuse, and enforce our terms;</li>
           <li>to answer you when you contact us.</li>
@@ -77,7 +84,7 @@ export function PrivacyPage() {
           </li>
           <li>
             <strong>Resend</strong>: sends account emails, such as password
-            reset codes.
+            reset codes and alerts when creators you follow go live.
           </li>
           <li>
             <strong>Network relay providers</strong>: help connect calls when a

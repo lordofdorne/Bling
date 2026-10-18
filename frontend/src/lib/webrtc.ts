@@ -1,3 +1,5 @@
+import { microphoneConstraints } from "./microphone";
+
 export type CallRole = "creator" | "viewer";
 
 export type WebRTCCallPhase =
@@ -97,11 +99,7 @@ export class WebRTCCallManager {
     this.setPhase("requesting-microphone");
     try {
       this.localStream = await this.dependencies.getUserMedia({
-        audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true,
-        },
+        audio: microphoneConstraints(),
         video: false,
       });
     } catch (cause) {
