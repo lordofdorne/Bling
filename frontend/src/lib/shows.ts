@@ -13,6 +13,8 @@ export type HotlineShow = {
   endedAt: string | null;
   createdAt: string;
   updatedAt: string;
+  /** When the creator announced this draft will open (Convex only). */
+  scheduledFor?: string | null;
 };
 
 type ShowResponse = { data: { show: HotlineShow } };
@@ -155,6 +157,28 @@ export const useCurrentShow = usingConvex
 export const useCreateShow = usingConvex
   ? convexHooks.useCreateShow
   : useCreateShowGo;
+/** The Go API has no scheduling; the Studio hides it in that build. */
+function useScheduleShowGo() {
+  return useMutation({
+    mutationFn: async (_input: {
+      showID: string;
+      scheduledFor: Date | null;
+    }): Promise<HotlineShow> => {
+      throw new ApiError(
+        501,
+        "NOT_SUPPORTED",
+        "Scheduling isn't available on this server.",
+      );
+    },
+  });
+}
+
+/** Whether this build can announce Hotline times. */
+export const schedulingAvailable = usingConvex;
+
+export const useScheduleShow = usingConvex
+  ? convexHooks.useScheduleShow
+  : useScheduleShowGo;
 export const useStartShow = usingConvex
   ? convexHooks.useStartShow
   : useStartShowGo;

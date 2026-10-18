@@ -92,6 +92,34 @@ export const resetWithCodeSchema = z
   });
 export type ResetWithCodeValues = z.infer<typeof resetWithCodeSchema>;
 
+// ---- Hotline schedule ----
+
+const MINUTE = 60_000;
+
+/**
+ * When a draft Hotline opens, from a `datetime-local` input (the viewer's
+ * local time). Same window as convex/shows.ts: 5 minutes to 60 days ahead.
+ */
+export const scheduleSchema = z.object({
+  when: z
+    .string()
+    .min(1, "Pick a date and time.")
+    .refine(
+      (value) => !Number.isNaN(new Date(value).getTime()),
+      "Pick a date and time.",
+    )
+    .refine(
+      (value) => new Date(value).getTime() - Date.now() >= 5 * MINUTE,
+      "Pick a time at least 5 minutes from now.",
+    )
+    .refine(
+      (value) =>
+        new Date(value).getTime() - Date.now() <= 60 * 24 * 60 * MINUTE,
+      "Pick a time within the next 60 days.",
+    ),
+});
+export type ScheduleValues = z.infer<typeof scheduleSchema>;
+
 // ---- Creator profile ----
 
 export const profileSchema = z.object({
@@ -119,8 +147,21 @@ export const callRequestSchema = z.object({
     .min(1, "Tell the host what you want to talk about.")
     .max(280, "Use 280 characters or fewer."),
   tierId: z.string().min(1, "Choose a tier."),
+  /**
+   * Where a guest's receipt goes for a paid tier. Optional here because the
+   * form only asks guests choosing a paid tier; it requires it then.
+   */
+  receiptEmail: z.union([z.literal(""), emailField]),
 });
 export type CallRequestValues = z.infer<typeof callRequestSchema>;
+
+// ---- Caller note ----
+// Same limit as convex/callerNotes.ts. Empty clears the note.
+
+export const callerNoteSchema = z.object({
+  note: z.string().trim().max(500, "Use 500 characters or fewer."),
+});
+export type CallerNoteValues = z.infer<typeof callerNoteSchema>;
 
 // ---- Hotline tiers ----
 // Duration and price stay strings while editing so a half-typed "0." or "4.5"

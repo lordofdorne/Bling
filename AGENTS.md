@@ -6,15 +6,15 @@ Guidance for agents working in this repo.
 
 - **The queue is a holding place, not a line.** Creators choose which waiting caller to connect to. Never show callers a number or place in line, an ETA, or "you're next", and never build first-in-first-out "take the next caller" logic. The API does not return a caller's position. Join order exists only to sort the creator's list and for random pick within a tier.
 
-## Backend: moving to Convex
+## Backend: Convex
 
-The backend is migrating from the Go API to Convex in phases; the plan, mapping and status are in [docs/convex-migration.md](docs/convex-migration.md). The Go API stays the production backend until cutover, so fix bugs there too. New backend work goes in `frontend/convex/` with `convex-test` tests next to it.
+Production runs on Convex. The Go API in `backend/` is legacy and does not run in production: do not change, build or test it, and do not port features or fixes to it. All backend work goes in `frontend/convex/` with `convex-test` tests next to it. How the code moved over is in [docs/convex-migration.md](docs/convex-migration.md).
 
 - A write that every caller makes (join, leave, heartbeat) touches only that caller's own document. Never add per-join counters or other hot shared documents.
 - Anything that can touch an unbounded number of documents runs in batches that reschedule themselves.
 - Throw `fail(code)` from `convex/lib/errors.ts`; codes match the Go API.
 - Stripe and other outside calls run in actions, never in mutations.
-- The frontend picks its backend at build time (`VITE_BACKEND=convex`). A data hook in `src/lib` needs both versions with the same name and result shape: the Go one in its module, the Convex one in `src/lib/convex/hooks.ts`, exported as `usingConvex ? convexHooks.X : XGo`. Components never import Convex directly.
+- Data hooks live in `src/lib/convex/hooks.ts` and are re-exported from their `src/lib` module, which components import; components never import Convex directly. Older modules still carry a Go twin behind `usingConvex ? convexHooks.X : XGo`; new hooks need only the Convex version.
 - Call signaling clients batch ICE candidates into one `signals.send` and acknowledge signals after a short quiet period, never one by one; otherwise ICE is about five times slower (measured in the migration doc, `npm run bench:signaling`).
 
 ## Tooling

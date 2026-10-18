@@ -16,6 +16,8 @@ type Intent = {
   status: string;
   capture_method: string;
   customer?: string;
+  description?: string;
+  receipt_email?: string | null;
   transfer_data: null;
   application_fee_amount: null;
   metadata: Record<string, string>;
@@ -75,6 +77,8 @@ export function createFakeStripe() {
           currency: string;
           capture_method: string;
           customer?: string;
+          description?: string;
+          receipt_email?: string;
           metadata: Record<string, string>;
         },
         options?: { idempotencyKey?: string },
@@ -92,6 +96,8 @@ export function createFakeStripe() {
           currency: params.currency,
           capture_method: params.capture_method,
           customer: params.customer,
+          description: params.description,
+          receipt_email: params.receipt_email ?? null,
           status: "requires_payment_method",
           transfer_data: null,
           application_fee_amount: null,
@@ -106,6 +112,14 @@ export function createFakeStripe() {
       async retrieve(id: string) {
         record("paymentIntents.retrieve");
         return intent(id);
+      },
+      async update(id: string, params: { receipt_email?: string }) {
+        record("paymentIntents.update");
+        const value = intent(id);
+        if (params.receipt_email !== undefined) {
+          value.receipt_email = params.receipt_email;
+        }
+        return value;
       },
       async capture(
         id: string,

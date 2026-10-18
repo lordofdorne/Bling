@@ -1,5 +1,6 @@
 import type { Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../_generated/server";
+import { queueLiveAlert } from "../liveAlerts";
 import { fail } from "./errors";
 
 // Social helpers shared by profiles, follows, directory, notifications,
@@ -65,6 +66,16 @@ export async function onShowCreated(ctx: MutationCtx, creatorId: Id<"users">) {
   }
 }
 
+/** Mirrors a draft's announced opening onto the public profile. */
+export async function onShowScheduled(
+  ctx: MutationCtx,
+  creatorId: Id<"users">,
+  scheduledFor: number | undefined,
+) {
+  const profile = await profileForUser(ctx, creatorId);
+  if (profile) await ctx.db.patch(profile._id, { nextHotlineAt: scheduledFor });
+}
+
 /**
  * Going live publishes the profile, marks it live and records one live
  * event per show for followers. A fixed amount of work: followers are never
@@ -78,6 +89,7 @@ export async function onShowLive(ctx: MutationCtx, show: Doc<"shows">) {
       isLive: true,
       liveShowId: show._id,
       liveStartedAt: show.startedAt,
+      nextHotlineAt: undefined,
     });
   }
   const existing = await ctx.db
@@ -89,6 +101,7 @@ export async function onShowLive(ctx: MutationCtx, show: Doc<"shows">) {
       creatorId: show.creatorId,
       showId: show._id,
     });
+    await queueLiveAlert(ctx, show);
   }
 }
 
@@ -141,7 +154,18 @@ export async function publicProfile(
     liveStartedAt: profile.liveStartedAt,
     isFollowing: following,
     channelVisitors: profile.isLive ? (stats?.visitors ?? 0) : undefined,
+    nextHotlineAt: upcoming(profile),
   };
+}
+
+/** How long after an announced time it still shows as "starting soon". */
+export const SCHEDULE_GRACE_MS = 3 * 60 * 60_000;
+
+/** The announced next Hotline, unless live already or long overdue. */
+function upcoming(profile: Doc<"profiles">) {
+  const at = profile.nextHotlineAt;
+  if (profile.isLive || at === undefined) return undefined;
+  return at > Date.now() - SCHEDULE_GRACE_MS ? at : undefined;
 }
 
 export async function avatarUrl(ctx: QueryCtx, profile: Doc<"profiles">) {

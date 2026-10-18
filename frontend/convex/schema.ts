@@ -95,6 +95,8 @@ export default defineSchema({
     phoneVerificationTime: v.optional(v.number()),
     isAnonymous: v.optional(v.boolean()),
     username: v.optional(v.string()),
+    /** The creator's platform fee, fixed at sign-up (lib/stripe.ts). */
+    platformFeeBps: v.optional(v.number()),
   })
     .index("email", ["email"])
     .index("phone", ["phone"])
@@ -105,6 +107,8 @@ export default defineSchema({
     status: showStatus,
     startedAt: v.optional(v.number()),
     endedAt: v.optional(v.number()),
+    /** When the creator says this draft will open, announced on their page. */
+    scheduledFor: v.optional(v.number()),
   }).index("by_creator_status", ["creatorId", "status"]),
 
   // Tiers belong to one show and are replaced as a set before it starts.
@@ -163,7 +167,17 @@ export default defineSchema({
     .index("by_show_status", ["showId", "status"])
     .index("by_status", ["status"])
     .index("by_payment_attempt", ["paymentAttemptId"])
-    .index("by_viewer_show", ["viewerId", "showId"]),
+    .index("by_viewer_show", ["viewerId", "showId"])
+    .index("by_creator_viewer", ["creatorId", "viewerId"]),
+
+  // A creator's private note about one caller, kept across shows. Only that
+  // creator reads or writes it; callers never see it.
+  callerNotes: defineTable({
+    creatorId: v.id("users"),
+    viewerId: v.id("users"),
+    note: v.string(),
+    updatedAt: v.number(),
+  }).index("by_creator_viewer", ["creatorId", "viewerId"]),
 
   // WebRTC signaling between the two participants. The sender inserts, the
   // recipient's live query sees it, and the recipient deletes it once handled.
@@ -382,6 +396,10 @@ export default defineSchema({
     isLive: v.boolean(),
     liveShowId: v.optional(v.id("shows")),
     liveStartedAt: v.optional(v.number()),
+    /** The announced opening of the creator's next Hotline, if any. */
+    nextHotlineAt: v.optional(v.number()),
+    /** When followers were last emailed that this creator went live. */
+    lastLiveAlertAt: v.optional(v.number()),
     /** username, display name and bio, for the search index. */
     searchText: v.string(),
   })
@@ -429,6 +447,13 @@ export default defineSchema({
   })
     .index("by_creator", ["creatorId"])
     .index("by_show", ["showId"]),
+
+  // A user's email choices. No row means the defaults (alerts on); a row is
+  // written only when they change something.
+  emailPreferences: defineTable({
+    userId: v.id("users"),
+    liveAlerts: v.boolean(),
+  }).index("by_user", ["userId"]),
 
   notificationReads: defineTable({
     userId: v.id("users"),

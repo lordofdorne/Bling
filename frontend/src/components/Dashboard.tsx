@@ -11,6 +11,8 @@ import {
 } from "../lib/shows";
 import { ProfileEditor } from "./ProfileEditor";
 import { CallerList } from "./studio/CallerList";
+import { PreShowCheck } from "./studio/PreShowCheck";
+import { ScheduleCard } from "./studio/ScheduleCard";
 import { TierConfiguration } from "./studio/TierConfiguration";
 import { PayoutSettings } from "./studio/PayoutSettings";
 import { PaymentSettings } from "./studio/PaymentSettings";
@@ -121,11 +123,15 @@ function StudioOverview({ username }: { username: string }) {
             </CardContent>
           </Card>
         ) : activeShow?.status === "CREATED" ? (
-          <TierConfiguration
-            showID={activeShow.id}
-            starting={startShow.isPending}
-            onStart={() => startShow.mutate(activeShow.id)}
-          />
+          <>
+            <ScheduleCard show={activeShow} username={username} />
+            <PreShowCheck />
+            <TierConfiguration
+              showID={activeShow.id}
+              starting={startShow.isPending}
+              onStart={() => startShow.mutate(activeShow.id)}
+            />
+          </>
         ) : (
           <Card>
             <CardContent className="flex flex-col items-center gap-3 py-(--space-6) text-center">

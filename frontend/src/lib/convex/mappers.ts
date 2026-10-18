@@ -13,7 +13,9 @@ type ShowDoc = NonNullable<FunctionReturnType<typeof api.shows.current>>;
 
 export function toShow(
   show: Pick<ShowDoc, "_id" | "status" | "startedAt"> &
-    Partial<Pick<ShowDoc, "creatorId" | "endedAt" | "_creationTime">>,
+    Partial<
+      Pick<ShowDoc, "creatorId" | "endedAt" | "_creationTime" | "scheduledFor">
+    >,
 ): HotlineShow {
   const created = iso(show._creationTime ?? show.startedAt ?? Date.now())!;
   return {
@@ -24,6 +26,7 @@ export function toShow(
     endedAt: iso(show.endedAt),
     createdAt: created,
     updatedAt: created,
+    scheduledFor: iso(show.scheduledFor),
   };
 }
 
@@ -55,7 +58,12 @@ export function toQueueTier(tier: PublicTier): QueueTier {
   };
 }
 
-type EntryDoc = FunctionReturnType<typeof api.queue.waiting>[number];
+// The creator's list adds caller insight; a caller's own entry has none.
+type EntryDoc = Omit<
+  FunctionReturnType<typeof api.queue.waiting>[number],
+  "caller"
+> &
+  Partial<Pick<FunctionReturnType<typeof api.queue.waiting>[number], "caller">>;
 
 export function toEntry(entry: EntryDoc): QueueEntry {
   return {
@@ -70,6 +78,7 @@ export function toEntry(entry: EntryDoc): QueueEntry {
     callDurationSeconds: entry.callDurationSeconds,
     tierPriceCents: entry.tierPriceCents,
     joinedAt: iso(entry.joinedAt)!,
+    caller: entry.caller,
   };
 }
 
@@ -118,5 +127,6 @@ export function toProfile(profile: ProfileDoc): CreatorProfile {
     liveStartedAt: iso(profile.liveStartedAt),
     isFollowing: profile.isFollowing,
     channelVisitors: profile.channelVisitors ?? null,
+    nextHotlineAt: iso(profile.nextHotlineAt),
   };
 }

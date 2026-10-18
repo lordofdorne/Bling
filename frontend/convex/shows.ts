@@ -16,7 +16,12 @@ import {
 } from "./lib/calls";
 import { fail } from "./lib/errors";
 import { scheduleCancel } from "./lib/payments";
-import { onShowCreated, onShowEnded, onShowLive } from "./lib/social";
+import {
+  onShowCreated,
+  onShowEnded,
+  onShowLive,
+  onShowScheduled,
+} from "./lib/social";
 import { accountReady } from "./payouts";
 
 // Show lifecycle: CREATED → LIVE → ENDED. Ported from backend/internal/show.
@@ -82,6 +87,33 @@ export const create = mutation({
     });
     await onShowCreated(ctx, creatorId);
     return showId;
+  },
+});
+
+/** A schedule must be at least this far ahead, and at most this far. */
+const SCHEDULE_MIN_LEAD_MS = 5 * 60_000;
+const SCHEDULE_MAX_LEAD_MS = 60 * 24 * 60 * 60_000;
+
+/**
+ * Announces when a draft Hotline will open, or clears it (null). It's an
+ * announcement, not a timer: the creator still opens the Hotline themselves,
+ * since callers need them there. Going live clears it.
+ */
+export const schedule = mutation({
+  args: { showId: v.id("shows"), scheduledFor: v.union(v.number(), v.null()) },
+  handler: async (ctx, { showId, scheduledFor }) => {
+    const creatorId = await requireCreatorId(ctx);
+    const show = await showForCreator(ctx, showId, creatorId);
+    if (show.status !== "CREATED") fail("INVALID_SHOW_STATE");
+    if (scheduledFor !== null) {
+      const lead = scheduledFor - Date.now();
+      if (lead < SCHEDULE_MIN_LEAD_MS || lead > SCHEDULE_MAX_LEAD_MS) {
+        fail("VALIDATION_FAILED");
+      }
+    }
+    await ctx.db.patch(showId, { scheduledFor: scheduledFor ?? undefined });
+    await onShowScheduled(ctx, creatorId, scheduledFor ?? undefined);
+    return (await ctx.db.get(showId))!;
   },
 });
 

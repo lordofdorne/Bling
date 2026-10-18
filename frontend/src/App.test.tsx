@@ -140,7 +140,18 @@ describe("App routes", () => {
     fireEvent.change(screen.getByLabelText(/What do you want/), {
       target: { value: "My launch" },
     });
+    // A guest on a paid tier is asked where to send the receipt.
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Continue to payment" }),
+    );
+    expect(
+      await screen.findByText("Enter an email for your receipt."),
+    ).toBeInTheDocument();
+    // A free tier needs no receipt.
     fireEvent.click(screen.getByLabelText(/Standard/));
+    expect(
+      screen.queryByLabelText("Email for your receipt"),
+    ).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Send call request" }));
 
     expect(await screen.findByText("The host can see you")).toBeInTheDocument();
@@ -151,7 +162,11 @@ describe("App routes", () => {
     expect(
       new Headers(joinCall?.[1]?.headers).get("Idempotency-Key"),
     ).toBeTruthy();
-    expect(JSON.parse(String(joinCall?.[1]?.body)).tierId).toBe("tier-1");
+    expect(JSON.parse(String(joinCall?.[1]?.body))).toEqual({
+      displayName: "Sam",
+      topic: "My launch",
+      tierId: "tier-1",
+    });
   });
 
   it("restores a caller request after refresh", async () => {

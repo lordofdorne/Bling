@@ -6,6 +6,7 @@ import { api } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import type { MutationCtx } from "./_generated/server";
 import { createProfile } from "./lib/social";
+import { STANDARD_PLATFORM_FEE_BPS } from "./lib/stripe";
 import schema from "./schema";
 
 // Shared setup for convex-test suites. Convex does not deploy files with more
@@ -18,11 +19,17 @@ export function setup() {
   // Convex Auth identities carry "userId|sessionId" in the subject.
   const as = (userId: Id<"users">) =>
     t.withIdentity({ subject: `${userId}|session` });
-  const creator = async (username: string) => {
+  // Creators pay the standard fee unless a test gives them another rate;
+  // null makes an account from before rates were stored.
+  const creator = async (
+    username: string,
+    platformFeeBps: number | null = STANDARD_PLATFORM_FEE_BPS,
+  ) => {
     const id = await t.run(async (ctx) => {
       const userId = await ctx.db.insert("users", {
         email: `${username}@bling.test`,
         username,
+        platformFeeBps: platformFeeBps ?? undefined,
       });
       await createProfile(ctx as unknown as MutationCtx, userId, username);
       return userId;

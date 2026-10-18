@@ -9,6 +9,7 @@
  */
 
 import type * as auth from "../auth.js";
+import type * as callerNotes from "../callerNotes.js";
 import type * as calls from "../calls.js";
 import type * as channels from "../channels.js";
 import type * as crons from "../crons.js";
@@ -22,6 +23,7 @@ import type * as lib_ledger from "../lib/ledger.js";
 import type * as lib_payments from "../lib/payments.js";
 import type * as lib_social from "../lib/social.js";
 import type * as lib_stripe from "../lib/stripe.js";
+import type * as liveAlerts from "../liveAlerts.js";
 import type * as notifications from "../notifications.js";
 import type * as passwordReset from "../passwordReset.js";
 import type * as paymentMethods from "../paymentMethods.js";
@@ -46,6 +48,7 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   auth: typeof auth;
+  callerNotes: typeof callerNotes;
   calls: typeof calls;
   channels: typeof channels;
   crons: typeof crons;
@@ -59,6 +62,7 @@ declare const fullApi: ApiFromModules<{
   "lib/payments": typeof lib_payments;
   "lib/social": typeof lib_social;
   "lib/stripe": typeof lib_stripe;
+  liveAlerts: typeof liveAlerts;
   notifications: typeof notifications;
   passwordReset: typeof passwordReset;
   paymentMethods: typeof paymentMethods;

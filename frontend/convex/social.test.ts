@@ -486,3 +486,92 @@ describe("channel visitors", () => {
     await env.t.finishAllScheduledFunctions(vi.runAllTimers);
   });
 });
+
+describe("scheduled Hotlines", () => {
+  const HOUR = 60 * 60_000;
+
+  async function draft(env: ReturnType<typeof setup>) {
+    const host = await env.creator("alice");
+    const showId = await host.client.mutation(api.shows.create, {});
+    const visitor = await env.viewer();
+    const next = async () =>
+      (await visitor.client.query(api.profiles.get, { username: "alice" }))
+        ?.nextHotlineAt;
+    return { host, showId, next };
+  }
+
+  it("announces the next opening on the public profile until it goes live", async () => {
+    const env = setup();
+    const { host, showId, next } = await draft(env);
+    const at = Date.now() + DAY;
+    await host.client.mutation(api.shows.schedule, {
+      showId,
+      scheduledFor: at,
+    });
+    expect(await next()).toBe(at);
+
+    await host.client.mutation(api.shows.start, { showId });
+    expect(await next()).toBeUndefined();
+  });
+
+  it("can be changed or cleared, and only on a draft", async () => {
+    const env = setup();
+    const { host, showId, next } = await draft(env);
+    await host.client.mutation(api.shows.schedule, {
+      showId,
+      scheduledFor: Date.now() + DAY,
+    });
+    await host.client.mutation(api.shows.schedule, {
+      showId,
+      scheduledFor: null,
+    });
+    expect(await next()).toBeUndefined();
+
+    await host.client.mutation(api.shows.start, { showId });
+    await expectCode(
+      host.client.mutation(api.shows.schedule, {
+        showId,
+        scheduledFor: Date.now() + DAY,
+      }),
+      "INVALID_SHOW_STATE",
+    );
+  });
+
+  it("must be at least 5 minutes and at most 60 days ahead", async () => {
+    const env = setup();
+    const { host, showId } = await draft(env);
+    for (const scheduledFor of [Date.now() + 60_000, Date.now() + 61 * DAY]) {
+      await expectCode(
+        host.client.mutation(api.shows.schedule, { showId, scheduledFor }),
+        "VALIDATION_FAILED",
+      );
+    }
+  });
+
+  it("shows as starting soon for 3 hours past the time, then drops off", async () => {
+    const env = setup();
+    const { host, showId, next } = await draft(env);
+    const at = Date.now() + HOUR;
+    await host.client.mutation(api.shows.schedule, {
+      showId,
+      scheduledFor: at,
+    });
+    vi.advanceTimersByTime(3 * HOUR);
+    expect(await next()).toBe(at);
+    vi.advanceTimersByTime(2 * HOUR);
+    expect(await next()).toBeUndefined();
+  });
+
+  it("is for the creator alone to set", async () => {
+    const env = setup();
+    const { showId } = await draft(env);
+    const other = await env.creator("bob");
+    await expectCode(
+      other.client.mutation(api.shows.schedule, {
+        showId,
+        scheduledFor: Date.now() + DAY,
+      }),
+      "SHOW_NOT_FOUND",
+    );
+  });
+});

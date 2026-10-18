@@ -12,6 +12,7 @@ import { useEffect } from "react";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { ApiError } from "../api";
+import type { AuthorizeInput } from "../payments";
 import type {
   Creator,
   LoginInput,
@@ -210,6 +211,24 @@ export function useCreateShow() {
   });
 }
 
+export function useScheduleShow() {
+  return useMutation({
+    mutationFn: async ({
+      showID,
+      scheduledFor,
+    }: {
+      showID: string;
+      scheduledFor: Date | null;
+    }) =>
+      toShow(
+        await runMutation(api.shows.schedule, {
+          showId: showId(showID),
+          scheduledFor: scheduledFor ? scheduledFor.getTime() : null,
+        }),
+      ),
+  });
+}
+
 export function useStartShow(_username: string) {
   return useMutation({
     mutationFn: async (id: string) =>
@@ -300,6 +319,17 @@ export function useCreatorQueue(id: string) {
   });
 }
 
+/** The live waiting list picks up the saved note by itself. */
+export function useSaveCallerNote(_id: string) {
+  return useMutation({
+    mutationFn: (input: { entryId: string; note: string }) =>
+      runMutation(api.callerNotes.save, {
+        entryId: input.entryId as Id<"queueEntries">,
+        note: input.note,
+      }),
+  });
+}
+
 /** Convex queries are live, so there is no event socket to hold open. */
 export function useQueueEvents(
   _showID: string,
@@ -383,13 +413,14 @@ function paymentKey(id: string, tierID: string) {
 export function useAuthorizePayment(id: string) {
   const ensureSession = useEnsureSession();
   return useMutation({
-    mutationFn: async (tierID: string) => {
+    mutationFn: async ({ tierID, receiptEmail }: AuthorizeInput) => {
       await ensureSession();
       const key = paymentKey(id, tierID);
       const result = await runAction(api.payments.authorize, {
         showId: showId(id),
         tierId: tierID as Id<"showTiers">,
         idempotencyKey: key.value,
+        receiptEmail: receiptEmail || undefined,
       });
       return { ...result, storageKey: key.storageKey };
     },
@@ -684,4 +715,17 @@ export function useChannelPresence(username: string, live: boolean) {
       document.removeEventListener("visibilitychange", visible);
     };
   }, [username, live, ensureSession]);
+}
+
+// ------------------------------------------------------------ email alerts
+
+export function useEmailPreferences() {
+  return useQuery(convexQuery(api.liveAlerts.preferences, {}));
+}
+
+export function useSetLiveAlerts() {
+  return useMutation({
+    mutationFn: (enabled: boolean) =>
+      runMutation(api.liveAlerts.setLiveAlerts, { enabled }),
+  });
 }

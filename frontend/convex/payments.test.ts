@@ -1,6 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { api } from "./_generated/api";
-import { paymentFees } from "./lib/stripe";
+import {
+  BETA_PLATFORM_FEE_BPS,
+  paymentFees,
+  STANDARD_PLATFORM_FEE_BPS,
+} from "./lib/stripe";
 import { expectCode, liveShow, type Participant, setup } from "./test.helpers";
 import {
   createFakeStripe,
@@ -25,9 +29,11 @@ beforeEach(() => {
 afterEach(() => vi.useRealTimers());
 
 /** A live show with a $5 paid tier, and one caller. */
-async function paidShow() {
+async function paidShow(
+  platformFeeBps: number | null = STANDARD_PLATFORM_FEE_BPS,
+) {
   const env = setup();
-  const host = await env.creator("alice");
+  const host = await env.creator("alice", platformFeeBps);
   const { showId } = await liveShow(host);
   // Starting a paid show needs payout setup, so add the tier directly.
   const tierId = await env.t.run((ctx) =>
@@ -105,10 +111,22 @@ describe("fees", () => {
     [1_000_000, 29030, 14515, 214515],
   ])("matches the Go API for %i cents", (amount, basic, creator, platform) => {
     // Expected values come from the Go formula (backend/internal/payment).
-    expect(paymentFees(amount)).toEqual({
+    expect(paymentFees(amount, STANDARD_PLATFORM_FEE_BPS)).toEqual({
       platformFeeBps: 2000,
       basicCardFeeCents: basic,
       creatorProcessingFeeCents: creator,
+      platformFeeCents: platform,
+    });
+  });
+
+  it.each([
+    [50, 20],
+    [500, 72],
+    [999, 129],
+    [5000, 587],
+  ])("lets beta creators keep 90% of %i cents", (amount, platform) => {
+    expect(paymentFees(amount, BETA_PLATFORM_FEE_BPS)).toMatchObject({
+      platformFeeBps: 1000,
       platformFeeCents: platform,
     });
   });
@@ -138,6 +156,22 @@ describe("authorizing a paid tier", () => {
       amountCents: 500,
       platformFeeCents: 122,
       payerId: env.caller.id,
+    });
+  });
+
+  it.each([
+    ["a beta creator", BETA_PLATFORM_FEE_BPS],
+    ["a creator from before rates were stored", null],
+  ])("takes the 10%% beta fee for %s", async (_name, platformFeeBps) => {
+    const env = await paidShow(platformFeeBps);
+    await authorizeAndJoin(env);
+    const [attempt] = await env.attempts();
+    expect(attempt).toMatchObject({
+      platformFeeBps: 1000,
+      platformFeeCents: 72,
+    });
+    expect(await env.host.client.query(api.payouts.current, {})).toMatchObject({
+      platformFeePercent: 10,
     });
   });
 
@@ -561,5 +595,67 @@ describe("saved cards", () => {
       caller.client.action(api.paymentMethods.list, {}),
       "UNAUTHENTICATED",
     );
+  });
+});
+
+describe("fan receipts", () => {
+  const intentFor = (clientSecret: string) =>
+    stripe.intents.get(clientSecret.replace("_secret", ""))!;
+
+  it("sends a guest's receipt to the email they gave, described by call", async () => {
+    const env = await paidShow();
+    const { clientSecret } = await env.caller.client.action(
+      api.payments.authorize,
+      {
+        showId: env.showId,
+        tierId: env.tierId,
+        idempotencyKey: "receipt-key-1",
+        receiptEmail: "  Sam@Example.com ",
+      },
+    );
+    expect(intentFor(clientSecret)).toMatchObject({
+      receipt_email: "sam@example.com",
+      description: "Call with @alice · Priority (2 min)",
+    });
+  });
+
+  it("updates the receipt email when a guest retries with a new one", async () => {
+    const env = await paidShow();
+    const authorize = (receiptEmail: string) =>
+      env.caller.client.action(api.payments.authorize, {
+        showId: env.showId,
+        tierId: env.tierId,
+        idempotencyKey: "receipt-key-2",
+        receiptEmail,
+      });
+    await authorize("typo@exmaple.com");
+    const { clientSecret } = await authorize("sam@example.com");
+    expect(intentFor(clientSecret).receipt_email).toBe("sam@example.com");
+  });
+
+  it("rejects an invalid receipt email before touching Stripe", async () => {
+    const env = await paidShow();
+    await expectCode(
+      env.caller.client.action(api.payments.authorize, {
+        showId: env.showId,
+        tierId: env.tierId,
+        idempotencyKey: "receipt-key-3",
+        receiptEmail: "not-an-email",
+      }),
+      "VALIDATION_FAILED",
+    );
+    expect(stripe.intents.size).toBe(0);
+  });
+
+  it("uses a signed-in fan's account email", async () => {
+    const env = await paidShow();
+    const fan = await env.creator("bob");
+    const { clientSecret } = await fan.client.action(api.payments.authorize, {
+      showId: env.showId,
+      tierId: env.tierId,
+      idempotencyKey: "receipt-key-4",
+      receiptEmail: "other@example.com",
+    });
+    expect(intentFor(clientSecret).receipt_email).toBe("bob@bling.test");
   });
 });
