@@ -10,23 +10,16 @@ import {
   type HotlineShow,
 } from "../../lib/shows";
 import { FormError, TextField } from "../form-fields";
-import { SectionHeader } from "../page";
+import { SetupRow } from "./SetupRow";
 import { formatDateTime, toDateTimeInput } from "./format";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import { Form } from "@/components/ui/form";
 
 // Announces when a draft Hotline will open. Fans see it on the creator's
 // page and can add it to their calendar; the creator still opens the
 // Hotline themselves when the time comes.
 
-export function ScheduleCard({
-  show,
-  username,
-}: {
-  show: HotlineShow;
-  username: string;
-}) {
+export function ScheduleRow({ show }: { show: HotlineShow }) {
   const schedule = useScheduleShow();
   const [editing, setEditing] = useState(false);
   const scheduledFor = show.scheduledFor ? new Date(show.scheduledFor) : null;
@@ -37,61 +30,56 @@ export function ScheduleCard({
     schedule.mutateAsync({ showID: show.id, scheduledFor: when });
 
   return (
-    <Card aria-label="Schedule">
-      <CardContent className="flex flex-col gap-(--card-gap)">
-        <SectionHeader
-          title="Schedule"
-          description={`Tell fans when you'll open. They'll see it on /u/${username}; you still open the Hotline yourself.`}
-        />
-        {scheduledFor && !editing ? (
-          <div className="flex flex-col gap-(--card-gap) tablet:flex-row tablet:items-center tablet:justify-between">
-            <div className="flex items-center gap-3">
-              <span className="bg-muted text-[var(--sand-text)] grid size-10 shrink-0 place-items-center rounded-lg">
-                <CalendarClock className="size-5" />
-              </span>
-              <div className="min-w-0">
-                <span className="text-muted-foreground block text-(length:--text-meta)">
-                  Opens
-                </span>
-                <strong className="block font-semibold">
-                  {formatDateTime(scheduledFor)}
-                </strong>
-              </div>
-            </div>
-            <div className="flex flex-col-reverse gap-2 tablet:flex-row">
-              <Button
-                variant="ghost"
-                size="sm"
-                type="button"
-                disabled={schedule.isPending}
-                onClick={() => void save(null).catch(() => {})}
-              >
-                Remove
-              </Button>
-              <Button
-                variant="secondary"
-                size="sm"
-                type="button"
-                onClick={() => setEditing(true)}
-              >
-                Change
-              </Button>
-            </div>
-          </div>
+    <SetupRow
+      label="Schedule"
+      icon={CalendarClock}
+      title="Schedule"
+      status={
+        scheduledFor ? (
+          <>
+            Opens{" "}
+            <strong className="text-foreground font-semibold">
+              {formatDateTime(scheduledFor)}
+            </strong>
+          </>
         ) : (
-          <ScheduleForm
-            initial={scheduledFor}
-            pending={schedule.isPending}
-            onCancel={scheduledFor ? () => setEditing(false) : undefined}
-            onSave={async (when) => {
-              await save(when);
-              setEditing(false);
-            }}
-          />
-        )}
-        <FormError error={schedule.error} />
-      </CardContent>
-    </Card>
+          "Let fans know when you'll open"
+        )
+      }
+      action={
+        !editing && (
+          <Button
+            variant="secondary"
+            size="sm"
+            type="button"
+            onClick={() => setEditing(true)}
+          >
+            {scheduledFor ? "Change" : "Set time"}
+          </Button>
+        )
+      }
+    >
+      {editing && (
+        <ScheduleForm
+          initial={scheduledFor}
+          pending={schedule.isPending}
+          onCancel={() => setEditing(false)}
+          onRemove={
+            scheduledFor
+              ? async () => {
+                  await save(null);
+                  setEditing(false);
+                }
+              : undefined
+          }
+          onSave={async (when) => {
+            await save(when);
+            setEditing(false);
+          }}
+        />
+      )}
+      <FormError error={schedule.error} />
+    </SetupRow>
   );
 }
 
@@ -100,11 +88,13 @@ function ScheduleForm({
   pending,
   onSave,
   onCancel,
+  onRemove,
 }: {
   initial: Date | null;
   pending: boolean;
   onSave: (when: Date) => Promise<void>;
-  onCancel?: () => void;
+  onCancel: () => void;
+  onRemove?: () => Promise<void>;
 }) {
   const controlSize = useControlSize();
   const form = useForm<ScheduleValues>({
@@ -135,17 +125,26 @@ function ScheduleForm({
           min={toDateTimeInput(new Date())}
           className="min-w-0 flex-1"
         />
-        <div className="flex flex-col-reverse gap-2 tablet:flex-row">
-          {onCancel && (
+        <div className="flex flex-col gap-2 tablet:flex-row">
+          {onRemove && (
             <Button
-              variant="secondary"
+              variant="ghost"
               size={controlSize}
               type="button"
-              onClick={onCancel}
+              disabled={pending}
+              onClick={() => void onRemove().catch(() => {})}
             >
-              Cancel
+              Remove
             </Button>
           )}
+          <Button
+            variant="secondary"
+            size={controlSize}
+            type="button"
+            onClick={onCancel}
+          >
+            Cancel
+          </Button>
           <Button size={controlSize} type="submit" disabled={pending}>
             {pending ? "Saving…" : "Announce"}
           </Button>

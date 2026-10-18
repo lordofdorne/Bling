@@ -11,8 +11,7 @@ import {
 } from "../lib/shows";
 import { ProfileEditor } from "./ProfileEditor";
 import { CallerList } from "./studio/CallerList";
-import { PreShowCheck } from "./studio/PreShowCheck";
-import { ScheduleCard } from "./studio/ScheduleCard";
+import { GoLiveSetup } from "./studio/GoLiveSetup";
 import { TierConfiguration } from "./studio/TierConfiguration";
 import { PayoutSettings } from "./studio/PayoutSettings";
 import { PaymentSettings } from "./studio/PaymentSettings";
@@ -124,8 +123,7 @@ function StudioOverview({ username }: { username: string }) {
           </Card>
         ) : activeShow?.status === "CREATED" ? (
           <>
-            <ScheduleCard show={activeShow} username={username} />
-            <PreShowCheck />
+            <GoLiveSetup show={activeShow} />
             <TierConfiguration
               showID={activeShow.id}
               starting={startShow.isPending}
