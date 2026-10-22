@@ -216,7 +216,7 @@ describe("API-backed social discovery", () => {
       "/api/v1/creators?q=bob&live=true",
       expect.anything(),
     );
-    fireEvent.click(screen.getByRole("button", { name: "Live now" }));
+    fireEvent.click(screen.getByRole("switch", { name: "Live only" }));
     await waitFor(() =>
       expect(fetch).toHaveBeenCalledWith(
         "/api/v1/creators?q=bob",

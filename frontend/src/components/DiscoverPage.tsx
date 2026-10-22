@@ -16,6 +16,8 @@ import { CreatorCallout, QuietNotice, TopicBar } from "./info/DiscoverExtras";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { Grid, GridItem } from "./Grid";
 import { PageHeader, SectionHeader } from "./page";
 import { useScreenSize } from "../lib/design";
@@ -233,27 +235,30 @@ export function DiscoverPage({
                 ? `Results for “${query}”`
                 : view === "following"
                   ? "From your following"
-                  : "Popular on Bling"
+                  : liveOnly
+                    ? "Live now"
+                    : "Popular on Bling"
             }
-            description="Live creators first, then the most followed."
+            description={
+              liveOnly
+                ? "Creators taking calls right now."
+                : "Live creators first, then the most followed."
+            }
           />
-          <Button
-            variant={liveOnly ? "secondary" : "outline"}
-            size="sm"
-            className="shrink-0 rounded-full"
-            aria-pressed={liveOnly}
-            onClick={() =>
-              setParams((current) => {
-                const next = new URLSearchParams(current);
-                if (liveOnly) next.delete("live");
-                else next.set("live", "true");
-                return next;
-              })
-            }
-          >
-            <span className="bg-primary size-2 rounded-full" />
-            Live now
-          </Button>
+          <Label className="flex shrink-0 cursor-pointer items-center gap-2 text-(length:--text-meta) font-semibold">
+            <Switch
+              checked={liveOnly}
+              onCheckedChange={(checked) =>
+                setParams((current) => {
+                  const next = new URLSearchParams(current);
+                  if (checked) next.set("live", "true");
+                  else next.delete("live");
+                  return next;
+                })
+              }
+            />
+            Live only
+          </Label>
         </div>
 
         {signedOut ? (
@@ -352,14 +357,18 @@ export function DiscoverPage({
                 ? "Make yourself at home."
                 : query
                   ? `No one's talking about “${query}” yet.`
-                  : "A new conversation starts with you."}
+                  : liveOnly
+                    ? "No one's live right now."
+                    : "A new conversation starts with you."}
             </h2>
             <p className="text-muted-foreground max-w-md text-sm">
               {view === "following"
                 ? "Follow creators to build your feed, or clear your filters to see more."
                 : query
                   ? "Try another topic above, or open your own Hotline and be the first."
-                  : "No creators match these filters yet. Clear your filters or open your own Hotline."}
+                  : liveOnly
+                    ? "Turn off Live only to see every creator, and follow the ones you like to hear when they go live."
+                    : "No creators match these filters yet. Clear your filters or open your own Hotline."}
             </p>
             <Button asChild>
               <Link to="/">
