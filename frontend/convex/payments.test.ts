@@ -5,6 +5,7 @@ import {
   paymentFees,
   STANDARD_PLATFORM_FEE_BPS,
 } from "./lib/stripe";
+import { creatorTakeHomeCents } from "../src/lib/site";
 import { expectCode, liveShow, type Participant, setup } from "./test.helpers";
 import {
   createFakeStripe,
@@ -130,6 +131,21 @@ describe("fees", () => {
       platformFeeCents: platform,
     });
   });
+
+  it.each([50, 500, 999, 1000, 2500, 5000, 1_000_000])(
+    "quotes creators the take-home they get for %i cents",
+    (amount) => {
+      for (const [bps, percent] of [
+        [BETA_PLATFORM_FEE_BPS, 90],
+        [STANDARD_PLATFORM_FEE_BPS, 80],
+      ]) {
+        const { platformFeeCents } = paymentFees(amount, bps);
+        expect(creatorTakeHomeCents(amount, percent)).toBe(
+          amount - platformFeeCents,
+        );
+      }
+    },
+  );
 });
 
 describe("authorizing a paid tier", () => {

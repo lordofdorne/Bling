@@ -314,6 +314,43 @@ describe("directory and search", () => {
     );
   });
 
+  it("finds creators by topic and keeps topics on later saves", async () => {
+    const { env, quiet } = await creators();
+    const details = {
+      displayName: "quiet",
+      bio: "",
+      coverUrl: "",
+      published: true,
+    };
+    await quiet.client.mutation(api.profiles.save, {
+      ...details,
+      topics: ["Advice", "Music", "Advice"],
+    });
+    const guest = await env.viewer();
+    const search = await guest.client.query(api.directory.search, {
+      query: "advice",
+    });
+    expect(search.items.map((p) => [p.username, p.topics])).toEqual([
+      ["quiet", ["Advice", "Music"]],
+    ]);
+    const kept = await quiet.client.mutation(api.profiles.save, details);
+    expect(kept.topics).toEqual(["Advice", "Music"]);
+    await expectCode(
+      quiet.client.mutation(api.profiles.save, {
+        ...details,
+        topics: ["Cats"],
+      }),
+      "VALIDATION_FAILED",
+    );
+    await expectCode(
+      quiet.client.mutation(api.profiles.save, {
+        ...details,
+        topics: ["Advice", "Music", "Art", "Tech"],
+      }),
+      "VALIDATION_FAILED",
+    );
+  });
+
   it("shows who the signed-in user follows", async () => {
     const { env } = await creators();
     const fan = await env.creator("fan_c");

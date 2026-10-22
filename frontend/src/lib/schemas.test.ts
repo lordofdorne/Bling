@@ -52,12 +52,36 @@ describe("form schemas", () => {
       avatarUrl: "",
       coverUrl: "",
       published: true,
+      topics: ["Advice"],
     };
     expect(profileSchema.safeParse(base).success).toBe(true);
     expect(
       profileSchema.safeParse({ ...base, coverUrl: "http://x.test/a.png" })
         .success,
     ).toBe(false);
+  });
+
+  it("accepts up to three known profile topics", () => {
+    const base = {
+      displayName: "Alice",
+      bio: "",
+      avatarUrl: "",
+      coverUrl: "",
+      published: true,
+    };
+    expect(
+      profileSchema.safeParse({ ...base, topics: ["Art", "Tech", "Music"] })
+        .success,
+    ).toBe(true);
+    expect(
+      profileSchema.safeParse({
+        ...base,
+        topics: ["Art", "Tech", "Music", "Money"],
+      }).success,
+    ).toBe(false);
+    expect(profileSchema.safeParse({ ...base, topics: ["Cats"] }).success).toBe(
+      false,
+    );
   });
 
   it("requires a topic for a call request", () => {
