@@ -146,7 +146,7 @@ afterEach(() => vi.unstubAllGlobals());
 
 describe("API-backed social discovery", () => {
   it("persists follows through API writes and fresh query clients", async () => {
-    const first = renderAt();
+    const first = renderAt("/?live=false");
     fireEvent.click(
       await screen.findByRole("button", { name: "Follow Alice Artist" }),
     );
@@ -181,7 +181,7 @@ describe("API-backed social discovery", () => {
   });
   it("rolls back a failed optimistic follow and permits retry", async () => {
     failFollow = true;
-    renderAt();
+    renderAt("/?live=false");
     fireEvent.click(
       await screen.findByRole("button", { name: "Follow Alice Artist" }),
     );
@@ -204,6 +204,33 @@ describe("API-backed social discovery", () => {
       ).toBeEnabled(),
     );
   });
+  it("shows only live creators on the home page until the filter is off", async () => {
+    renderAt("/");
+    await waitFor(() =>
+      expect(fetch).toHaveBeenCalledWith(
+        "/api/v1/creators?live=true",
+        expect.anything(),
+      ),
+    );
+    expect(screen.getByRole("switch", { name: "Live only" })).toBeChecked();
+  });
+
+  it("offers everyone when no one is live", async () => {
+    profiles = profiles.map((p) => ({ ...p, isLive: false }));
+    renderAt("/");
+    expect(
+      await screen.findByRole("heading", { name: "No one's live right now." }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("switch", { name: "Live only" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "See all creators" }));
+    expect(
+      await within(screen.getByRole("main")).findByRole("link", {
+        name: "Visit Bob Music",
+      }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("switch", { name: "Live only" })).not.toBeChecked();
+  });
+
   it("sends search and live filters to the server", async () => {
     profiles[1].isLive = true;
     renderAt("/?q=bob&live=true");
@@ -226,7 +253,7 @@ describe("API-backed social discovery", () => {
   });
   it("loads subsequent pages with a server cursor", async () => {
     paginated = true;
-    renderAt("/");
+    renderAt("/?live=false");
     fireEvent.click(
       await screen.findByRole("button", { name: "Load more creators" }),
     );
@@ -290,7 +317,7 @@ describe("API-backed social discovery", () => {
   });
   it("recovers from a discovery failure using the retry control", async () => {
     failList = true;
-    renderAt();
+    renderAt("/?live=false");
     expect(await screen.findByRole("alert")).toHaveTextContent(
       "We couldn’t load creators.",
     );

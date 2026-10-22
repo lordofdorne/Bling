@@ -138,7 +138,20 @@ export function DiscoverPage({
   const [params, setParams] = useSearchParams();
   const me = useMe();
   const query = params.get("q") ?? "";
-  const liveOnly = params.get("live") === "true";
+  // Browsing the home page shows live creators unless the visitor turns that
+  // off (?live=false). Searches and the following feed show everyone unless
+  // they turn it on (?live=true).
+  const liveByDefault = view === "home" && !query;
+  const liveOnly = liveByDefault
+    ? params.get("live") !== "false"
+    : params.get("live") === "true";
+  const setLiveOnly = (on: boolean) =>
+    setParams((current) => {
+      const next = new URLSearchParams(current);
+      if (on === liveByDefault) next.delete("live");
+      else next.set("live", String(on));
+      return next;
+    });
   const discovery = useCreators({
     q: query,
     live: liveOnly,
@@ -148,9 +161,14 @@ export function DiscoverPage({
   const feature = items.find((p) => p.isLive);
   const signedOut = view === "following" && !me.isPending && !me.data;
   const { isPhone } = useScreenSize();
-  const browsing = view === "home" && !query && !liveOnly;
+  const browsing = view === "home" && !query;
+  // Everyone, for the upcoming Hotlines when nobody is live. The sidebar
+  // makes the same query, so this shares its cache.
+  const everyone = useCreators();
   const quiet =
-    browsing && !discovery.isPending && items.length > 0 && !feature;
+    browsing && !discovery.isPending && !discovery.isError && !feature;
+  // With the live filter on and nobody live, the notice replaces the list.
+  const nobodyLive = quiet && liveOnly && items.length === 0;
 
   return (
     <ViewerShell>
@@ -173,7 +191,14 @@ export function DiscoverPage({
 
       {view === "home" && <TopicBar query={query} />}
 
-      {quiet && <QuietNotice creators={items} signedIn={!!me.data} />}
+      {quiet && (
+        <QuietNotice
+          id={nobodyLive ? "creators" : undefined}
+          creators={creatorItems(everyone.data?.pages)}
+          signedIn={!!me.data}
+          onShowAll={liveOnly ? () => setLiveOnly(false) : undefined}
+        />
+      )}
 
       {view === "home" && !query && feature && (
         <Card
@@ -227,163 +252,155 @@ export function DiscoverPage({
         </Card>
       )}
 
-      <section id="creators" aria-label="Creator discovery">
-        <div className="mb-(--stack-gap) flex items-end justify-between gap-4">
-          <SectionHeader
-            title={
-              query
-                ? `Results for “${query}”`
-                : view === "following"
-                  ? "From your following"
-                  : liveOnly
-                    ? "Live now"
-                    : "Popular on Bling"
-            }
-            description={
-              liveOnly
-                ? "Creators taking calls right now."
-                : "Live creators first, then the most followed."
-            }
-          />
-          <Label className="flex shrink-0 cursor-pointer items-center gap-2 text-(length:--text-meta) font-semibold">
-            <Switch
-              checked={liveOnly}
-              onCheckedChange={(checked) =>
-                setParams((current) => {
-                  const next = new URLSearchParams(current);
-                  if (checked) next.set("live", "true");
-                  else next.delete("live");
-                  return next;
-                })
+      {!nobodyLive && (
+        <section id="creators" aria-label="Creator discovery">
+          <div className="mb-(--stack-gap) flex items-end justify-between gap-4">
+            <SectionHeader
+              title={
+                query
+                  ? `Results for “${query}”`
+                  : view === "following"
+                    ? "From your following"
+                    : liveOnly
+                      ? "Live now"
+                      : "Popular on Bling"
+              }
+              description={
+                liveOnly
+                  ? "Creators taking calls right now."
+                  : "Live creators first, then the most followed."
               }
             />
-            Live only
-          </Label>
-        </div>
+            <Label className="flex shrink-0 cursor-pointer items-center gap-2 text-(length:--text-meta) font-semibold">
+              <Switch checked={liveOnly} onCheckedChange={setLiveOnly} />
+              Live only
+            </Label>
+          </div>
 
-        {signedOut ? (
-          <Card className="items-center gap-3 px-(--card-pad) py-(--space-9) text-center">
-            <span className="bg-muted text-primary grid size-12 place-items-center rounded-xl">
-              <Heart className="size-6" />
-            </span>
-            <h2 className="text-xl font-bold">Your people are waiting.</h2>
-            <p className="text-muted-foreground text-sm">
-              Sign in to follow creators and see when they go live.
-            </p>
-            <Button asChild>
-              <Link to="/login?next=%2Ffollowing">Sign in</Link>
-            </Button>
-            <Button asChild variant="link">
-              <Link to="/register?next=%2Ffollowing">
-                Create a viewer account
-              </Link>
-            </Button>
-          </Card>
-        ) : me.isError || (discovery.isError && !discovery.data) ? (
-          <Card
-            className="items-center gap-3 px-(--card-pad) py-(--space-9) text-center"
-            role="alert"
-          >
-            <h2 className="text-xl font-bold">We couldn’t load creators.</h2>
-            <p className="text-muted-foreground text-sm">
-              Please try again in a moment.
-            </p>
-            <Button
-              variant="secondary"
-              onClick={() =>
-                void (me.isError ? me.refetch() : discovery.refetch())
-              }
-            >
-              Try again
-            </Button>
-          </Card>
-        ) : discovery.isPending ? (
-          <Card
-            className="text-muted-foreground items-center px-(--card-pad) py-(--space-9) text-center text-sm"
-            role="status"
-          >
-            Finding your next conversation…
-          </Card>
-        ) : items.length ? (
-          <>
-            {isPhone ? (
-              <Card className="gap-0 py-0">
-                <ul className="divide-y">
-                  {items.map((creator) => (
-                    <CreatorRow key={creator.id} creator={creator} />
-                  ))}
-                </ul>
-              </Card>
-            ) : (
-              <Grid>
-                {items.map((creator) => (
-                  <GridItem key={creator.id} span={4} tablet={4} wide={3}>
-                    <CreatorCard creator={creator} />
-                  </GridItem>
-                ))}
-              </Grid>
-            )}
-            {discovery.hasNextPage && (
-              <div className="mt-(--stack-gap) flex justify-center">
-                <Button
-                  variant="secondary"
-                  className="w-full tablet:w-auto"
-                  disabled={discovery.isFetchingNextPage}
-                  onClick={() => void discovery.fetchNextPage()}
-                >
-                  {discovery.isFetchingNextPage
-                    ? "Loading…"
-                    : "Load more creators"}
-                </Button>
-              </div>
-            )}
-            {discovery.isFetchNextPageError && (
-              <p role="alert" className="text-destructive mt-4 text-sm">
-                Couldn’t load more creators. Try again.
-              </p>
-            )}
-          </>
-        ) : (
-          <Card className="items-center gap-3 px-(--card-pad) py-(--space-9) text-center">
-            <span className="bg-muted text-primary grid size-12 place-items-center rounded-xl">
-              {view === "following" ? (
+          {signedOut ? (
+            <Card className="items-center gap-3 px-(--card-pad) py-(--space-9) text-center">
+              <span className="bg-muted text-primary grid size-12 place-items-center rounded-xl">
                 <Heart className="size-6" />
+              </span>
+              <h2 className="text-xl font-bold">Your people are waiting.</h2>
+              <p className="text-muted-foreground text-sm">
+                Sign in to follow creators and see when they go live.
+              </p>
+              <Button asChild>
+                <Link to="/login?next=%2Ffollowing">Sign in</Link>
+              </Button>
+              <Button asChild variant="link">
+                <Link to="/register?next=%2Ffollowing">
+                  Create a viewer account
+                </Link>
+              </Button>
+            </Card>
+          ) : me.isError || (discovery.isError && !discovery.data) ? (
+            <Card
+              className="items-center gap-3 px-(--card-pad) py-(--space-9) text-center"
+              role="alert"
+            >
+              <h2 className="text-xl font-bold">We couldn’t load creators.</h2>
+              <p className="text-muted-foreground text-sm">
+                Please try again in a moment.
+              </p>
+              <Button
+                variant="secondary"
+                onClick={() =>
+                  void (me.isError ? me.refetch() : discovery.refetch())
+                }
+              >
+                Try again
+              </Button>
+            </Card>
+          ) : discovery.isPending ? (
+            <Card
+              className="text-muted-foreground items-center px-(--card-pad) py-(--space-9) text-center text-sm"
+              role="status"
+            >
+              Finding your next conversation…
+            </Card>
+          ) : items.length ? (
+            <>
+              {isPhone ? (
+                <Card className="gap-0 py-0">
+                  <ul className="divide-y">
+                    {items.map((creator) => (
+                      <CreatorRow key={creator.id} creator={creator} />
+                    ))}
+                  </ul>
+                </Card>
               ) : (
-                <Search className="size-6" />
+                <Grid>
+                  {items.map((creator) => (
+                    <GridItem key={creator.id} span={4} tablet={4} wide={3}>
+                      <CreatorCard creator={creator} />
+                    </GridItem>
+                  ))}
+                </Grid>
               )}
-            </span>
-            <h2 className="text-xl font-bold">
-              {view === "following"
-                ? "Make yourself at home."
-                : query
-                  ? `No one's talking about “${query}” yet.`
-                  : liveOnly
-                    ? "No one's live right now."
-                    : "A new conversation starts with you."}
-            </h2>
-            <p className="text-muted-foreground max-w-md text-sm">
-              {view === "following"
-                ? "Follow creators to build your feed, or clear your filters to see more."
-                : query
-                  ? "Try another topic above, or open your own Hotline and be the first."
-                  : liveOnly
-                    ? "Turn off Live only to see every creator, and follow the ones you like to hear when they go live."
-                    : "No creators match these filters yet. Clear your filters or open your own Hotline."}
-            </p>
-            <Button asChild>
-              <Link to="/">
-                Explore all creators
-                <ArrowRight className="size-4" />
-              </Link>
-            </Button>
-            <Button asChild variant="link">
-              <Link to={me.data ? "/dashboard" : "/register"}>
-                {me.data ? "Open creator studio" : "Open your Hotline"}
-              </Link>
-            </Button>
-          </Card>
-        )}
-      </section>
+              {discovery.hasNextPage && (
+                <div className="mt-(--stack-gap) flex justify-center">
+                  <Button
+                    variant="secondary"
+                    className="w-full tablet:w-auto"
+                    disabled={discovery.isFetchingNextPage}
+                    onClick={() => void discovery.fetchNextPage()}
+                  >
+                    {discovery.isFetchingNextPage
+                      ? "Loading…"
+                      : "Load more creators"}
+                  </Button>
+                </div>
+              )}
+              {discovery.isFetchNextPageError && (
+                <p role="alert" className="text-destructive mt-4 text-sm">
+                  Couldn’t load more creators. Try again.
+                </p>
+              )}
+            </>
+          ) : (
+            <Card className="items-center gap-3 px-(--card-pad) py-(--space-9) text-center">
+              <span className="bg-muted text-primary grid size-12 place-items-center rounded-xl">
+                {view === "following" ? (
+                  <Heart className="size-6" />
+                ) : (
+                  <Search className="size-6" />
+                )}
+              </span>
+              <h2 className="text-xl font-bold">
+                {view === "following"
+                  ? "Make yourself at home."
+                  : query
+                    ? `No one's talking about “${query}” yet.`
+                    : liveOnly
+                      ? "No one's live right now."
+                      : "A new conversation starts with you."}
+              </h2>
+              <p className="text-muted-foreground max-w-md text-sm">
+                {view === "following"
+                  ? "Follow creators to build your feed, or clear your filters to see more."
+                  : query
+                    ? "Try another topic above, or open your own Hotline and be the first."
+                    : liveOnly
+                      ? "Turn off Live only to see every creator, and follow the ones you like to hear when they go live."
+                      : "No creators match these filters yet. Clear your filters or open your own Hotline."}
+              </p>
+              <Button asChild>
+                <Link to="/">
+                  Explore all creators
+                  <ArrowRight className="size-4" />
+                </Link>
+              </Button>
+              <Button asChild variant="link">
+                <Link to={me.data ? "/dashboard" : "/register"}>
+                  {me.data ? "Open creator studio" : "Open your Hotline"}
+                </Link>
+              </Button>
+            </Card>
+          )}
+        </section>
+      )}
 
       {browsing && !me.data && !me.isPending && <CreatorCallout />}
     </ViewerShell>

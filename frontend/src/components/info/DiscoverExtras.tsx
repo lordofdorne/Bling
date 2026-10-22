@@ -53,11 +53,16 @@ export function TopicBar({ query }: { query: string }) {
  * announced, soonest first, or a nudge to follow and get an alert.
  */
 export function QuietNotice({
+  id,
   creators,
   signedIn,
+  onShowAll,
 }: {
+  id?: string;
   creators: CreatorProfile[];
   signedIn: boolean;
+  /** Turns off the live filter; shown while it hides everyone. */
+  onShowAll?: () => void;
 }) {
   const upcoming = creators
     .filter((creator) => creator.nextHotlineAt)
@@ -69,7 +74,7 @@ export function QuietNotice({
     .slice(0, 3);
 
   return (
-    <Card className="gap-0 py-0" aria-labelledby="quiet-notice-title">
+    <Card id={id} className="gap-0 py-0" aria-labelledby="quiet-notice-title">
       <div className="flex gap-3 p-(--card-pad)">
         <span className="bg-muted text-primary grid size-(--icon-button) shrink-0 place-items-center rounded-lg">
           {upcoming.length ? (
@@ -112,14 +117,25 @@ export function QuietNotice({
           ))}
         </ul>
       )}
-      {!signedIn && (
-        <div className="border-t px-(--card-pad) py-(--inset-pad)">
-          <Button asChild variant="link" className="h-auto px-0">
-            <Link to="/register">
-              Make a free account to follow creators
-              <ArrowRight className="size-4" />
-            </Link>
-          </Button>
+      {(onShowAll || !signedIn) && (
+        <div className="flex flex-col gap-2 border-t px-(--card-pad) py-(--inset-pad) tablet:flex-row tablet:items-center">
+          {onShowAll && (
+            <Button
+              variant="secondary"
+              className="w-full tablet:w-auto"
+              onClick={onShowAll}
+            >
+              See all creators
+            </Button>
+          )}
+          {!signedIn && (
+            <Button asChild variant="link" className="h-auto px-0">
+              <Link to="/register">
+                Make a free account to follow creators
+                <ArrowRight className="size-4" />
+              </Link>
+            </Button>
+          )}
         </div>
       )}
     </Card>
