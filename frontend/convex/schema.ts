@@ -400,7 +400,9 @@ export default defineSchema({
     nextHotlineAt: v.optional(v.number()),
     /** When followers were last emailed that this creator went live. */
     lastLiveAlertAt: v.optional(v.number()),
-    /** username, display name and bio, for the search index. */
+    /** Up to three labels from convex/lib/topics.ts. */
+    topics: v.optional(v.array(v.string())),
+    /** username, display name, bio and topics, for the search index. */
     searchText: v.string(),
   })
     .index("by_user", ["userId"])

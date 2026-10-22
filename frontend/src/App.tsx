@@ -5,6 +5,9 @@ import { ProtectedRoute } from "./components/ProtectedRoute";
 import { PublicHotline } from "./components/PublicHotline";
 import { DiscoverPage, LegacyCreatorRedirect } from "./components/DiscoverPage";
 import { PasswordRecoveryPage } from "./components/PasswordRecoveryPage";
+import { AboutPage } from "./components/info/AboutPage";
+import { FaqPage } from "./components/info/FaqPage";
+import { PricingPage } from "./components/info/PricingPage";
 import { ContactPage } from "./components/legal/ContactPage";
 import { PrivacyPage } from "./components/legal/PrivacyPage";
 import { RefundPage } from "./components/legal/RefundPage";
@@ -65,6 +68,9 @@ export function App() {
             }
           />
           <Route path="/u/:username" element={<PublicHotline />} />
+          <Route path="/about" element={<AboutPage />} />
+          <Route path="/faq" element={<FaqPage />} />
+          <Route path="/pricing" element={<PricingPage />} />
           <Route path="/terms" element={<TermsPage />} />
           <Route path="/privacy" element={<PrivacyPage />} />
           <Route path="/refunds" element={<RefundPage />} />

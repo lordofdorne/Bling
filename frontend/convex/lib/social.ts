@@ -15,9 +15,16 @@ export const VISITOR_TTL_MS = 90_000;
 export const VISITOR_COUNT_INTERVAL_MS = 30_000;
 
 export function searchText(
-  profile: Pick<Doc<"profiles">, "username" | "displayName" | "bio">,
+  profile: Pick<Doc<"profiles">, "username" | "displayName" | "bio"> & {
+    topics?: readonly string[];
+  },
 ) {
-  return `${profile.username} ${profile.displayName} ${profile.bio}`;
+  return [
+    profile.username,
+    profile.displayName,
+    profile.bio,
+    ...(profile.topics ?? []),
+  ].join(" ");
 }
 
 /** Creates the unpublished profile every new account gets. */
@@ -145,6 +152,7 @@ export async function publicProfile(
     username: profile.username,
     displayName: profile.displayName,
     bio: profile.bio,
+    topics: profile.topics ?? [],
     avatarUrl: await avatarUrl(ctx, profile),
     coverUrl: profile.coverUrl,
     published: profile.published,

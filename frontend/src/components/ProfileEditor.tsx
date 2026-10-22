@@ -9,6 +9,7 @@ import {
   type CreatorProfile,
 } from "../lib/social";
 import { profileSchema, type ProfileValues } from "../lib/schemas";
+import { MAX_TOPICS, TOPICS, type Topic } from "../lib/topics";
 import {
   FormError,
   SwitchField,
@@ -21,7 +22,15 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Form } from "@/components/ui/form";
+import {
+  Form,
+  FormControl,
+  FormDescription,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
 import { useControlSize } from "../lib/design";
 
 export function ProfileEditor() {
@@ -65,6 +74,9 @@ function ProfileForm({ profile }: { profile: CreatorProfile }) {
       avatarUrl: profile.avatarUrl,
       coverUrl: profile.coverUrl,
       published: profile.published,
+      topics: (profile.topics ?? []).filter((topic): topic is Topic =>
+        (TOPICS as readonly string[]).includes(topic),
+      ),
     },
   });
   const save = useSaveProfile();
@@ -148,6 +160,56 @@ function ProfileForm({ profile }: { profile: CreatorProfile }) {
               className="tablet:col-span-2"
               rows={4}
               placeholder="What do you love talking about?"
+            />
+
+            <FormField
+              control={form.control}
+              name="topics"
+              render={({ field }) => (
+                <FormItem className="tablet:col-span-2">
+                  <FormLabel>What you talk about</FormLabel>
+                  <FormControl>
+                    <div
+                      role="group"
+                      aria-label="What you talk about"
+                      className="flex flex-wrap gap-2"
+                    >
+                      {TOPICS.map((topic) => {
+                        const selected = field.value.includes(topic);
+                        const full =
+                          !selected && field.value.length >= MAX_TOPICS;
+                        return (
+                          <Button
+                            key={topic}
+                            type="button"
+                            size="sm"
+                            variant={selected ? "default" : "outline"}
+                            className="rounded-full"
+                            aria-pressed={selected}
+                            disabled={full}
+                            onClick={() => {
+                              field.onChange(
+                                selected
+                                  ? field.value.filter((t) => t !== topic)
+                                  : [...field.value, topic],
+                              );
+                              setSaved(false);
+                            }}
+                          >
+                            {selected && <Check className="size-3.5" />}
+                            {topic}
+                          </Button>
+                        );
+                      })}
+                    </div>
+                  </FormControl>
+                  <FormDescription>
+                    Pick up to {MAX_TOPICS}. Fans browsing a topic on the home
+                    page will find you.
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
             />
 
             <div className="grid gap-3">

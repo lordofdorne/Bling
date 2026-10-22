@@ -74,6 +74,7 @@ it("saves real profile fields and keeps a success confirmation after refetch", a
         avatarUrl: "",
         coverUrl: "",
         published: true,
+        topics: [],
       }),
     }),
   );

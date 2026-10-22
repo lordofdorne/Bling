@@ -23,6 +23,7 @@ import type * as lib_ledger from "../lib/ledger.js";
 import type * as lib_payments from "../lib/payments.js";
 import type * as lib_social from "../lib/social.js";
 import type * as lib_stripe from "../lib/stripe.js";
+import type * as lib_topics from "../lib/topics.js";
 import type * as liveAlerts from "../liveAlerts.js";
 import type * as notifications from "../notifications.js";
 import type * as passwordReset from "../passwordReset.js";
@@ -62,6 +63,7 @@ declare const fullApi: ApiFromModules<{
   "lib/payments": typeof lib_payments;
   "lib/social": typeof lib_social;
   "lib/stripe": typeof lib_stripe;
+  "lib/topics": typeof lib_topics;
   liveAlerts: typeof liveAlerts;
   notifications: typeof notifications;
   passwordReset: typeof passwordReset;

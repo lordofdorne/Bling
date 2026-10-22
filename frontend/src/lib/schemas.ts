@@ -3,6 +3,7 @@ import {
   MINIMUM_PAID_TIER_CENTS,
   centsFromPriceInput,
 } from "../components/studio/format";
+import { MAX_TOPICS, TOPICS } from "./topics";
 
 // Shared validation for every Bling form. Field rules live here once so the
 // same email, password, or name is checked the same way on every screen, and
@@ -134,6 +135,9 @@ export const profileSchema = z.object({
       message: "Use an https:// image URL.",
     }),
   published: z.boolean(),
+  topics: z
+    .array(z.enum(TOPICS))
+    .max(MAX_TOPICS, `Pick up to ${MAX_TOPICS} topics.`),
 });
 export type ProfileValues = z.infer<typeof profileSchema>;
 

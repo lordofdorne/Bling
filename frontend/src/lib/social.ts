@@ -17,6 +17,8 @@ export type CreatorProfile = {
   username: string;
   displayName: string;
   bio: string;
+  /** Labels from lib/topics.ts (Convex only). */
+  topics?: string[];
   avatarUrl: string;
   coverUrl: string;
   published: boolean;
@@ -31,7 +33,7 @@ export type CreatorProfile = {
 };
 export type ProfileInput = Pick<
   CreatorProfile,
-  "displayName" | "bio" | "avatarUrl" | "coverUrl" | "published"
+  "displayName" | "bio" | "avatarUrl" | "coverUrl" | "published" | "topics"
 >;
 export type CreatorPage = { items: CreatorProfile[]; nextCursor?: string };
 export type LiveNotification = {
@@ -329,6 +331,12 @@ export const formatCount = (value: number) =>
     notation: "compact",
     maximumFractionDigits: 1,
   }).format(value);
+
+/** "1.2K followers", or "New on Bling" before anyone has followed. */
+export const followerLabel = (count: number) =>
+  count === 0
+    ? "New on Bling"
+    : `${formatCount(count)} ${count === 1 ? "follower" : "followers"}`;
 
 // The Convex build swaps in src/lib/convex/hooks.ts (see lib/backend.ts).
 export const useCreators = usingConvex

@@ -118,7 +118,9 @@ function SidebarNav({ onNavigate }: { onNavigate: () => void }) {
             >
               {creator.isLive
                 ? "Live"
-                : `${formatCount(creator.followerCount)}`}
+                : creator.followerCount > 0
+                  ? formatCount(creator.followerCount)
+                  : null}
             </span>
           </Link>
         ))}

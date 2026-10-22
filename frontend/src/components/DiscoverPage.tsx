@@ -3,6 +3,7 @@ import { ArrowRight, Heart, Phone, Search, Users } from "lucide-react";
 import { useMe } from "../lib/auth";
 import {
   creatorItems,
+  followerLabel,
   formatCount,
   useCreators,
   type CreatorProfile,
@@ -10,6 +11,8 @@ import {
 import { FollowButton } from "./FollowButton";
 import { CreatorAvatar, CreatorCover } from "./CreatorIdentity";
 import { ViewerShell } from "./ViewerShell";
+import { HomeIntro } from "./info/HomeIntro";
+import { CreatorCallout, QuietNotice, TopicBar } from "./info/DiscoverExtras";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -28,6 +31,17 @@ function LivePill({ live }: { live: boolean }) {
       {live ? "Live" : "Offline"}
     </Badge>
   );
+}
+
+/** "@name · 12 followers · Advice", the line under a creator's name. */
+function creatorMeta(creator: CreatorProfile) {
+  return [
+    `@${creator.username}`,
+    followerLabel(creator.followerCount),
+    creator.topics?.[0],
+  ]
+    .filter(Boolean)
+    .join(" · ");
 }
 
 function CreatorCard({ creator }: { creator: CreatorProfile }) {
@@ -70,8 +84,7 @@ function CreatorCard({ creator }: { creator: CreatorProfile }) {
             </h3>
           </Link>
           <p className="text-muted-foreground truncate text-xs">
-            @{creator.username} · {formatCount(creator.followerCount)}{" "}
-            {creator.followerCount === 1 ? "follower" : "followers"}
+            {creatorMeta(creator)}
           </p>
         </div>
         <FollowButton profile={creator} compact />
@@ -106,8 +119,7 @@ function CreatorRow({ creator }: { creator: CreatorProfile }) {
             {creator.isLive && <LivePill live />}
           </span>
           <span className="text-muted-foreground block truncate text-(length:--text-meta)">
-            @{creator.username} · {formatCount(creator.followerCount)}{" "}
-            {creator.followerCount === 1 ? "follower" : "followers"}
+            {creatorMeta(creator)}
           </span>
         </span>
       </Link>
@@ -134,21 +146,32 @@ export function DiscoverPage({
   const feature = items.find((p) => p.isLive);
   const signedOut = view === "following" && !me.isPending && !me.data;
   const { isPhone } = useScreenSize();
+  const browsing = view === "home" && !query && !liveOnly;
+  const quiet =
+    browsing && !discovery.isPending && items.length > 0 && !feature;
 
   return (
     <ViewerShell>
-      <PageHeader
-        title={
-          view === "following"
-            ? "Your people. Your place."
-            : "Good company. Real connection."
-        }
-        description={
-          view === "following"
-            ? "The creators you follow, together in one feed."
-            : "Find a conversation you love. Be a part of it."
-        }
-      />
+      {view === "home" && !query && !me.data ? (
+        <HomeIntro />
+      ) : (
+        <PageHeader
+          title={
+            view === "following"
+              ? "Your people. Your place."
+              : "Talk live with creators."
+          }
+          description={
+            view === "following"
+              ? "The creators you follow, together in one feed."
+              : "Ask to call anyone who's live. They pick who they talk to."
+          }
+        />
+      )}
+
+      {view === "home" && <TopicBar query={query} />}
+
+      {quiet && <QuietNotice creators={items} signedIn={!!me.data} />}
 
       {view === "home" && !query && feature && (
         <Card
@@ -170,8 +193,7 @@ export function DiscoverPage({
                     {feature.displayName}
                   </h2>
                   <p className="text-muted-foreground text-sm">
-                    @{feature.username} · {formatCount(feature.followerCount)}{" "}
-                    {feature.followerCount === 1 ? "follower" : "followers"}
+                    {creatorMeta(feature)}
                   </p>
                 </div>
               </div>
@@ -203,7 +225,7 @@ export function DiscoverPage({
         </Card>
       )}
 
-      <section aria-label="Creator discovery">
+      <section id="creators" aria-label="Creator discovery">
         <div className="mb-(--stack-gap) flex items-end justify-between gap-4">
           <SectionHeader
             title={
@@ -328,12 +350,16 @@ export function DiscoverPage({
             <h2 className="text-xl font-bold">
               {view === "following"
                 ? "Make yourself at home."
-                : "A new conversation starts with you."}
+                : query
+                  ? `No one's talking about “${query}” yet.`
+                  : "A new conversation starts with you."}
             </h2>
             <p className="text-muted-foreground max-w-md text-sm">
               {view === "following"
                 ? "Follow creators to build your feed, or clear your filters to see more."
-                : "No creators match these filters yet. Clear your filters or open your own Hotline."}
+                : query
+                  ? "Try another topic above, or open your own Hotline and be the first."
+                  : "No creators match these filters yet. Clear your filters or open your own Hotline."}
             </p>
             <Button asChild>
               <Link to="/">
@@ -342,11 +368,15 @@ export function DiscoverPage({
               </Link>
             </Button>
             <Button asChild variant="link">
-              <Link to="/dashboard">Open creator studio</Link>
+              <Link to={me.data ? "/dashboard" : "/register"}>
+                {me.data ? "Open creator studio" : "Open your Hotline"}
+              </Link>
             </Button>
           </Card>
         )}
       </section>
+
+      {browsing && !me.data && !me.isPending && <CreatorCallout />}
     </ViewerShell>
   );
 }

@@ -118,6 +118,7 @@ export function toProfile(profile: ProfileDoc): CreatorProfile {
     username: profile.username,
     displayName: profile.displayName,
     bio: profile.bio,
+    topics: profile.topics,
     avatarUrl: profile.avatarUrl,
     coverUrl: profile.coverUrl,
     published: profile.published,

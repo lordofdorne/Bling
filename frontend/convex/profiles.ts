@@ -11,6 +11,7 @@ import {
 } from "./_generated/server";
 import { requireCreatorId } from "./lib/auth";
 import { fail } from "./lib/errors";
+import { isTopic, MAX_TOPICS } from "./lib/topics";
 import {
   profileByUsername,
   profileForUser,
@@ -66,8 +67,8 @@ function validHttpsUrl(raw: string) {
 
 /**
  * Saves profile details. avatarUrl: leave out to keep the current avatar,
- * "" to remove it, or an https URL to use an external image. A live profile
- * stays published.
+ * "" to remove it, or an https URL to use an external image. topics: leave
+ * out to keep the current ones. A live profile stays published.
  */
 export const save = mutation({
   args: {
@@ -76,6 +77,7 @@ export const save = mutation({
     avatarUrl: v.optional(v.string()),
     coverUrl: v.string(),
     published: v.boolean(),
+    topics: v.optional(v.array(v.string())),
   },
   handler: async (ctx, args) => {
     const userId = await requireCreatorId(ctx);
@@ -106,13 +108,25 @@ export const save = mutation({
     ) {
       fail("VALIDATION_FAILED", "Images must be https links.");
     }
+    const topics = args.topics
+      ? [...new Set(args.topics)]
+      : (profile.topics ?? []);
+    if (topics.length > MAX_TOPICS || !topics.every(isTopic)) {
+      fail("VALIDATION_FAILED", `Pick up to ${MAX_TOPICS} topics.`);
+    }
 
     const patch = {
       displayName,
       bio,
       coverUrl,
       published: args.published || profile.isLive,
-      searchText: searchText({ username: profile.username, displayName, bio }),
+      topics,
+      searchText: searchText({
+        username: profile.username,
+        displayName,
+        bio,
+        topics,
+      }),
     };
     if (avatar === undefined || keepsUpload) {
       await ctx.db.patch(profile._id, patch);
