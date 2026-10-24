@@ -113,6 +113,7 @@ export function AuthPage({ mode }: AuthPageProps) {
                   </Alert>
                 )}
                 <RegisterForm
+                  creator={!viewerIntent}
                   onDone={() => navigate(destination, { replace: true })}
                   onConfirmationRequired={setConfirmationEmail}
                 />
@@ -186,9 +187,11 @@ function LoginForm({ onDone }: { onDone: () => void }) {
 }
 
 function RegisterForm({
+  creator,
   onDone,
   onConfirmationRequired,
 }: {
+  creator: boolean;
   onDone: () => void;
   onConfirmationRequired: (email: string) => void;
 }) {
@@ -201,6 +204,7 @@ function RegisterForm({
   const submit = form.handleSubmit(async (values) => {
     try {
       const result = await register.mutateAsync(values);
+      if (creator) window.fbq?.("track", "CompleteRegistration");
       if (result.data.confirmationRequired) {
         onConfirmationRequired(values.email.toLowerCase());
         return;

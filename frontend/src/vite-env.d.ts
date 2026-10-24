@@ -9,3 +9,8 @@ interface ImportMetaEnv {
 interface ImportMeta {
   readonly env: ImportMetaEnv;
 }
+
+interface Window {
+  /** Meta Pixel, loaded in index.html; missing when an ad blocker stops it. */
+  fbq?: (...args: unknown[]) => void;
+}
